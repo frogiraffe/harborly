@@ -4,7 +4,12 @@ import json
 
 import pytest
 
-from sea_mile.matching import BatchMatchResult, ConfidenceTier, MatchStatus
+from sea_mile.matching import (
+    BatchMatchResult,
+    ConfidenceTier,
+    MatchReason,
+    MatchStatus,
+)
 from sea_mile.ports import (
     NearbyPortGroup,
     NearbyPortResult,
@@ -77,7 +82,13 @@ MODEL_DICTS = [
     _group().to_dict(),
     NearbyPortGroup(_group(), 1.5).to_dict(),
     BatchMatchResult(
-        "Mersin", "TR", MatchStatus.AUTO_RESOLVED, ConfidenceTier.A, "WPI:1", "reason"
+        query="Mersin",
+        country_code="TR",
+        status=MatchStatus.AUTO_RESOLVED,
+        confidence_tier=ConfidenceTier.A,
+        selected_registry_id="WPI:1",
+        reason_code=MatchReason.UNIQUE_EXACT_WPI,
+        reason="reason",
     ).to_dict(),
     _route().summary(),
 ]

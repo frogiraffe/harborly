@@ -140,9 +140,12 @@ results = registry.match_names(["Mersin", "Hamilton"], country_codes=["TR", "US"
 ```
 
 Each `BatchMatchResult` holds the input `query`, the `country_code`, a `status`, a
-`confidence_tier`, the `selected_registry_id`, and a short `reason`. The `status` is a
-`MatchStatus` value, and the `confidence_tier` is a `ConfidenceTier` value from `A` to
-`D`.
+`confidence_tier`, the `selected_registry_id`, a stable `reason_code`, and a short
+human `reason`. The `status` is a `MatchStatus` value, the `confidence_tier` is a
+`ConfidenceTier` value from `A` to `D`, and the `reason_code` is a `MatchReason` value.
+Branch automation on `reason_code`, not on the `reason` text, which may change. The
+`MatchReason` values are `unique_exact_wpi`, `unique_exact_unlocode`,
+`coordinate_conflict`, `multiple_identities`, and `no_candidate`.
 
 `match_names` uses `decide_exact_match` under the hood. A single exact WPI match and a
 single exact UN/LOCODE match are not always the same physical port. Real places can

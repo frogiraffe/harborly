@@ -65,8 +65,10 @@ Some `data` fields carry a fixed set of string values.
 | --- | --- |
 | `status` | `auto_resolved`, `review_required`, `unresolved` |
 | `confidence_tier` | `A`, `B`, `C`, `D` |
+| `reason_code` | `unique_exact_wpi`, `unique_exact_unlocode`, `coordinate_conflict`, `multiple_identities`, `no_candidate` |
 
-A confidence tier is a similarity signal, not a calibrated probability.
+A confidence tier is a similarity signal, not a calibrated probability. The `reason_code`
+is stable for automation, while the `reason` text is human-readable and may change.
 
 ### `route` quality flag
 

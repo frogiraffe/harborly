@@ -13,8 +13,11 @@ versioning.
 - `docs/schemas/envelope-1.schema.json`, a JSON Schema for the envelope that the test
   suite validates the output of every `--json` command against.
 - A stable machine-readable `code` on every public exception.
-- Documented the `match` status and confidence-tier values and the `route` quality
-  flags.
+- A stable `reason_code` (the `MatchReason` enum) on every `BatchMatchResult` and in
+  the `match --json` output, so automation can branch on the decision reason instead of
+  the human `reason` text.
+- Documented the `match` status, confidence-tier, and reason-code values, and the
+  `route` quality flags.
 
 ### Changed
 

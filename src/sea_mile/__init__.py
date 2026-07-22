@@ -15,6 +15,7 @@ from .matching import (
     BatchMatchResult,
     ConfidenceTier,
     ExactMatchDecision,
+    MatchReason,
     MatchStatus,
     decide_exact_match,
 )
@@ -60,6 +61,7 @@ __all__ = [
     "ConfidenceTier",
     "CoordinateCheck",
     "ExactMatchDecision",
+    "MatchReason",
     "MatchStatus",
     "NearbyPortGroup",
     "NearbyPortResult",

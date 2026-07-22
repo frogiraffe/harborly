@@ -228,7 +228,9 @@ def test_match_resolves_names_from_csv(tmp_path, capsys) -> None:
     results = {row["query"]: row for row in json.loads(capsys.readouterr().out)["data"]}
     assert results["Mersin"]["status"] == "auto_resolved"
     assert results["Mersin"]["selected_registry_id"] == "WPI:1"
+    assert results["Mersin"]["reason_code"] == "unique_exact_wpi"
     assert results["Atlantis"]["status"] == "unresolved"
+    assert results["Atlantis"]["reason_code"] == "no_candidate"
 
 
 def test_match_reports_missing_name_column(tmp_path, capsys) -> None:

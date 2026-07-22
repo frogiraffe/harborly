@@ -658,6 +658,7 @@ class PortRegistry:
                     status=decision.status,
                     confidence_tier=decision.confidence_tier,
                     selected_registry_id=decision.selected_registry_id,
+                    reason_code=decision.reason_code,
                     reason=decision.reason,
                 )
             )

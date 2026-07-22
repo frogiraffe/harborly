@@ -26,11 +26,20 @@ class ConfidenceTier(StrEnum):
     D = "D"
 
 
+class MatchReason(StrEnum):
+    UNIQUE_EXACT_WPI = "unique_exact_wpi"
+    UNIQUE_EXACT_UNLOCODE = "unique_exact_unlocode"
+    COORDINATE_CONFLICT = "coordinate_conflict"
+    MULTIPLE_IDENTITIES = "multiple_identities"
+    NO_CANDIDATE = "no_candidate"
+
+
 @dataclass(frozen=True, slots=True)
 class ExactMatchDecision:
     status: MatchStatus
     confidence_tier: ConfidenceTier
     selected_registry_id: str | None
+    reason_code: MatchReason
     reason: str
 
 
@@ -41,6 +50,7 @@ class BatchMatchResult:
     status: MatchStatus
     confidence_tier: ConfidenceTier
     selected_registry_id: str | None
+    reason_code: MatchReason
     reason: str
 
     def to_dict(self) -> dict[str, Any]:
@@ -50,6 +60,7 @@ class BatchMatchResult:
             "status": str(self.status),
             "confidence_tier": str(self.confidence_tier),
             "selected_registry_id": self.selected_registry_id,
+            "reason_code": str(self.reason_code),
             "reason": self.reason,
         }
 
@@ -107,6 +118,7 @@ def decide_exact_match(
                     MatchStatus.REVIEW_REQUIRED,
                     ConfidenceTier.C,
                     None,
+                    MatchReason.COORDINATE_CONFLICT,
                     "exact WPI and UN/LOCODE matches disagree on location",
                 )
             if agreement is None:
@@ -117,6 +129,7 @@ def decide_exact_match(
             else MatchStatus.AUTO_RESOLVED,
             ConfidenceTier.B if country_requires_review else ConfidenceTier.A,
             wpi_ids[0],
+            MatchReason.UNIQUE_EXACT_WPI,
             reason,
         )
     if len(wpi_ids) > 1:
@@ -124,6 +137,7 @@ def decide_exact_match(
             MatchStatus.REVIEW_REQUIRED,
             ConfidenceTier.C,
             None,
+            MatchReason.MULTIPLE_IDENTITIES,
             "multiple exact WPI records",
         )
     if len(unlocode_ids) == 1:
@@ -133,6 +147,7 @@ def decide_exact_match(
             else MatchStatus.AUTO_RESOLVED,
             ConfidenceTier.C if country_requires_review else ConfidenceTier.B,
             unlocode_ids[0],
+            MatchReason.UNIQUE_EXACT_UNLOCODE,
             "unique exact UN/LOCODE port match with coordinates",
         )
     if len(unlocode_ids) > 1:
@@ -140,10 +155,15 @@ def decide_exact_match(
             MatchStatus.REVIEW_REQUIRED,
             ConfidenceTier.C,
             None,
+            MatchReason.MULTIPLE_IDENTITIES,
             "multiple exact UN/LOCODE records",
         )
     return ExactMatchDecision(
-        MatchStatus.UNRESOLVED, ConfidenceTier.D, None, "no exact official match"
+        MatchStatus.UNRESOLVED,
+        ConfidenceTier.D,
+        None,
+        MatchReason.NO_CANDIDATE,
+        "no exact official match",
     )
 
 
