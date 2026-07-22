@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>sea-mile synthetic route demo</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        font-family: system-ui, sans-serif;
+        color: #0f2a43;
+      }
+      #map {
+        height: 100%;
+      }
+      .panel {
+        position: absolute;
+        z-index: 1000;
+        top: 16px;
+        left: 52px;
+        max-width: 360px;
+        padding: 14px 16px;
+        border-radius: 10px;
+        background: rgb(255 255 255 / 92%);
+        box-shadow: 0 4px 18px rgb(15 42 67 / 20%);
+      }
+      .panel h1 {
+        margin: 0 0 6px;
+        font-size: 18px;
+      }
+      .panel p {
+        margin: 4px 0;
+        font-size: 13px;
+        line-height: 1.35;
+      }
+      .warning {
+        color: #8a5a00;
+        font-weight: 650;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="panel">
+      <h1>sea-mile synthetic route demo</h1>
+      <p>Six made-up endpoint pairs, routed in explicit nautical miles.</p>
+      <p class="warning">
+        Every name and coordinate on this map is a fixed example value.
+        This demo is not for navigation.
+      </p>
+    </div>
+    <div id="map" aria-label="Interactive map of synthetic sea routes"></div>
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <!--
+      Loaded as a script (not fetch()) so this page also works when opened
+      directly as a file:// URL, where fetch() of a local file is blocked
+      by CORS. Regenerate with scripts/build_synthetic_demo.py.
+    -->
+    <script src="./synthetic_routes.geojson.js"></script>
+    <script>
+      const shownWarnings = new Set();
+      function showWarning(message) {
+        if (shownWarnings.has(message)) return;
+        shownWarnings.add(message);
+        document.querySelector(".panel").insertAdjacentHTML(
+          "beforeend",
+          `<p class="warning">${message}</p>`,
+        );
+      }
+
+      if (typeof L === "undefined") {
+        showWarning("Leaflet failed to load from unpkg.com. Check your network connection.");
+      } else if (typeof window.SYNTHETIC_ROUTES === "undefined") {
+        showWarning(
+          "synthetic_routes.geojson.js failed to load. Run scripts/build_synthetic_demo.py.",
+        );
+      } else {
+        const map = L.map("map", { worldCopyJump: true }).setView([43, 12], 4);
+        // tile.openstreetmap.org actively blocks generic/hotlinked demo
+        // traffic (returns a 200 "Access blocked" placeholder tile, see
+        // osm.wiki/Blocked) - CARTO's free basemap tiles are the
+        // documented Leaflet-recommended alternative for this.
+        L.tileLayer("https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+          maxZoom: 12,
+          attribution:
+            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors ' +
+            '&copy; <a href="https://carto.com/attributions">CARTO</a>',
+        })
+          .on("tileerror", () =>
+            showWarning("Map tiles failed to load from basemaps.cartocdn.com."),
+          )
+          .addTo(map);
+
+        const layer = L.geoJSON(window.SYNTHETIC_ROUTES, {
+          style: (feature) => ({
+            color: feature.properties.quality_flag === "ok" ? "#0b6e75" : "#c77c02",
+            weight: 3,
+            opacity: 0.85,
+          }),
+          onEachFeature: (feature, routeLayer) => {
+            const p = feature.properties;
+            routeLayer.bindPopup(
+              `<strong>${p.route_id}</strong><br>` +
+                `${p.origin_id} &rarr; ${p.destination_id}<br>` +
+                `${p.distance_nmi.toLocaleString()} nmi<br>` +
+                `detour ratio: ${p.detour_ratio}`,
+            );
+          },
+        }).addTo(map);
+        map.fitBounds(layer.getBounds(), { padding: [35, 35] });
+      }
+    </script>
+  </body>
+</html>
