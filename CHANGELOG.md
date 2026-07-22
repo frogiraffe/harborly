@@ -16,6 +16,8 @@ versioning.
 - A stable `reason_code` (the `MatchReason` enum) on every `BatchMatchResult` and in
   the `match --json` output, so automation can branch on the decision reason instead of
   the human `reason` text.
+- A `candidates` list of `MatchCandidate` records on every `BatchMatchResult` and in the
+  `match --json` output, exposing the exact records that informed each decision.
 - Documented the `match` status, confidence-tier, and reason-code values, and the
   `route` quality flags.
 

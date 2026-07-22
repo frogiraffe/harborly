@@ -44,6 +44,30 @@ class ExactMatchDecision:
 
 
 @dataclass(frozen=True, slots=True)
+class MatchCandidate:
+    """One exact-match record that informed a bulk decision."""
+
+    registry_id: str
+    provider: str
+    name: str
+    country_code: str
+    latitude: float | None
+    longitude: float | None
+    unlocode: str | None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "registry_id": self.registry_id,
+            "provider": self.provider,
+            "name": self.name,
+            "country_code": self.country_code,
+            "latitude": self.latitude,
+            "longitude": self.longitude,
+            "unlocode": self.unlocode,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class BatchMatchResult:
     query: str
     country_code: str | None
@@ -52,6 +76,7 @@ class BatchMatchResult:
     selected_registry_id: str | None
     reason_code: MatchReason
     reason: str
+    candidates: tuple[MatchCandidate, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -62,6 +87,7 @@ class BatchMatchResult:
             "selected_registry_id": self.selected_registry_id,
             "reason_code": str(self.reason_code),
             "reason": self.reason,
+            "candidates": [candidate.to_dict() for candidate in self.candidates],
         }
 
 

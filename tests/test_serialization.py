@@ -7,6 +7,7 @@ import pytest
 from sea_mile.matching import (
     BatchMatchResult,
     ConfidenceTier,
+    MatchCandidate,
     MatchReason,
     MatchStatus,
 )
@@ -81,6 +82,15 @@ MODEL_DICTS = [
     NearbyPortResult(_port(), 1.5).to_dict(),
     _group().to_dict(),
     NearbyPortGroup(_group(), 1.5).to_dict(),
+    MatchCandidate(
+        registry_id="WPI:1",
+        provider="NGA_WPI",
+        name="Mersin",
+        country_code="TR",
+        latitude=36.8,
+        longitude=34.65,
+        unlocode="TRMER",
+    ).to_dict(),
     BatchMatchResult(
         query="Mersin",
         country_code="TR",
@@ -89,6 +99,17 @@ MODEL_DICTS = [
         selected_registry_id="WPI:1",
         reason_code=MatchReason.UNIQUE_EXACT_WPI,
         reason="reason",
+        candidates=(
+            MatchCandidate(
+                registry_id="WPI:1",
+                provider="NGA_WPI",
+                name="Mersin",
+                country_code="TR",
+                latitude=36.8,
+                longitude=34.65,
+                unlocode="TRMER",
+            ),
+        ),
     ).to_dict(),
     _route().summary(),
 ]

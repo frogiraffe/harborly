@@ -20,7 +20,7 @@ from sea_mile.exceptions import (
     PortNotFoundError,
     RegistryDataError,
 )
-from sea_mile.matching import BatchMatchResult, decide_exact_match
+from sea_mile.matching import BatchMatchResult, MatchCandidate, decide_exact_match
 from sea_mile.normalization import canonical_key
 from sea_mile.quality import _EARTH_RADIUS_NMI, great_circle_nmi, validate_coordinate
 
@@ -651,6 +651,18 @@ class PortRegistry:
                 unlocode_ids,
                 coordinates_by_registry_id=coordinates,
             )
+            candidates = tuple(
+                MatchCandidate(
+                    registry_id=result.port.registry_id,
+                    provider=result.port.provider,
+                    name=result.port.name,
+                    country_code=result.port.country_code,
+                    latitude=result.port.latitude,
+                    longitude=result.port.longitude,
+                    unlocode=result.port.unlocode,
+                )
+                for result in exact
+            )
             results.append(
                 BatchMatchResult(
                     query=name,
@@ -660,6 +672,7 @@ class PortRegistry:
                     selected_registry_id=decision.selected_registry_id,
                     reason_code=decision.reason_code,
                     reason=decision.reason,
+                    candidates=candidates,
                 )
             )
         return results
