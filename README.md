@@ -19,7 +19,8 @@ Do not use it for navigation, voyage planning, or a safety decision.
 - Match a CSV of port names in bulk, with a review flag for unsafe matches.
 - Calculate a sea route between ports or raw coordinates, and a distance matrix.
 - Export matching records as CSV or GeoJSON.
-- Read machine-readable JSON from every command with `--json`.
+- Read machine-readable JSON from the search, inspection, routing, matching, and data
+  commands with `--json`.
 
 ## Install
 
@@ -65,8 +66,17 @@ uv run sea-mile match ports.csv --country-column country
 uv run sea-mile data verify
 ```
 
-Add `--json` after any command for machine-readable output. Add `--verbose` before a
-command to log progress to stderr, and `--version` to print the version.
+Add `--json` for machine-readable output on `info`, `search`, `show`, `near`, `route`,
+`matrix`, `match`, and the `data` commands. The `export` command selects its output
+with `--format`, and `tui` is interactive, so neither takes `--json`. Add `--verbose`
+before a command to log progress to stderr, and `--version` to print the version.
+
+### Exit codes
+
+- `0`: the command completed, including a search or match that found no results.
+- `1`: `data verify` ran and one or more of its checks failed.
+- `2`: a usage, data, resolution, or missing-dependency error. The message goes to
+  stderr.
 
 The `route` command prints the sea distance and the great-circle lower bound in
 nautical miles, plus the detour ratio, the routing engine version, the algorithm, and

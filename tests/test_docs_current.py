@@ -59,3 +59,41 @@ def test_readme_examples_parse() -> None:
             parser.parse_args(command)
         except SystemExit:  # pragma: no cover - only on a broken example
             raise AssertionError(f"README example does not parse: {command}") from None
+
+
+def _has_json_option(subparser: argparse.ArgumentParser) -> bool:
+    return any("--json" in action.option_strings for action in subparser._actions)
+
+
+def _subcommands(parser: argparse.ArgumentParser) -> dict[str, argparse.ArgumentParser]:
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            return dict(action.choices)
+    return {}
+
+
+def test_only_json_emitting_commands_accept_the_json_flag() -> None:
+    commands = _subcommands(_parser())
+
+    # export selects output with --format, and tui is interactive. Neither emits
+    # the machine-readable JSON that --json promises, so they must not accept it.
+    assert not _has_json_option(commands["export"])
+    assert not _has_json_option(commands["tui"])
+
+    for name in ("info", "search", "show", "near", "match", "route", "matrix"):
+        assert _has_json_option(commands[name]), name
+
+    data_commands = _subcommands(commands["data"])
+    for name in ("download", "build", "prepare", "verify"):
+        assert _has_json_option(data_commands[name]), name
+
+
+def test_readme_scopes_json_and_documents_exit_codes() -> None:
+    readme = README.read_text().lower()
+
+    # The blanket "JSON on every command" claim was false and must not come back.
+    assert "from every command" not in readme
+    assert "after any command" not in readme
+
+    # Exit codes are part of the CLI contract, so they must be documented.
+    assert "exit code" in readme

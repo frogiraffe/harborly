@@ -321,6 +321,8 @@ def _cmd_route(args: argparse.Namespace) -> int:
 
 
 def _cmd_matrix(args: argparse.Namespace) -> int:
+    if len(args.ports) < 2:
+        raise ValueError("matrix needs two or more ports")
     from sea_mile.router import SeaRouter
 
     registry = _load_registry(args)
@@ -476,24 +478,29 @@ def _cmd_data(args: argparse.Namespace) -> int:
         else:
             _print_verify_report(report)
         return 0 if report["status"] == "passed" else 1
+    payload: dict[str, Any] = {}
     if args.data_command in {"download", "prepare"}:
         from sea_mile.source_data import download_reference_data
 
         download_manifest = download_reference_data(
             args.reference_root, refresh=getattr(args, "refresh", False)
         )
-        if args.json:
-            _print_json(download_manifest)
-        else:
+        payload["download"] = download_manifest
+        if not args.json:
             _print_download_manifest(download_manifest)
     if args.data_command in {"build", "prepare"}:
         from sea_mile.registry_build import build_reference_registry
 
         build_manifest = build_reference_registry(args.reference_root)
-        if args.json:
-            _print_json(build_manifest)
-        else:
+        payload["build"] = build_manifest
+        if not args.json:
             _print_build_manifest(build_manifest)
+    if args.json:
+        # prepare emits both manifests as one document. download and build each
+        # emit their single manifest at the top level, keeping their prior shape.
+        _print_json(
+            payload if args.data_command == "prepare" else payload[args.data_command]
+        )
     return 0
 
 
@@ -532,7 +539,6 @@ def _parser() -> argparse.ArgumentParser:
 
     tui = subparsers.add_parser(
         "tui",
-        parents=[common],
         help="launch an interactive terminal port search (needs the tui extra)",
     )
     tui.set_defaults(func=_cmd_tui)
@@ -616,9 +622,7 @@ def _parser() -> argparse.ArgumentParser:
     matrix.add_argument("ports", nargs="+", help="two or more port IDs or UN/LOCODEs")
     matrix.set_defaults(func=_cmd_matrix)
 
-    export = subparsers.add_parser(
-        "export", parents=[common], help="export matching port records"
-    )
+    export = subparsers.add_parser("export", help="export matching port records")
     export.add_argument("--query", help="port name to search for")
     export.add_argument("--country", dest="country_code")
     export.add_argument("--limit", type=int, default=1000)

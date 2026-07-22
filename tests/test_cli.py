@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 import pandas as pd
+import pytest
 
 from sea_mile.cli import main
 
@@ -279,8 +280,6 @@ def test_export_needs_a_filter(tmp_path, capsys) -> None:
 
 
 def test_matrix_reports_pairwise_distance(tmp_path, capsys) -> None:
-    import pytest
-
     pytest.importorskip("searoute", reason="matrix needs the routing extra")
     data_directory = tmp_path / "registry"
     write_registry(data_directory)
@@ -303,3 +302,78 @@ def test_data_build_reports_missing_sources_without_loading_registry(
 
     assert status == 2
     assert "run data download first" in capsys.readouterr().err
+
+
+def test_data_prepare_json_is_one_valid_document(tmp_path, capsys, monkeypatch) -> None:
+    download_manifest = {"retrieved_at_utc": "test", "sources": {}}
+    build_manifest = {"registry_rows": 2, "providers": {}}
+    monkeypatch.setattr(
+        "sea_mile.source_data.download_reference_data",
+        lambda *args, **kwargs: download_manifest,
+    )
+    monkeypatch.setattr(
+        "sea_mile.registry_build.build_reference_registry",
+        lambda *args, **kwargs: build_manifest,
+    )
+
+    status = main(["data", "prepare", "--reference-root", str(tmp_path), "--json"])
+
+    assert status == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload == {"download": download_manifest, "build": build_manifest}
+
+
+def test_data_download_json_keeps_flat_manifest_shape(
+    tmp_path, capsys, monkeypatch
+) -> None:
+    download_manifest = {"retrieved_at_utc": "test", "sources": {}}
+    monkeypatch.setattr(
+        "sea_mile.source_data.download_reference_data",
+        lambda *args, **kwargs: download_manifest,
+    )
+
+    status = main(["data", "download", "--reference-root", str(tmp_path), "--json"])
+
+    assert status == 0
+    assert json.loads(capsys.readouterr().out) == download_manifest
+
+
+@pytest.mark.parametrize("command", [["export", "--country", "TR"], ["tui"]])
+def test_non_json_commands_reject_the_json_flag(tmp_path, command) -> None:
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+
+    with pytest.raises(SystemExit):
+        main(["--data-dir", str(data_directory), *command, "--json"])
+
+
+def test_matrix_requires_two_or_more_ports(tmp_path, capsys) -> None:
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+
+    status = main(["--data-dir", str(data_directory), "matrix", "TRMER"])
+
+    assert status == 2
+    assert "two or more ports" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("command", "returns_list"),
+    [
+        (["info"], False),
+        (["search", "Mersin"], True),
+        (["show", "TRMER"], False),
+        (["near", "36.8", "34.65"], True),
+    ],
+)
+def test_json_commands_emit_one_valid_document(
+    tmp_path, capsys, command, returns_list
+) -> None:
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+
+    status = main(["--data-dir", str(data_directory), *command, "--json"])
+
+    assert status == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert isinstance(payload, list if returns_list else dict)
