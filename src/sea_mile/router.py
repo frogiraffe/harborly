@@ -58,7 +58,7 @@ class SeaRoute:
             "engine_version": self.engine_version,
             "algorithm": self.algorithm,
             "backend": self.backend,
-            "restrictions": self.restrictions,
+            "restrictions": list(self.restrictions),
         }
 
     def to_geojson_feature(self) -> dict[str, Any]:

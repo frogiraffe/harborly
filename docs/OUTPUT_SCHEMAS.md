@@ -4,6 +4,10 @@ Every command that supports `--json` prints one JSON document to stdout. The doc
 is a versioned envelope. Automation should read `schema_version` first and then branch
 on whether `data` or `error` is present.
 
+A machine-readable JSON Schema for the envelope lives at
+[`schemas/envelope-1.schema.json`](schemas/envelope-1.schema.json), and the test suite
+validates the output of every `--json` command against it.
+
 ## Success envelope
 
 ```json
@@ -50,6 +54,27 @@ A recoverable error replaces `data` with `error`, and the process exits 2.
 The `message` is human text and may change between releases. Automation should branch on
 `code`, not on `message`. The `details` object is reserved for structured context and
 may be empty.
+
+## Enumerated values
+
+Some `data` fields carry a fixed set of string values.
+
+### `match` decisions
+
+| Field | Values |
+| --- | --- |
+| `status` | `auto_resolved`, `review_required`, `unresolved` |
+| `confidence_tier` | `A`, `B`, `C`, `D` |
+
+A confidence tier is a similarity signal, not a calibrated probability.
+
+### `route` quality flag
+
+| Value | Meaning |
+| --- | --- |
+| `ok` | The route passed the basic plausibility checks. |
+| `high_detour_ratio` | The route is far longer than the great-circle lower bound. |
+| `coincident_endpoints` | The origin and destination are the same point. |
 
 ## Command data shapes
 

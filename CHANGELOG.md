@@ -10,7 +10,11 @@ versioning.
 
 - `docs/OUTPUT_SCHEMAS.md` documenting the JSON envelope, the `data` shape of each
   command, and the error codes.
+- `docs/schemas/envelope-1.schema.json`, a JSON Schema for the envelope that the test
+  suite validates the output of every `--json` command against.
 - A stable machine-readable `code` on every public exception.
+- Documented the `match` status and confidence-tier values and the `route` quality
+  flags.
 
 ### Changed
 
@@ -28,6 +32,8 @@ versioning.
   `build` keys, instead of two concatenated objects that a JSON parser cannot read.
 - The `matrix` command now requires two or more ports, matching its help text,
   instead of accepting a single port and returning a one-by-one matrix.
+- The `route` summary now reports `restrictions` as a JSON array, so the JSON output
+  round-trips through a parser unchanged.
 
 ### Removed
 
