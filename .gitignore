@@ -1,0 +1,21 @@
+# Local reference data (downloaded, not committed)
+data/reference/
+
+# Local example output
+examples/synthetic/synthetic_routes.geojson
+examples/synthetic/synthetic_routes.geojson.js
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+.pytest_cache/
+.coverage
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
