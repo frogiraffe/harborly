@@ -2,6 +2,7 @@
 
 from typing import TYPE_CHECKING
 
+from .canonical import assign_canonical_ids
 from .exceptions import (
     AmbiguousPortError,
     PortCoordinateError,
@@ -73,6 +74,7 @@ __all__ = [
     "SeaRoute",
     "SeaRouter",
     "SourceDataError",
+    "assign_canonical_ids",
     "build_reference_registry",
     "canonical_key",
     "decide_exact_match",

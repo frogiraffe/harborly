@@ -786,3 +786,69 @@ def test_registry_conveniences(registry: PortRegistry) -> None:
         "WPI:2",
         "WPI:3",
     }
+
+
+def test_canonical_id_uses_the_shared_unlocode(registry: PortRegistry) -> None:
+    group = registry.group_for("TRMER")
+
+    assert group.canonical_id == "TRMER"
+    assert all(
+        member.canonical_id == "TRMER" for member in group.members if member.unlocode
+    )
+
+
+def test_resolve_canonical_returns_the_group(registry: PortRegistry) -> None:
+    group = registry.resolve_canonical("TRMER")
+
+    assert group.canonical_id == "TRMER"
+    assert {member.registry_id for member in group.members} == {
+        "WPI:1",
+        "UNLOCODE:TRMER",
+    }
+
+    with pytest.raises(PortNotFoundError):
+        registry.resolve_canonical("SM-NOTHING")
+
+
+def test_canonical_id_attaches_codeless_record_to_a_coded_sibling() -> None:
+    records = pd.DataFrame(
+        [
+            _record("WPI:50", "NGA_WPI", "ZZ", "Harbor", "ZZHBR", 20.0, 20.0),
+            _record("GEONAMES:50", "GEONAMES", "ZZ", "Harbor", None, 20.05, 20.05),
+            _record("GEONAMES:51", "GEONAMES", "ZZ", "Harbor", None, 60.0, 60.0),
+        ]
+    )
+    aliases = pd.DataFrame(
+        [
+            _alias("WPI:50", "NGA_WPI", "Harbor"),
+            _alias("GEONAMES:50", "GEONAMES", "Harbor"),
+            _alias("GEONAMES:51", "GEONAMES", "Harbor"),
+        ]
+    )
+    ports = {port.registry_id: port for port in PortRegistry(records, aliases).ports()}
+
+    assert ports["WPI:50"].canonical_id == "ZZHBR"
+    assert ports["GEONAMES:50"].canonical_id == "ZZHBR"
+    assert ports["GEONAMES:51"].canonical_id.startswith("SM-")
+
+
+def test_canonical_ids_are_order_independent() -> None:
+    from sea_mile.canonical import assign_canonical_ids
+
+    rows = [
+        _record("WPI:50", "NGA_WPI", "ZZ", "Harbor", "ZZHBR", 20.0, 20.0),
+        _record("GEONAMES:50", "GEONAMES", "ZZ", "Harbor", None, 20.05, 20.05),
+    ]
+    frame = pd.DataFrame(rows)
+    reversed_frame = pd.DataFrame(list(reversed(rows)))
+
+    forward = dict(zip(frame["registry_id"], assign_canonical_ids(frame), strict=True))
+    backward = dict(
+        zip(
+            reversed_frame["registry_id"],
+            assign_canonical_ids(reversed_frame),
+            strict=True,
+        )
+    )
+
+    assert forward == backward

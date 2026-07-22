@@ -95,6 +95,7 @@ def _port_lines(port: Port) -> list[str]:
     lines = [
         f"name: {port.name}",
         f"registry_id: {port.registry_id}",
+        f"canonical_id: {port.canonical_id}",
         f"provider: {port.provider} ({port.provider_id})",
         f"country: {port.country_code}",
         f"unlocode: {port.unlocode or '-'}",

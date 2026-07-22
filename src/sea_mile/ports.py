@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 from rapidfuzz import fuzz, process
 
+from sea_mile.canonical import assign_canonical_ids
 from sea_mile.exceptions import (
     AmbiguousPortError,
     PortCoordinateError,
@@ -118,6 +119,7 @@ class Port:
     coordinate_resolution: str | None
     variant_count: int = 1
     coordinate_conflict: bool = False
+    canonical_id: str = ""
 
     @property
     def has_coordinates(self) -> bool:
@@ -180,6 +182,7 @@ class PortGroup:
 
     name: str
     country_code: str
+    canonical_id: str
     unlocode: str | None
     members: tuple[Port, ...]
     sources: tuple[str, ...]
@@ -198,6 +201,7 @@ class PortGroup:
         return {
             "name": self.name,
             "country_code": self.country_code,
+            "canonical_id": self.canonical_id,
             "unlocode": self.unlocode,
             "sources": list(self.sources),
             "latitude": self.latitude,
@@ -262,6 +266,12 @@ class PortRegistry:
             )
         self._registry = registry.copy()
         self._aliases = aliases.copy()
+        # A prebuilt registry stores canonical IDs. Compute them once here for a
+        # frame that does not carry them yet.
+        if "canonical_id" not in self._registry.columns:
+            self._registry["canonical_id"] = assign_canonical_ids(
+                self._registry, coordinate_agreement_nmi=coordinate_agreement_nmi
+            )
         self._by_id = self._registry.set_index("registry_id", drop=False)
         self._coordinate_agreement_nmi = coordinate_agreement_nmi
 
@@ -493,6 +503,10 @@ class PortRegistry:
             )
         )
         unlocode = next((port.unlocode for port in members if port.unlocode), None)
+        canonical_id = next(
+            (port.canonical_id for port in members if port.unlocode),
+            members[0].canonical_id,
+        )
         coordinate_ports = [port for port in members if port.has_coordinates]
         conflict = self._members_disagree(coordinate_ports)
         if conflict or not coordinate_ports:
@@ -503,6 +517,7 @@ class PortRegistry:
         return PortGroup(
             name=members[0].name,
             country_code=members[0].country_code,
+            canonical_id=canonical_id,
             unlocode=unlocode,
             members=tuple(members),
             sources=sources,
@@ -590,6 +605,15 @@ class PortRegistry:
             if any(port.registry_id == anchor.registry_id for port in cluster):
                 return self._make_group(cluster, 100.0, "exact")
         return self._make_group([anchor], 100.0, "exact")
+
+    def resolve_canonical(self, canonical_id: str) -> PortGroup:
+        """Return the grouped port for a stable canonical ID."""
+
+        frame = self._registry[self._registry["canonical_id"] == canonical_id]
+        if frame.empty:
+            raise PortNotFoundError(f"unknown canonical ID: {canonical_id}")
+        ports = [self._port_from_row(row) for _, row in frame.iterrows()]
+        return self._make_group(ports, 100.0, "canonical")
 
     def match_names(
         self,
@@ -1013,4 +1037,5 @@ class PortRegistry:
             coordinate_resolution=_optional_text(row["coordinate_resolution"]),
             variant_count=int(row["variant_count"]),
             coordinate_conflict=bool(row["coordinate_conflict"]),
+            canonical_id=str(row["canonical_id"]),
         )

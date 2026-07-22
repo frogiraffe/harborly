@@ -45,6 +45,7 @@ The main fields are:
 - `latitude`, `longitude`, and `coordinate_resolution`.
 - `function_code` and `source_version`.
 - `variant_count` and `coordinate_conflict`.
+- `canonical_id`, a stable ID shared by every record for the same physical port.
 
 `Port.to_geojson_feature` returns one GeoJSON point feature. The feature properties
 keep the provider and source fields.
@@ -79,6 +80,16 @@ or UN/LOCODE record for the same place. A `PortGroup` holds:
 
 `group_for` returns the `PortGroup` for a single UN/LOCODE code or registry ID. Use it
 to read every source record for one known port.
+
+### Canonical IDs
+
+Every record carries a stable `canonical_id`, so one physical port has one identifier
+across sources and across rebuilds. A port with a UN/LOCODE code uses the code as its
+canonical ID. A code-less port attaches to a nearby coded record of the same name when
+there is one, and otherwise gets a deterministic `SM-<hash>` from its country, name,
+and rounded coordinate. `registry.resolve_canonical("TRMER")` returns the `PortGroup`
+for a canonical ID. `assign_canonical_ids` computes the IDs for a registry frame, which
+the build stores in the Parquet file. `PortGroup` also exposes `canonical_id`.
 
 `resolve` is stricter than `search`. It accepts a registry ID, a UN/LOCODE code, or
 one unambiguous exact alias. It does not pick a fuzzy result on its own. When two or
