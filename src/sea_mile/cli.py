@@ -79,6 +79,35 @@ def _print_json(value: object) -> None:
     print(json.dumps(value, ensure_ascii=False, indent=2))
 
 
+OUTPUT_SCHEMA_VERSION = "1"
+
+
+def _command_label(args: argparse.Namespace) -> str:
+    if args.command == "data":
+        return f"data {args.data_command}"
+    return str(args.command)
+
+
+def _emit_json(
+    args: argparse.Namespace, data: object, *, warnings: list[str] | None = None
+) -> None:
+    """Print one command result inside the versioned output envelope."""
+
+    _print_json(
+        {
+            "schema_version": OUTPUT_SCHEMA_VERSION,
+            "command": _command_label(args),
+            "data": data,
+            "warnings": warnings or [],
+        }
+    )
+
+
+def _error_code(error: Exception) -> str:
+    code = getattr(error, "code", None)
+    return code if isinstance(code, str) else "usage_error"
+
+
 def _print_table(headers: Sequence[str], rows: Sequence[Sequence[str]]) -> None:
     widths = [len(header) for header in headers]
     for row in rows:
@@ -124,12 +153,13 @@ def _cmd_info(args: argparse.Namespace) -> int:
     registry = _load_registry(args)
     data_directory = str(args.data_dir.resolve())
     if args.json:
-        _print_json(
+        _emit_json(
+            args,
             {
                 "registry_records": len(registry),
                 "providers": registry.providers,
                 "data_directory": data_directory,
-            }
+            },
         )
         return 0
     print(f"registry_records: {len(registry)}")
@@ -158,7 +188,7 @@ def _cmd_search(args: argparse.Namespace) -> int:
             minimum_score=args.minimum_score,
         )
         if args.json:
-            _print_json([result.to_dict() for result in results])
+            _emit_json(args, [result.to_dict() for result in results])
             return 0
         if not results:
             print("no matches")
@@ -187,7 +217,7 @@ def _cmd_search(args: argparse.Namespace) -> int:
         minimum_score=args.minimum_score,
     )
     if args.json:
-        _print_json([group.to_dict() for group in groups])
+        _emit_json(args, [group.to_dict() for group in groups])
         return 0
     if not groups:
         print("no matches")
@@ -213,7 +243,7 @@ def _cmd_show(args: argparse.Namespace) -> int:
     registry = _load_registry(args)
     port = registry.resolve(args.port, country_code=args.country_code)
     if args.json:
-        _print_json(port.to_dict())
+        _emit_json(args, port.to_dict())
         return 0
     for line in _port_lines(port):
         print(line)
@@ -231,7 +261,7 @@ def _cmd_near(args: argparse.Namespace) -> int:
             max_distance_nmi=args.max_distance_nmi,
         )
         if args.json:
-            _print_json([result.to_dict() for result in results])
+            _emit_json(args, [result.to_dict() for result in results])
             return 0
         if not results:
             print("no matches")
@@ -259,7 +289,7 @@ def _cmd_near(args: argparse.Namespace) -> int:
         max_distance_nmi=args.max_distance_nmi,
     )
     if args.json:
-        _print_json([result.to_dict() for result in groups])
+        _emit_json(args, [result.to_dict() for result in groups])
         return 0
     if not groups:
         print("no matches")
@@ -293,7 +323,7 @@ def _cmd_route(args: argparse.Namespace) -> int:
         print(f"sea-mile: error: {error}", file=sys.stderr)
         return 2
     if args.json:
-        _print_json(result.summary())
+        _emit_json(args, result.summary())
     else:
         detour = (
             f"{result.detour_ratio:.3f}" if result.detour_ratio is not None else "-"
@@ -334,7 +364,7 @@ def _cmd_matrix(args: argparse.Namespace) -> int:
         return 2
     labels = [port.registry_id for port in ports]
     if args.json:
-        _print_json({"ports": labels, "distances_nmi": matrix})
+        _emit_json(args, {"ports": labels, "distances_nmi": matrix})
         return 0
     _print_table(
         ("FROM/TO", *labels),
@@ -399,7 +429,7 @@ def _cmd_match(args: argparse.Namespace) -> int:
     results = registry.match_names(names, country_codes=country_codes)
 
     if args.json:
-        _print_json([result.to_dict() for result in results])
+        _emit_json(args, [result.to_dict() for result in results])
         return 0
     if not results:
         print("no rows")
@@ -474,7 +504,7 @@ def _cmd_data(args: argparse.Namespace) -> int:
 
         report = verify_reference_data(args.reference_root)
         if args.json:
-            _print_json(report)
+            _emit_json(args, report)
         else:
             _print_verify_report(report)
         return 0 if report["status"] == "passed" else 1
@@ -498,8 +528,9 @@ def _cmd_data(args: argparse.Namespace) -> int:
     if args.json:
         # prepare emits both manifests as one document. download and build each
         # emit their single manifest at the top level, keeping their prior shape.
-        _print_json(
-            payload if args.data_command == "prepare" else payload[args.data_command]
+        _emit_json(
+            args,
+            payload if args.data_command == "prepare" else payload[args.data_command],
         )
     return 0
 
@@ -678,7 +709,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         return args.func(args)
     except (SeaMileError, ValueError) as error:
-        print(f"sea-mile: error: {error}", file=sys.stderr)
+        if getattr(args, "json", False):
+            _print_json(
+                {
+                    "schema_version": OUTPUT_SCHEMA_VERSION,
+                    "command": _command_label(args),
+                    "error": {
+                        "code": _error_code(error),
+                        "message": str(error),
+                        "details": {},
+                    },
+                }
+            )
+        else:
+            print(f"sea-mile: error: {error}", file=sys.stderr)
         return 2
 
 

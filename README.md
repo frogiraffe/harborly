@@ -71,6 +71,34 @@ Add `--json` for machine-readable output on `info`, `search`, `show`, `near`, `r
 with `--format`, and `tui` is interactive, so neither takes `--json`. Add `--verbose`
 before a command to log progress to stderr, and `--version` to print the version.
 
+### JSON output
+
+Each `--json` response is a versioned envelope. Read `schema_version` first, then the
+`data` field.
+
+```json
+{
+  "schema_version": "1",
+  "command": "search",
+  "data": [],
+  "warnings": []
+}
+```
+
+A recoverable error carries an `error` object instead of `data`, and the command
+exits 2.
+
+```json
+{
+  "schema_version": "1",
+  "command": "show",
+  "error": { "code": "port_not_found", "message": "no exact port match", "details": {} }
+}
+```
+
+See [Output schemas](docs/OUTPUT_SCHEMAS.md) for the `data` shape of each command and
+the full list of error codes.
+
 ### Exit codes
 
 - `0`: the command completed, including a search or match that found no results.

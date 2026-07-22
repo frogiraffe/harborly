@@ -6,17 +6,28 @@ versioning.
 
 ## [Unreleased]
 
+### Added
+
+- `docs/OUTPUT_SCHEMAS.md` documenting the JSON envelope, the `data` shape of each
+  command, and the error codes.
+- A stable machine-readable `code` on every public exception.
+
+### Changed
+
+- CLI `--json` output is now a versioned envelope with `schema_version`, `command`,
+  `data`, and `warnings`. A recoverable error emits the same envelope with an `error`
+  object that holds a stable `code`, a `message`, and `details`, printed to stdout with
+  exit code 2. Anything that parsed the previous bare JSON must now read the `data`
+  field. See `docs/OUTPUT_SCHEMAS.md`.
+- Scoped the README JSON note to the commands that emit JSON, and documented the
+  CLI exit codes.
+
 ### Fixed
 
 - `data prepare --json` now prints one valid JSON document, with `download` and
   `build` keys, instead of two concatenated objects that a JSON parser cannot read.
 - The `matrix` command now requires two or more ports, matching its help text,
   instead of accepting a single port and returning a one-by-one matrix.
-
-### Changed
-
-- Scoped the README JSON note to the commands that emit JSON, and documented the
-  CLI exit codes.
 
 ### Removed
 

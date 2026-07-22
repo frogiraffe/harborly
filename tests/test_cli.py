@@ -72,7 +72,10 @@ def test_info_and_search_emit_machine_readable_json(tmp_path, capsys) -> None:
 
     assert main(["--data-dir", str(data_directory), "info", "--json"]) == 0
     info = json.loads(capsys.readouterr().out)
-    assert info["registry_records"] == 2
+    assert info["schema_version"] == "1"
+    assert info["command"] == "info"
+    assert info["warnings"] == []
+    assert info["data"]["registry_records"] == 2
 
     assert (
         main(
@@ -88,7 +91,7 @@ def test_info_and_search_emit_machine_readable_json(tmp_path, capsys) -> None:
         )
         == 0
     )
-    results = json.loads(capsys.readouterr().out)
+    results = json.loads(capsys.readouterr().out)["data"]
     assert results[0]["best_id"] == "WPI:1"
     assert results[0]["sources"] == ["NGA_WPI"]
 
@@ -109,7 +112,7 @@ def test_info_and_search_emit_machine_readable_json(tmp_path, capsys) -> None:
         )
         == 0
     )
-    nearest = json.loads(capsys.readouterr().out)
+    nearest = json.loads(capsys.readouterr().out)["data"]
     assert nearest[0]["best_id"] == "WPI:1"
     assert "distance_nmi" in nearest[0]
 
@@ -197,7 +200,7 @@ def test_route_can_write_geojson(tmp_path, capsys) -> None:
     )
 
     assert status == 0
-    summary = json.loads(capsys.readouterr().out)
+    summary = json.loads(capsys.readouterr().out)["data"]
     feature = json.loads(output.read_text())
     assert summary["distance_nmi"] > 0
     assert feature["properties"]["routing_units"] == "nautical_miles"
@@ -222,7 +225,7 @@ def test_match_resolves_names_from_csv(tmp_path, capsys) -> None:
     )
 
     assert status == 0
-    results = {row["query"]: row for row in json.loads(capsys.readouterr().out)}
+    results = {row["query"]: row for row in json.loads(capsys.readouterr().out)["data"]}
     assert results["Mersin"]["status"] == "auto_resolved"
     assert results["Mersin"]["selected_registry_id"] == "WPI:1"
     assert results["Atlantis"]["status"] == "unresolved"
@@ -287,7 +290,7 @@ def test_matrix_reports_pairwise_distance(tmp_path, capsys) -> None:
     status = main(
         ["--data-dir", str(data_directory), "matrix", "TRMER", "GRPIR", "--json"]
     )
-    payload = json.loads(capsys.readouterr().out)
+    payload = json.loads(capsys.readouterr().out)["data"]
 
     assert status == 0
     assert payload["ports"] == ["WPI:1", "WPI:2"]
@@ -320,7 +323,8 @@ def test_data_prepare_json_is_one_valid_document(tmp_path, capsys, monkeypatch) 
 
     assert status == 0
     payload = json.loads(capsys.readouterr().out)
-    assert payload == {"download": download_manifest, "build": build_manifest}
+    assert payload["command"] == "data prepare"
+    assert payload["data"] == {"download": download_manifest, "build": build_manifest}
 
 
 def test_data_download_json_keeps_flat_manifest_shape(
@@ -335,7 +339,7 @@ def test_data_download_json_keeps_flat_manifest_shape(
     status = main(["data", "download", "--reference-root", str(tmp_path), "--json"])
 
     assert status == 0
-    assert json.loads(capsys.readouterr().out) == download_manifest
+    assert json.loads(capsys.readouterr().out)["data"] == download_manifest
 
 
 @pytest.mark.parametrize("command", [["export", "--country", "TR"], ["tui"]])
@@ -375,5 +379,33 @@ def test_json_commands_emit_one_valid_document(
     status = main(["--data-dir", str(data_directory), *command, "--json"])
 
     assert status == 0
+    envelope = json.loads(capsys.readouterr().out)
+    assert envelope["schema_version"] == "1"
+    assert envelope["warnings"] == []
+    assert isinstance(envelope["data"], list if returns_list else dict)
+
+
+def test_json_error_output_is_structured(tmp_path, capsys) -> None:
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+
+    status = main(["--data-dir", str(data_directory), "show", "Nowhere", "--json"])
+
+    assert status == 2
     payload = json.loads(capsys.readouterr().out)
-    assert isinstance(payload, list if returns_list else dict)
+    assert payload["command"] == "show"
+    assert payload["error"]["code"] == "port_not_found"
+    assert payload["error"]["message"]
+    assert payload["error"]["details"] == {}
+
+
+def test_text_error_still_goes_to_stderr(tmp_path, capsys) -> None:
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+
+    status = main(["--data-dir", str(data_directory), "show", "Nowhere"])
+
+    captured = capsys.readouterr()
+    assert status == 2
+    assert captured.out == ""
+    assert "sea-mile: error:" in captured.err
