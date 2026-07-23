@@ -84,6 +84,9 @@ The main fields are:
 `Port.to_geojson_feature` returns one GeoJSON point feature. The feature properties
 keep the provider and source fields.
 
+[Data dictionary](DATA_DICTIONARY.md) documents every field each public model
+serializes, with its type, whether it can be null, its unit, and its meaning.
+
 ## Search and resolution
 
 ```python

@@ -117,7 +117,7 @@ def _checksum(
         prior = prior_sources.get(source_key)
         if (
             isinstance(prior, dict)
-            and prior.get("path") == str(path.relative_to(reference_root))
+            and prior.get("path") == path.relative_to(reference_root).as_posix()
             and prior.get("bytes") == path.stat().st_size
             and isinstance(prior.get("sha256"), str)
         ):
@@ -192,7 +192,7 @@ def download_reference_data(
                 "publisher": "National Geospatial-Intelligence Agency",
                 "url": WPI_URL,
                 "snapshot_label": wpi_path.parent.name,
-                "path": str(wpi_path.relative_to(reference_root)),
+                "path": wpi_path.relative_to(reference_root).as_posix(),
                 "sha256": _checksum(
                     reference_root, prior_sources, "wpi", wpi_path, downloaded
                 ),
@@ -202,7 +202,7 @@ def download_reference_data(
                 "publisher": "United Nations Economic Commission for Europe",
                 "url": UNLOCODE_URL,
                 "release": UNLOCODE_RELEASE,
-                "path": str(unlocode_path.relative_to(reference_root)),
+                "path": unlocode_path.relative_to(reference_root).as_posix(),
                 "sha256": _checksum(
                     reference_root,
                     prior_sources,
@@ -217,7 +217,7 @@ def download_reference_data(
                 "url": GEONAMES_URL,
                 "snapshot_label": geonames_path.parent.name,
                 "license": "CC BY 4.0",
-                "path": str(geonames_path.relative_to(reference_root)),
+                "path": geonames_path.relative_to(reference_root).as_posix(),
                 "sha256": _checksum(
                     reference_root,
                     prior_sources,

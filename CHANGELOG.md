@@ -6,8 +6,26 @@ versioning.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-07-24
+
+The first stable release. It gathers the reproducible-build, routing-boundary,
+performance, and API-reduction work done since 0.3, validates the three usage scenarios
+end to end, and commits to a frozen public API, CLI, JSON envelope, error codes, and
+registry schema. See the [stability policy](docs/STABILITY.md) for what is guaranteed and
+the [migration guide](docs/MIGRATION.md) for moving off the names deprecated along the
+way. Positioning shifts from port search and distances to reproducible, source-aware port
+identity resolution with approximate analytical distances.
+
 ### Added
 
+- A stability policy (`docs/STABILITY.md`) that states what is frozen at 1.0, the
+  supported Python versions and operating systems, and the deprecation schedule, and a
+  migration guide (`docs/MIGRATION.md`) that maps the removed top-level names and the
+  relocated modules to their new homes.
+- End to end scenario tests for the three usage paths sea-mile targets: an analyst bulk
+  match that enriches every row and repeats, a developer embedding search and routing, and
+  a researcher building a reproducible distance matrix. A new `docs/DATA_DICTIONARY.md`
+  documents every serialized field with its type, nullability, unit, and meaning.
 - A `registry_schema_version` and a deterministic `registry_content_hash` in the build
   manifest, plus a load-time check that refuses a processed registry whose schema this
   build of sea-mile cannot read. The content hash is order-independent, so two builds
@@ -51,6 +69,8 @@ versioning.
 - `sea-mile match` now reads its input in chunks and appends the `--output` and `--review`
   rows as it goes, so a large input no longer loads into memory all at once. The written
   output is unchanged.
+- CI now runs the suite on macOS and Windows alongside Linux, and pins every GitHub Action
+  to a commit SHA for a reproducible, tamper-evident workflow.
 - The top-level `sea_mile.__all__` now lists the core types only, so the advertised public
   surface is smaller. The names it dropped still import from `sea_mile` with a warning for
   one release. See Deprecated below and the Public API surface section in the library docs.
