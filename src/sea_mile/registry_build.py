@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from zipfile import ZipFile
@@ -14,6 +15,40 @@ from sea_mile.geonames import load_geonames_port_archive
 from sea_mile.normalization import canonical_key, normalize_display_text
 from sea_mile.osm import load_osm_port_archive
 from sea_mile.reference import parse_unlocode_coordinates, parse_wpi_dms
+
+# The on-disk format of the processed registry. A reader refuses a version it does
+# not support instead of failing on a missing or renamed column.
+REGISTRY_SCHEMA_VERSION = 1
+
+
+def registry_content_hash(registry: pd.DataFrame, aliases: pd.DataFrame) -> str:
+    """Return a deterministic content hash of the normalized registry.
+
+    Two builds from the same sources produce the same hash regardless of row
+    order, so it identifies a build and lets a rebuild be checked for drift.
+    """
+
+    registry_csv = registry.sort_values("registry_id").to_csv(index=False)
+    aliases_csv = aliases.sort_values(["registry_id", "alias_key", "alias"]).to_csv(
+        index=False
+    )
+    digest = hashlib.sha256()
+    digest.update(registry_csv.encode())
+    digest.update(aliases_csv.encode())
+    return digest.hexdigest()
+
+
+def _write_parquet_atomic(frame: pd.DataFrame, path: Path) -> None:
+    temp = path.with_name(path.name + ".part")
+    frame.to_parquet(temp, index=False)
+    temp.replace(path)
+
+
+def _write_text_atomic(path: Path, text: str) -> None:
+    temp = path.with_name(path.name + ".part")
+    temp.write_text(text, encoding="utf-8")
+    temp.replace(path)
+
 
 UNLOCODE_COLUMNS = [
     "change",
@@ -255,9 +290,13 @@ def build_reference_registry(reference_root: str | Path) -> dict[str, object]:
         [frame for _, frame in provider_frames.values()], ignore_index=True
     ).drop_duplicates()
     processed_root.mkdir(parents=True, exist_ok=True)
-    registry.to_parquet(processed_root / "port_registry.parquet", index=False)
-    aliases.to_parquet(processed_root / "port_aliases.parquet", index=False)
+    # Write to temporary files and rename, so a failed build never leaves a
+    # half-written registry, and the manifest a reader checks first lands last.
+    _write_parquet_atomic(registry, processed_root / "port_registry.parquet")
+    _write_parquet_atomic(aliases, processed_root / "port_aliases.parquet")
     manifest: dict[str, object] = {
+        "registry_schema_version": REGISTRY_SCHEMA_VERSION,
+        "registry_content_hash": registry_content_hash(registry, aliases),
         "registry_rows": len(registry),
         "alias_rows": len(aliases),
         "providers": {
@@ -272,7 +311,8 @@ def build_reference_registry(reference_root: str | Path) -> dict[str, object]:
         ),
         "coordinate_conflict_records": int(registry["coordinate_conflict"].sum()),
     }
-    (processed_root / "registry_manifest.json").write_text(
-        json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+    _write_text_atomic(
+        processed_root / "registry_manifest.json",
+        json.dumps(manifest, indent=2) + "\n",
     )
     return manifest

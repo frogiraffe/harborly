@@ -6,6 +6,22 @@ versioning.
 
 ## [Unreleased]
 
+### Added
+
+- A `registry_schema_version` and a deterministic `registry_content_hash` in the build
+  manifest, plus a load-time check that refuses a processed registry whose schema this
+  build of sea-mile cannot read. The content hash is order-independent, so two builds
+  from the same sources produce the same hash.
+- A source lockfile. `sea-mile data lock` pins each source snapshot's URL, label, size,
+  and SHA-256 into `sea-mile.lock.json`, and `sea-mile data build --lock` verifies the
+  local raw snapshots against it before building, for an offline reproducible build that
+  fails loudly on drift.
+
+### Changed
+
+- The registry build now writes its Parquet files and manifest through temporary files
+  and an atomic rename, so a failed build no longer leaves a half-written registry.
+
 ## [0.3.0] - 2026-07-23
 
 The first hardened release since 0.1.0. It makes the `--json` output a versioned,

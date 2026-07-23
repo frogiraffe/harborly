@@ -234,3 +234,71 @@ def download_reference_data(
         json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
     )
     return manifest
+
+
+SOURCE_LOCK_VERSION = 1
+
+
+def write_source_lock(
+    reference_root: str | Path, *, lock_path: str | Path | None = None
+) -> dict[str, object]:
+    """Pin the downloaded source snapshots into a lockfile.
+
+    The lock records each source's URL, snapshot label, size, and SHA-256 from the
+    download manifest, so a build can be verified against it and repeated offline.
+    """
+
+    reference_root = Path(reference_root)
+    manifest_path = reference_root / "manifest.json"
+    if not manifest_path.exists():
+        raise SourceDataError(
+            f"no download manifest at {manifest_path}; run data download first"
+        )
+    manifest = json.loads(manifest_path.read_text())
+    lock: dict[str, object] = {
+        "lock_version": SOURCE_LOCK_VERSION,
+        "generated_at_utc": datetime.now(UTC).isoformat(),
+        "retrieved_at_utc": manifest.get("retrieved_at_utc"),
+        "sources": manifest.get("sources", {}),
+    }
+    target = Path(lock_path) if lock_path else reference_root / "sea-mile.lock.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(lock, indent=2) + "\n", encoding="utf-8")
+    return lock
+
+
+def load_source_lock(lock_path: str | Path) -> dict[str, object]:
+    """Read a source lockfile, raising SourceDataError when it is unusable."""
+
+    lock_path = Path(lock_path)
+    if not lock_path.exists():
+        raise SourceDataError(f"lockfile not found: {lock_path}")
+    try:
+        return json.loads(lock_path.read_text())
+    except json.JSONDecodeError as error:
+        raise SourceDataError(f"lockfile is not valid JSON: {lock_path}") from error
+
+
+def lock_mismatches(reference_root: str | Path, lock: dict[str, object]) -> list[str]:
+    """Return one description per source that differs from the lock.
+
+    A source is a mismatch when its local file is missing or when its SHA-256 no
+    longer matches the value the lock pinned. An empty list means the local raw
+    snapshots reproduce the locked sources exactly.
+    """
+
+    reference_root = Path(reference_root)
+    sources = lock.get("sources")
+    if not isinstance(sources, dict):
+        return ["lockfile records no sources"]
+    mismatches: list[str] = []
+    for name, details in sources.items():
+        if not isinstance(details, dict):
+            continue
+        path = reference_root / str(details.get("path"))
+        expected = details.get("sha256")
+        if not path.exists():
+            mismatches.append(f"{name}: missing local file {details.get('path')}")
+        elif isinstance(expected, str) and sha256(path) != expected:
+            mismatches.append(f"{name}: sha256 differs from the lock")
+    return mismatches

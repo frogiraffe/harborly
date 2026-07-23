@@ -34,6 +34,19 @@ build_reference_registry("reference")
 `sea-mile data verify` checks a local build. The `verify_reference_data` function in
 `sea_mile.validation` returns the same report.
 
+The build manifest records a `registry_schema_version` and a deterministic
+`registry_content_hash`. When it loads a directory, `PortRegistry.from_directory` reads
+the manifest and refuses a schema version this build of sea-mile does not support,
+rather than failing later on a missing or renamed column. The content hash is
+order-independent, so a rebuild from the same sources produces the same hash.
+
+`sea-mile data lock` writes `sea-mile.lock.json` from the download manifest, pinning
+each source's URL, snapshot label, size, and SHA-256. `sea-mile data build --lock`
+verifies the local raw snapshots against the lock before building and fails on a
+mismatch, so a build repeats exactly and offline from present files. The
+`write_source_lock`, `load_source_lock`, and `lock_mismatches` functions in
+`sea_mile.source_data` expose the same behavior.
+
 ## Port records
 
 A `Port` object is one provider record. It is not a cross-source consensus record.
