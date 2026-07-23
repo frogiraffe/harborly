@@ -562,7 +562,7 @@ def _record(registry_id, provider, country, name, unlocode, lat, lon) -> dict:
 
 
 def _alias(registry_id, provider, name) -> dict:
-    from sea_mile.normalization import canonical_key
+    from sea_mile.text import canonical_key
 
     return {
         "registry_id": registry_id,

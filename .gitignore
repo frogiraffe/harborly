@@ -9,8 +9,8 @@ examples/synthetic/synthetic_routes.geojson.js
 __pycache__/
 *.py[cod]
 *.egg-info/
-build/
-dist/
+/build/
+/dist/
 .venv/
 .pytest_cache/
 .coverage

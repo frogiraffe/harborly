@@ -7,7 +7,7 @@ from pathlib import Path
 
 import searoute
 
-from sea_mile.quality import great_circle_nmi
+from sea_mile.geo import great_circle_nmi
 from sea_mile.routing import assess_route_length
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]

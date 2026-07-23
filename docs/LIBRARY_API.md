@@ -12,18 +12,18 @@ The stable top-level exports are the core types: `Port`, `PortGroup`, `PortRegis
 `SourceDataError`, `PortNotFoundError`, `AmbiguousPortError`, `PortCoordinateError`,
 `RoutingError`).
 
-The lower-level helpers below still import from `sea_mile` for one release, with a
-`DeprecationWarning`, and stay available from their own modules. Import them from the
-module going forward.
+The lower-level helpers below still import from the top-level `sea_mile` namespace for
+one release, with a `DeprecationWarning`, and several of their modules were renamed or
+grouped in 0.7. Import them from the module named here going forward. The old module
+paths also keep working for one release and warn on import.
 
-- `sea_mile.quality`: `validate_coordinate`, `CoordinateCheck`, `great_circle_nmi`.
-- `sea_mile.normalization`: `canonical_key`, `normalize_display_text`.
-- `sea_mile.reference`: `parse_wpi_dms`, `parse_unlocode_coordinates`.
+- `sea_mile.geo`: `validate_coordinate`, `CoordinateCheck`, `great_circle_nmi`.
+- `sea_mile.text`: `canonical_key`, `normalize_display_text`.
+- `sea_mile.sources`: `parse_wpi_dms`, `parse_unlocode_coordinates`.
 - `sea_mile.matching`: `decide_exact_match`, `ExactMatchDecision`, `MatchCandidate`.
 - `sea_mile.ports`: `PortSearchResult`, `NearbyPortResult`, `NearbyPortGroup`.
 - `sea_mile.canonical`: `assign_canonical_ids`.
-- `sea_mile.registry_build`: `build_reference_registry`.
-- `sea_mile.source_data`: `download_reference_data`.
+- `sea_mile.build`: `build_reference_registry`, `download_reference_data`.
 
 ## Data lifecycle
 
@@ -46,8 +46,7 @@ the read commands at a different processed registry.
 The Python calls are `download_reference_data` and `build_reference_registry`:
 
 ```python
-from sea_mile.registry_build import build_reference_registry
-from sea_mile.source_data import download_reference_data
+from sea_mile.build import build_reference_registry, download_reference_data
 
 download_reference_data("reference")
 build_reference_registry("reference")
@@ -67,7 +66,7 @@ each source's URL, snapshot label, size, and SHA-256. `sea-mile data build --loc
 verifies the local raw snapshots against the lock before building and fails on a
 mismatch, so a build repeats exactly and offline from present files. The
 `write_source_lock`, `load_source_lock`, and `lock_mismatches` functions in
-`sea_mile.source_data` expose the same behavior.
+`sea_mile.build` expose the same behavior.
 
 ## Port records
 

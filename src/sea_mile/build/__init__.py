@@ -1,8 +1,6 @@
-"""Deprecated import path. Source downloading moved to sea_mile.build in 0.7."""
+"""Build the local port registry and download its public source snapshots."""
 
-import warnings
-
-from sea_mile.build import (
+from .download import (
     GEONAMES_URL,
     SOURCE_LOCK_VERSION,
     UNLOCODE_RELEASE,
@@ -14,23 +12,26 @@ from sea_mile.build import (
     sha256,
     write_source_lock,
 )
-
-warnings.warn(
-    "sea_mile.source_data moved to sea_mile.build in 0.7. "
-    "Import these names from sea_mile.build instead.",
-    DeprecationWarning,
-    stacklevel=2,
+from .registry import (
+    REGISTRY_SCHEMA_VERSION,
+    UNLOCODE_COLUMNS,
+    build_reference_registry,
+    registry_content_hash,
 )
 
 __all__ = [
     "GEONAMES_URL",
+    "REGISTRY_SCHEMA_VERSION",
     "SOURCE_LOCK_VERSION",
+    "UNLOCODE_COLUMNS",
     "UNLOCODE_RELEASE",
     "UNLOCODE_URL",
     "WPI_URL",
+    "build_reference_registry",
     "download_reference_data",
     "load_source_lock",
     "lock_mismatches",
+    "registry_content_hash",
     "sha256",
     "write_source_lock",
 ]

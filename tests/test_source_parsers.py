@@ -12,8 +12,8 @@ from zipfile import ZipFile
 
 import pandas as pd
 
-from sea_mile.geonames import load_geonames_port_archive
-from sea_mile.registry_build import _load_unlocode, _load_wpi
+from sea_mile.build.registry import _load_unlocode, _load_wpi
+from sea_mile.sources.geonames import load_geonames_port_archive
 
 
 def test_load_wpi_parses_the_real_column_layout(tmp_path) -> None:

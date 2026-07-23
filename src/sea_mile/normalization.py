@@ -1,25 +1,14 @@
-"""String normalization without destroying the original source text."""
+"""Deprecated import path. The text helpers moved to sea_mile.text in 0.7."""
 
-import re
-import unicodedata
+import warnings
 
-_WHITESPACE = re.compile(r"\s+")
-_NON_ALPHANUMERIC = re.compile(r"[^0-9a-z]+")
+from sea_mile.text import canonical_key, normalize_display_text
 
+warnings.warn(
+    "sea_mile.normalization moved to sea_mile.text in 0.7. "
+    "Import these names from sea_mile.text instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
-def normalize_display_text(value: object) -> str:
-    """Normalize Unicode and whitespace while preserving human-readable accents."""
-
-    normalized = unicodedata.normalize("NFKC", str(value or "")).strip()
-    return _WHITESPACE.sub(" ", normalized)
-
-
-def canonical_key(value: object) -> str:
-    """Create an accent/punctuation-insensitive key for candidate generation."""
-
-    display = normalize_display_text(value).replace("ı", "i")
-    decomposed = unicodedata.normalize("NFKD", display.casefold())
-    without_marks = "".join(
-        character for character in decomposed if unicodedata.category(character) != "Mn"
-    )
-    return _WHITESPACE.sub(" ", _NON_ALPHANUMERIC.sub(" ", without_marks)).strip()
+__all__ = ["canonical_key", "normalize_display_text"]

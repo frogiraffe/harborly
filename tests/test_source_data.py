@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from sea_mile.source_data import download_reference_data, sha256
+from sea_mile.build.download import download_reference_data, sha256
 
 
 def test_existing_snapshots_produce_checksum_manifest_without_network(tmp_path) -> None:
@@ -49,7 +49,7 @@ def test_reuses_existing_snapshot_without_network(tmp_path, monkeypatch) -> None
     def fail(*args, **kwargs):
         raise AssertionError("no download expected when a snapshot already exists")
 
-    monkeypatch.setattr("sea_mile.source_data._download", fail)
+    monkeypatch.setattr("sea_mile.build.download._download", fail)
 
     manifest = download_reference_data(tmp_path)
     sources = manifest["sources"]
@@ -67,7 +67,7 @@ def test_reused_snapshot_keeps_manifest_checksum_without_rehashing(
     def fail(*args, **kwargs):
         raise AssertionError("no download expected")
 
-    monkeypatch.setattr("sea_mile.source_data._download", fail)
+    monkeypatch.setattr("sea_mile.build.download._download", fail)
     first = download_reference_data(tmp_path)
 
     calls: list = []
@@ -76,7 +76,7 @@ def test_reused_snapshot_keeps_manifest_checksum_without_rehashing(
         calls.append(path)
         return "unexpected"
 
-    monkeypatch.setattr("sea_mile.source_data.sha256", counting_sha256)
+    monkeypatch.setattr("sea_mile.build.download.sha256", counting_sha256)
     second = download_reference_data(tmp_path)
 
     assert calls == []
@@ -97,7 +97,7 @@ def test_explicit_snapshot_label_downloads_into_that_label(
         destination.write_bytes(b"fresh")
         calls.append(destination)
 
-    monkeypatch.setattr("sea_mile.source_data._download", fake_download)
+    monkeypatch.setattr("sea_mile.build.download._download", fake_download)
     manifest = download_reference_data(tmp_path, snapshot_label="2099-12-31")
     sources = manifest["sources"]
 
@@ -115,7 +115,7 @@ def test_refresh_redownloads_into_new_folder(tmp_path, monkeypatch) -> None:
         destination.write_bytes(b"fresh")
         calls.append(destination)
 
-    monkeypatch.setattr("sea_mile.source_data._download", fake_download)
+    monkeypatch.setattr("sea_mile.build.download._download", fake_download)
 
     manifest = download_reference_data(
         tmp_path, snapshot_label="2099-12-31", refresh=True

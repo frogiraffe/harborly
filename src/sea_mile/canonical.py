@@ -14,8 +14,8 @@ import hashlib
 
 import pandas as pd
 
-from sea_mile.normalization import canonical_key
-from sea_mile.quality import great_circle_nmi
+from sea_mile.geo import great_circle_nmi
+from sea_mile.text import canonical_key
 
 
 def _synthetic_id(

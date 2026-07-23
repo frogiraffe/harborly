@@ -736,7 +736,7 @@ def _cmd_data(args: argparse.Namespace) -> int:
             _print_verify_report(report)
         return 0 if report["status"] == "passed" else 1
     if args.data_command == "lock":
-        from sea_mile.source_data import write_source_lock
+        from sea_mile.build.download import write_source_lock
 
         lock = write_source_lock(args.reference_root, lock_path=args.output)
         if args.json:
@@ -746,7 +746,7 @@ def _cmd_data(args: argparse.Namespace) -> int:
         return 0
     payload: dict[str, Any] = {}
     if args.data_command in {"download", "prepare"}:
-        from sea_mile.source_data import download_reference_data
+        from sea_mile.build.download import download_reference_data
 
         download_manifest = download_reference_data(
             args.reference_root, refresh=getattr(args, "refresh", False)
@@ -756,14 +756,14 @@ def _cmd_data(args: argparse.Namespace) -> int:
             _print_download_manifest(download_manifest)
     if args.data_command in {"build", "prepare"}:
         if getattr(args, "lock", None) is not None:
-            from sea_mile.source_data import load_source_lock, lock_mismatches
+            from sea_mile.build.download import load_source_lock, lock_mismatches
 
             mismatches = lock_mismatches(
                 args.reference_root, load_source_lock(args.lock)
             )
             if mismatches:
                 raise SourceDataError("source lock mismatch: " + ", ".join(mismatches))
-        from sea_mile.registry_build import build_reference_registry
+        from sea_mile.build.registry import build_reference_registry
 
         build_manifest = build_reference_registry(args.reference_root)
         payload["build"] = build_manifest

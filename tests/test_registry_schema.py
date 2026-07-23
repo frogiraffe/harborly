@@ -5,9 +5,9 @@ import json
 import pandas as pd
 import pytest
 
+from sea_mile.build.registry import REGISTRY_SCHEMA_VERSION, registry_content_hash
 from sea_mile.exceptions import RegistryDataError
 from sea_mile.ports import PortRegistry
-from sea_mile.registry_build import REGISTRY_SCHEMA_VERSION, registry_content_hash
 
 
 def _registry_frame() -> pd.DataFrame:

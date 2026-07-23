@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from sea_mile.reference import parse_unlocode_coordinates, parse_wpi_dms
+from sea_mile.sources.reference import parse_unlocode_coordinates, parse_wpi_dms
 
 
 class ReferenceCoordinateTests(unittest.TestCase):

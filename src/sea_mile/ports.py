@@ -21,9 +21,9 @@ from sea_mile.exceptions import (
     PortNotFoundError,
     RegistryDataError,
 )
+from sea_mile.geo import _EARTH_RADIUS_NMI, great_circle_nmi, validate_coordinate
 from sea_mile.matching import BatchMatchResult, MatchCandidate, decide_exact_match
-from sea_mile.normalization import canonical_key
-from sea_mile.quality import _EARTH_RADIUS_NMI, great_circle_nmi, validate_coordinate
+from sea_mile.text import canonical_key
 
 try:
     from scipy.spatial import cKDTree

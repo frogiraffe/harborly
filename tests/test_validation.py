@@ -6,7 +6,7 @@ import sys
 import pandas as pd
 import pytest
 
-from sea_mile.source_data import sha256
+from sea_mile.build.download import sha256
 from sea_mile.validation import verify_reference_data
 
 

@@ -67,11 +67,11 @@ def test_data_command_envelopes_match_schema(
     tmp_path, capsys, validator, monkeypatch
 ) -> None:
     monkeypatch.setattr(
-        "sea_mile.source_data.download_reference_data",
+        "sea_mile.build.download.download_reference_data",
         lambda *args, **kwargs: {"sources": {}},
     )
     monkeypatch.setattr(
-        "sea_mile.registry_build.build_reference_registry",
+        "sea_mile.build.registry.build_reference_registry",
         lambda *args, **kwargs: {"registry_rows": 0},
     )
 

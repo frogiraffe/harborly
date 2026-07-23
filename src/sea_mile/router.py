@@ -18,8 +18,8 @@ from sea_mile.exceptions import (
     RoutingErrorReason,
     SeaMileError,
 )
+from sea_mile.geo import great_circle_nmi, validate_coordinate
 from sea_mile.ports import Port, PortRegistry
-from sea_mile.quality import great_circle_nmi, validate_coordinate
 from sea_mile.routing import RouteQualityFlag, assess_route_length
 
 

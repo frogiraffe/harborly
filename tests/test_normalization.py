@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from sea_mile.normalization import canonical_key, normalize_display_text
+from sea_mile.text import canonical_key, normalize_display_text
 
 
 class NormalizationTests(unittest.TestCase):

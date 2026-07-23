@@ -7,7 +7,7 @@ import pytest
 
 from sea_mile._routing_backend import BackendRoute, RoutingConfig, SeaRouteBackend
 from sea_mile.exceptions import RoutingError, RoutingErrorReason
-from sea_mile.quality import great_circle_nmi
+from sea_mile.geo import great_circle_nmi
 from sea_mile.router import SeaRouter
 from sea_mile.routing import RouteQualityFlag
 

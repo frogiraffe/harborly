@@ -33,22 +33,22 @@ _LAZY_EXPORTS = {
 # Names that left the top-level namespace in 0.7. They still import from here for one
 # release, with a warning, and stay available from the modules named below.
 _DEPRECATED_EXPORTS = {
-    "CoordinateCheck": "sea_mile.quality",
+    "CoordinateCheck": "sea_mile.geo",
     "ExactMatchDecision": "sea_mile.matching",
     "MatchCandidate": "sea_mile.matching",
     "NearbyPortGroup": "sea_mile.ports",
     "NearbyPortResult": "sea_mile.ports",
     "PortSearchResult": "sea_mile.ports",
     "assign_canonical_ids": "sea_mile.canonical",
-    "build_reference_registry": "sea_mile.registry_build",
-    "canonical_key": "sea_mile.normalization",
+    "build_reference_registry": "sea_mile.build",
+    "canonical_key": "sea_mile.text",
     "decide_exact_match": "sea_mile.matching",
-    "download_reference_data": "sea_mile.source_data",
-    "great_circle_nmi": "sea_mile.quality",
-    "normalize_display_text": "sea_mile.normalization",
-    "parse_unlocode_coordinates": "sea_mile.reference",
-    "parse_wpi_dms": "sea_mile.reference",
-    "validate_coordinate": "sea_mile.quality",
+    "download_reference_data": "sea_mile.build",
+    "great_circle_nmi": "sea_mile.geo",
+    "normalize_display_text": "sea_mile.text",
+    "parse_unlocode_coordinates": "sea_mile.sources",
+    "parse_wpi_dms": "sea_mile.sources",
+    "validate_coordinate": "sea_mile.geo",
 }
 
 

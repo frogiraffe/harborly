@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
+from sea_mile.build.download import lock_mismatches, sha256, write_source_lock
 from sea_mile.cli import main
 from sea_mile.exceptions import SourceDataError
-from sea_mile.source_data import lock_mismatches, sha256, write_source_lock
 
 
 def _seed_manifest(root: Path) -> Path:

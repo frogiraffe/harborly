@@ -19,7 +19,7 @@ import pandas as pd
 
 import sea_mile.ports
 from sea_mile import PortRegistry
-from sea_mile.normalization import canonical_key
+from sea_mile.text import canonical_key
 
 try:
     import resource

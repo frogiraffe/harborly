@@ -54,19 +54,27 @@ versioning.
 - The top-level `sea_mile.__all__` now lists the core types only, so the advertised public
   surface is smaller. The names it dropped still import from `sea_mile` with a warning for
   one release. See Deprecated below and the Public API surface section in the library docs.
+- Grouped the internal modules ahead of 1.0. String normalization moved to `sea_mile.text`,
+  the coordinate and distance rules to `sea_mile.geo`, the source parsers under a
+  `sea_mile.sources` package, and registry building and downloading under a `sea_mile.build`
+  package. The old module paths still work for one release and warn on import.
 
 ### Deprecated
 
 - Importing these lower-level helpers from the top-level `sea_mile` namespace now warns and
-  will stop working after one release. Import them from their modules instead.
-  - `sea_mile.quality`: `validate_coordinate`, `CoordinateCheck`, `great_circle_nmi`.
-  - `sea_mile.normalization`: `canonical_key`, `normalize_display_text`.
-  - `sea_mile.reference`: `parse_wpi_dms`, `parse_unlocode_coordinates`.
+  will stop working after one release. Import them from the module named here instead.
+  - `sea_mile.geo`: `validate_coordinate`, `CoordinateCheck`, `great_circle_nmi`.
+  - `sea_mile.text`: `canonical_key`, `normalize_display_text`.
+  - `sea_mile.sources`: `parse_wpi_dms`, `parse_unlocode_coordinates`.
   - `sea_mile.matching`: `decide_exact_match`, `ExactMatchDecision`, `MatchCandidate`.
   - `sea_mile.ports`: `PortSearchResult`, `NearbyPortResult`, `NearbyPortGroup`.
   - `sea_mile.canonical`: `assign_canonical_ids`.
-  - `sea_mile.registry_build`: `build_reference_registry`.
-  - `sea_mile.source_data`: `download_reference_data`.
+  - `sea_mile.build`: `build_reference_registry`, `download_reference_data`.
+- The old module paths for the relocated modules now warn on import and will be removed
+  after one release. `sea_mile.normalization` is now `sea_mile.text`, `sea_mile.quality` is
+  now `sea_mile.geo`, `sea_mile.reference`, `sea_mile.geonames`, and `sea_mile.osm` are now
+  under `sea_mile.sources`, and `sea_mile.registry_build` and `sea_mile.source_data` are now
+  under `sea_mile.build`.
 
 ## [0.3.0] - 2026-07-23
 

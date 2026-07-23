@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from sea_mile.registry_build import (
+from sea_mile.build.registry import (
     _provider_manifest_entry,
     _write_parquet_atomic,
     _write_text_atomic,

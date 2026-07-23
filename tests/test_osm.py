@@ -5,7 +5,7 @@ import json
 import pytest
 
 from sea_mile.exceptions import RegistryDataError
-from sea_mile.osm import load_osm_port_archive
+from sea_mile.sources.osm import load_osm_port_archive
 
 
 def _feature(feature_id, name, properties, longitude, latitude) -> dict:

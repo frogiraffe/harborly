@@ -8,7 +8,7 @@ from typing import Any
 import pandas as pd
 from rapidfuzz import fuzz, process
 
-from sea_mile.quality import great_circle_nmi
+from sea_mile.geo import great_circle_nmi
 
 OFFICIAL_PROVIDERS = frozenset({"NGA_WPI", "UN_LOCODE"})
 

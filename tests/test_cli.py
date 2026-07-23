@@ -400,11 +400,11 @@ def test_data_prepare_json_is_one_valid_document(tmp_path, capsys, monkeypatch) 
     download_manifest = {"retrieved_at_utc": "test", "sources": {}}
     build_manifest = {"registry_rows": 2, "providers": {}}
     monkeypatch.setattr(
-        "sea_mile.source_data.download_reference_data",
+        "sea_mile.build.download.download_reference_data",
         lambda *args, **kwargs: download_manifest,
     )
     monkeypatch.setattr(
-        "sea_mile.registry_build.build_reference_registry",
+        "sea_mile.build.registry.build_reference_registry",
         lambda *args, **kwargs: build_manifest,
     )
 
@@ -421,7 +421,7 @@ def test_data_download_json_keeps_flat_manifest_shape(
 ) -> None:
     download_manifest = {"retrieved_at_utc": "test", "sources": {}}
     monkeypatch.setattr(
-        "sea_mile.source_data.download_reference_data",
+        "sea_mile.build.download.download_reference_data",
         lambda *args, **kwargs: download_manifest,
     )
 
