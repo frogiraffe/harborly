@@ -8,6 +8,10 @@ versioning.
 
 ### Added
 
+- A curated golden identity dataset under `tests/golden/` and a test that runs it,
+  asserting each labeled outcome and the bulk-matching precision, recall, and
+  review-rate thresholds. It covers same-name ports, terminal versus city, accents,
+  transliterations, historic names, coordinate conflicts, and missing coordinates.
 - A `match` review workflow. `--output` writes the input rows back with appended
   `sea_mile_*` columns, `--review` writes the rows needing a human one row per
   candidate, and `--decisions` applies a reviewed `row_id`/`chosen_registry_id` file,

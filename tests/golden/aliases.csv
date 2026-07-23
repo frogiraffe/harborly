@@ -1,0 +1,24 @@
+registry_id,provider,alias,alias_key,alias_type
+WPI:MERSIN,NGA_WPI,Mersin,mersin,primary
+UNLOCODE:TRMER,UN_LOCODE,Mersin,mersin,primary
+GEONAMES:MERSIN,GEONAMES,Mersin,mersin,primary
+WPI:PIRAEUS,NGA_WPI,Piraeus,piraeus,primary
+WPI:HAMILTON,NGA_WPI,Hamilton,hamilton,primary
+UNLOCODE:USHAM,UN_LOCODE,Hamilton,hamilton,primary
+WPI:NEWPORTRI,NGA_WPI,Newport,newport,primary
+WPI:NEWPORTOR,NGA_WPI,Newport,newport,primary
+UNLOCODE:NOAES,UN_LOCODE,Ålesund,alesund,primary
+UNLOCODE:XXNOC,UN_LOCODE,Nocoord,nocoord,primary
+WPI:SANTOS,NGA_WPI,Santos,santos,primary
+GEONAMES:BOMBAY,GEONAMES,Bombay,bombay,primary
+WPI:ROTTERDAM,NGA_WPI,Rotterdam,rotterdam,primary
+WPI:JEBELALI,NGA_WPI,Jebel Ali,jebel ali,primary
+WPI:IZMIR,NGA_WPI,İzmir,izmir,primary
+WPI:FELIXSTOWE,NGA_WPI,Felixstowe,felixstowe,primary
+WPI:FELIXSTOWETERM,NGA_WPI,Felixstowe,felixstowe,primary
+WPI:TRIPOLILY,NGA_WPI,Tripoli,tripoli,primary
+WPI:TRIPOLILB,NGA_WPI,Tripoli,tripoli,primary
+WPI:GOTEBORG,NGA_WPI,Göteborg,goteborg,primary
+WPI:DURRES,NGA_WPI,Durres,durres,primary
+UNLOCODE:ALDRZ,UN_LOCODE,Durres,durres,primary
+WPI:ISTANBUL,NGA_WPI,İstanbul,istanbul,primary

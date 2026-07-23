@@ -1,0 +1,24 @@
+registry_id,provider,provider_id,country_code,canonical_name,latitude,longitude,unlocode,function_code,source_version,coordinate_resolution,variant_count,coordinate_conflict
+WPI:MERSIN,NGA_WPI,1,TR,Mersin,36.80,34.65,TRMER,port,golden,arc_second,1,False
+UNLOCODE:TRMER,UN_LOCODE,TRMER,TR,Mersin,36.81,34.64,TRMER,1-----,golden,arc_minute,1,False
+GEONAMES:MERSIN,GEONAMES,g-mersin,TR,Mersin,36.79,34.66,,,golden,,1,False
+WPI:PIRAEUS,NGA_WPI,2,GR,Piraeus,37.94,23.63,GRPIR,port,golden,arc_second,1,False
+WPI:HAMILTON,NGA_WPI,3,US,Hamilton,39.40,-84.60,,port,golden,arc_second,1,False
+UNLOCODE:USHAM,UN_LOCODE,USHAM,US,Hamilton,43.90,-75.50,USHAM,1-----,golden,arc_minute,1,False
+WPI:NEWPORTRI,NGA_WPI,4,US,Newport,41.49,-71.31,USNPT,port,golden,arc_second,1,False
+WPI:NEWPORTOR,NGA_WPI,5,US,Newport,44.63,-124.05,,port,golden,arc_second,1,False
+UNLOCODE:NOAES,UN_LOCODE,NOAES,NO,Ålesund,62.47,6.15,NOAES,1-----,golden,arc_minute,1,False
+UNLOCODE:XXNOC,UN_LOCODE,XXNOC,XZ,Nocoord,,,XXNOC,1-----,golden,,1,False
+WPI:SANTOS,NGA_WPI,6,BR,Santos,-23.95,-46.33,BRSSZ,port,golden,arc_second,1,False
+GEONAMES:BOMBAY,GEONAMES,g-bombay,IN,Bombay,18.96,72.83,,,golden,,1,False
+WPI:ROTTERDAM,NGA_WPI,7,NL,Rotterdam,51.95,4.14,NLRTM,port,golden,arc_second,1,False
+WPI:JEBELALI,NGA_WPI,8,AE,Jebel Ali,25.01,55.06,AEJEA,port,golden,arc_second,1,False
+WPI:IZMIR,NGA_WPI,9,TR,İzmir,38.43,27.14,TRIZM,port,golden,arc_second,1,False
+WPI:FELIXSTOWE,NGA_WPI,10,GB,Felixstowe,51.95,1.32,GBFXT,port,golden,arc_second,1,False
+WPI:FELIXSTOWETERM,NGA_WPI,11,GB,Felixstowe,51.96,1.31,,port,golden,arc_second,1,False
+WPI:TRIPOLILY,NGA_WPI,12,LY,Tripoli,32.90,13.18,LYTIP,port,golden,arc_second,1,False
+WPI:TRIPOLILB,NGA_WPI,13,LB,Tripoli,34.44,35.82,LBKYE,port,golden,arc_second,1,False
+WPI:GOTEBORG,NGA_WPI,14,SE,Göteborg,57.71,11.97,SEGOT,port,golden,arc_second,1,False
+WPI:DURRES,NGA_WPI,15,AL,Durres,41.31,19.45,ALDRZ,port,golden,arc_second,1,False
+UNLOCODE:ALDRZ,UN_LOCODE,ALDRZ,AL,Durres,40.20,18.50,ALDRZ,1-----,golden,arc_minute,1,False
+WPI:ISTANBUL,NGA_WPI,16,TR,İstanbul,41.01,28.98,TRIST,port,golden,arc_second,1,False
