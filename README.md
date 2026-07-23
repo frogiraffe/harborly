@@ -137,6 +137,22 @@ then apply them. Reviewed rows become `manually_resolved`.
 uv run sea-mile match ports.csv --name-column port_name --id-column row_id --decisions decisions.csv --output matched.csv
 ```
 
+### Reproducible builds
+
+`sea-mile data lock` writes `sea-mile.lock.json`, pinning each source snapshot's URL,
+label, size, and SHA-256 from the download manifest. `sea-mile data build --lock
+sea-mile.lock.json` verifies the local raw snapshots against the lock before building,
+so a build fails loudly when a source drifted and repeats exactly from present files
+without a network fetch.
+
+```bash
+uv run sea-mile data lock
+uv run sea-mile data build --lock sea-mile.lock.json
+```
+
+The lock records provenance and detects drift. It does not re-fetch an old upstream
+snapshot, because the WPI endpoint is dynamic and GeoNames serves the latest dump.
+
 Install the `tui` extra for an interactive search:
 
 ```bash

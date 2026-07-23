@@ -16,7 +16,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
-from sea_mile.exceptions import SeaMileError
+from sea_mile.exceptions import SeaMileError, SourceDataError
 from sea_mile.matching import BatchMatchResult, MatchReason, MatchStatus
 from sea_mile.ports import Port, PortGroup, PortRegistry, source_short_label
 
@@ -686,6 +686,15 @@ def _print_build_manifest(manifest: dict[str, Any]) -> None:
     print(f"coordinate_conflict_records: {manifest['coordinate_conflict_records']}")
 
 
+def _print_source_lock(lock: dict[str, Any]) -> None:
+    print(f"lock_version: {lock['lock_version']}")
+    print(f"generated_at_utc: {lock['generated_at_utc']}")
+    for source, details in lock.get("sources", {}).items():
+        label = details.get("snapshot_label") or details.get("release") or "-"
+        digest = str(details.get("sha256", ""))[:12]
+        print(f"{source}: {label} sha256={digest}")
+
+
 def _print_verify_report(report: dict[str, Any]) -> None:
     print(f"status: {report['status']}")
     for check in report["checks"]:
@@ -706,6 +715,15 @@ def _cmd_data(args: argparse.Namespace) -> int:
         else:
             _print_verify_report(report)
         return 0 if report["status"] == "passed" else 1
+    if args.data_command == "lock":
+        from sea_mile.source_data import write_source_lock
+
+        lock = write_source_lock(args.reference_root, lock_path=args.output)
+        if args.json:
+            _emit_json(args, lock)
+        else:
+            _print_source_lock(lock)
+        return 0
     payload: dict[str, Any] = {}
     if args.data_command in {"download", "prepare"}:
         from sea_mile.source_data import download_reference_data
@@ -717,6 +735,14 @@ def _cmd_data(args: argparse.Namespace) -> int:
         if not args.json:
             _print_download_manifest(download_manifest)
     if args.data_command in {"build", "prepare"}:
+        if getattr(args, "lock", None) is not None:
+            from sea_mile.source_data import load_source_lock, lock_mismatches
+
+            mismatches = lock_mismatches(
+                args.reference_root, load_source_lock(args.lock)
+            )
+            if mismatches:
+                raise SourceDataError("source lock mismatch: " + ", ".join(mismatches))
         from sea_mile.registry_build import build_reference_registry
 
         build_manifest = build_reference_registry(args.reference_root)
@@ -890,6 +916,7 @@ def _parser() -> argparse.ArgumentParser:
         ("build", "build Parquet registry files from local snapshots"),
         ("prepare", "download sources and then build the registry"),
         ("verify", "check a local build against its manifests and rules"),
+        ("lock", "write a source lockfile from the current download manifest"),
     ):
         data_command = data_subparsers.add_parser(
             command, parents=[common], help=help_text
@@ -905,6 +932,18 @@ def _parser() -> argparse.ArgumentParser:
                 "--refresh",
                 action="store_true",
                 help="redownload sources even when a local snapshot already exists",
+            )
+        if command == "build":
+            data_command.add_argument(
+                "--lock",
+                type=Path,
+                help="verify raw snapshots against this lockfile before building",
+            )
+        if command == "lock":
+            data_command.add_argument(
+                "--output",
+                type=Path,
+                help="lockfile path (default sea-mile.lock.json in the reference root)",
             )
         data_command.set_defaults(func=_cmd_data)
     return parser

@@ -95,6 +95,7 @@ review workflow applies a decisions file.
 | `data build` | the build manifest object |
 | `data prepare` | object with `download` and `build` manifests |
 | `data verify` | the verification report object |
+| `data lock` | the source lockfile object |
 
 The `export` command writes CSV or GeoJSON chosen with `--format`, and `tui` is
 interactive, so neither uses this envelope.

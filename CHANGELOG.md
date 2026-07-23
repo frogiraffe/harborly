@@ -12,6 +12,10 @@ versioning.
   manifest, plus a load-time check that refuses a processed registry whose schema this
   build of sea-mile cannot read. The content hash is order-independent, so two builds
   from the same sources produce the same hash.
+- A source lockfile. `sea-mile data lock` pins each source snapshot's URL, label, size,
+  and SHA-256 into `sea-mile.lock.json`, and `sea-mile data build --lock` verifies the
+  local raw snapshots against it before building, for an offline reproducible build that
+  fails loudly on drift.
 
 ## [0.3.0] - 2026-07-23
 
