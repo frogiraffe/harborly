@@ -2,10 +2,14 @@
 
 Run `python scripts/benchmark.py [record_count]` to time the hot paths on a
 synthetic registry, so a regression in search or nearest shows up as a number.
+Pass `--no-kdtree` to force the scan path and measure nearest without scipy.
+The numbers this prints are the source for `docs/PERFORMANCE.md`.
 """
 
 from __future__ import annotations
 
+import argparse
+import platform
 import random
 import sys
 import time
@@ -13,9 +17,16 @@ from collections.abc import Callable, Sequence
 
 import pandas as pd
 
+import sea_mile.ports
 from sea_mile import PortRegistry
 from sea_mile.normalization import canonical_key
-from sea_mile.ports import cKDTree
+
+try:
+    import resource
+except ImportError:
+    resource = None
+
+_LABEL = 22
 
 _PREFIXES = (
     "Port",
@@ -68,6 +79,15 @@ def _synthetic(count: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     return pd.DataFrame(records), pd.DataFrame(aliases)
 
 
+def _peak_memory_mb() -> float | None:
+    if resource is None:
+        return None
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    if sys.platform == "darwin":
+        return peak / (1024 * 1024)
+    return peak / 1024
+
+
 def _bench(
     label: str, inputs: Sequence[object], call: Callable[[object], object]
 ) -> None:
@@ -75,20 +95,49 @@ def _bench(
     for item in inputs:
         call(item)
     per_op = (time.perf_counter() - start) / len(inputs) * 1000
-    print(f"{label:22}{per_op:8.3f} ms/op  ({len(inputs)} distinct)")
+    print(f"{label:{_LABEL}}{per_op:8.3f} ms/op  ({len(inputs)} distinct)")
 
 
-def main() -> None:
-    count = int(sys.argv[1]) if len(sys.argv) > 1 else 40000
-    frame, aliases = _synthetic(count)
-    print(f"synthetic registry: {count} records")
-    print(f"k-d tree (scipy): {'yes' if cKDTree is not None else 'no'}")
+def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Time registry build, search, and nearest on synthetic data."
+    )
+    parser.add_argument(
+        "count",
+        nargs="?",
+        type=int,
+        default=40000,
+        help="number of synthetic records to build (default 40000)",
+    )
+    parser.add_argument(
+        "--no-kdtree",
+        action="store_true",
+        help="disable the scipy k-d tree and measure nearest on the scan path",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    args = _parse_args(argv)
+    if args.no_kdtree:
+        sea_mile.ports.cKDTree = None
+
+    frame, aliases = _synthetic(args.count)
+    tree = "scipy" if sea_mile.ports.cKDTree is not None else "scan only"
+    machine = f"{platform.system()} {platform.machine()}"
+
+    print("sea-mile benchmark")
+    print(f"{'python':{_LABEL}}{platform.python_version()} on {machine}")
+    print(f"{'records':{_LABEL}}{args.count}")
+    print(f"{'k-d tree':{_LABEL}}{tree}")
 
     start = time.perf_counter()
     registry = PortRegistry(frame, aliases)
-    print(f"{'build PortRegistry':22}{(time.perf_counter() - start) * 1000:8.1f} ms\n")
+    print(
+        f"{'build registry':{_LABEL}}{(time.perf_counter() - start) * 1000:8.1f} ms\n"
+    )
 
-    step = max(1, count // 100)
+    step = max(1, args.count // 100)
     rows = frame.iloc[::step]
     names = [str(name) for name in rows["canonical_name"]]
     coords = list(zip(rows["latitude"], rows["longitude"], strict=True))
@@ -122,6 +171,10 @@ def main() -> None:
             limit=10,
         ),
     )
+
+    peak = _peak_memory_mb()
+    reading = f"{peak:8.1f} MB" if peak is not None else "     n/a"
+    print(f"\n{'peak memory':{_LABEL}}{reading}  (process high-water mark)")
 
 
 if __name__ == "__main__":

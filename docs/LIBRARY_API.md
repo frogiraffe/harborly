@@ -176,6 +176,43 @@ coordinates so `decide_exact_match` can catch this and return an `ExactMatchDeci
 with a review status instead of resolving to the wrong record. Call `decide_exact_match`
 directly when you already have candidate ID lists.
 
+### Matching pandas frames and large files
+
+`match_series` takes a pandas Series of names and returns the same `BatchMatchResult`
+list as `match_names`. It reads a missing cell as an empty name.
+
+```python
+results = registry.match_series(frame["port_name"], country_codes=frame["country"])
+```
+
+`match_dataframe` returns a copy of a frame with eight appended columns:
+`sea_mile_status`, `sea_mile_reason_code`, `sea_mile_registry_id`, `sea_mile_name`,
+`sea_mile_country_code`, `sea_mile_latitude`, `sea_mile_longitude`, and
+`sea_mile_unlocode`. These are the same columns that `sea-mile match --output` writes.
+
+```python
+enriched = registry.match_dataframe(
+    frame, name_column="port_name", country_column="country"
+)
+```
+
+To match a file too large to hold in memory, read it in chunks and match each chunk on
+its own. Neither the reader nor the matcher holds the whole file.
+
+```python
+import pandas as pd
+
+header = True
+for chunk in pd.read_csv("big.csv", chunksize=10_000, dtype=str, keep_default_na=False):
+    enriched = registry.match_dataframe(chunk, name_column="port_name")
+    enriched.to_csv("out.csv", mode="a", header=header, index=False)
+    header = False
+```
+
+The `sea-mile match --output` command streams the same way. It reads the input in
+chunks and appends each block to the output file, so it does not load the whole input
+either.
+
 ## Sea routes
 
 ```python

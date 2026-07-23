@@ -228,3 +228,7 @@ route against an independent WGS84 calculation.
 
 The test suite includes `tests/test_docs_current.py`, which fails when a CLI command or
 a public export is not documented, so the docs stay current with the code.
+
+Run `python scripts/benchmark.py` to time registry build, search, and `nearest` on a
+synthetic registry. See [Performance](docs/PERFORMANCE.md) for numbers on a reference
+machine, the memory and latency budgets, and how much the scipy k-d tree helps.

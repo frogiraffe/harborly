@@ -16,6 +16,14 @@ versioning.
   and SHA-256 into `sea-mile.lock.json`, and `sea-mile data build --lock` verifies the
   local raw snapshots against it before building, for an offline reproducible build that
   fails loudly on drift.
+- A performance benchmark with published budgets. `scripts/benchmark.py` now reports
+  peak process memory and takes a `--no-kdtree` flag that measures `nearest` on the scan
+  path, and the new `docs/PERFORMANCE.md` records build time, memory, and search and
+  nearest latency on a reference machine.
+- Pandas-native bulk matching. `PortRegistry.match_series` matches a Series of names and
+  `PortRegistry.match_dataframe` returns a frame with the eight `sea_mile_` match columns
+  appended, so a matching pipeline can stay in pandas. Reading a large file in chunks and
+  matching each chunk keeps the whole file out of memory.
 
 - A `RouteQualityFlag` enum. A `SeaRoute` now carries its `quality_flag` as this stable
   enum instead of a bare string, so automation can branch on it. The value is a string
@@ -40,6 +48,9 @@ versioning.
   and an atomic rename, so a failed build no longer leaves a half-written registry.
 - A route that fails the plausibility check now raises `RoutingError` instead of
   `PortCoordinateError`, so a failed route is distinct from a bad input coordinate.
+- `sea-mile match` now reads its input in chunks and appends the `--output` and `--review`
+  rows as it goes, so a large input no longer loads into memory all at once. The written
+  output is unchanged.
 
 ## [0.3.0] - 2026-07-23
 

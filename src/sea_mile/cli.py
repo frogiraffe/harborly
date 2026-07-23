@@ -11,14 +11,21 @@ import logging
 import os
 import sys
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
 from sea_mile.exceptions import SeaMileError, SourceDataError
 from sea_mile.matching import BatchMatchResult, MatchReason, MatchStatus
-from sea_mile.ports import Port, PortGroup, PortRegistry, source_short_label
+from sea_mile.ports import (
+    _ENRICHMENT_FIELDS,
+    Port,
+    PortGroup,
+    PortRegistry,
+    _result_enrichment,
+    source_short_label,
+)
 
 logger = logging.getLogger("sea_mile")
 
@@ -413,16 +420,7 @@ def _cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
-_ENRICHED_FIELDS = [
-    "sea_mile_status",
-    "sea_mile_reason_code",
-    "sea_mile_registry_id",
-    "sea_mile_name",
-    "sea_mile_country_code",
-    "sea_mile_latitude",
-    "sea_mile_longitude",
-    "sea_mile_unlocode",
-]
+_MATCH_CHUNK_SIZE = 10_000
 
 _REVIEW_FIELDS = [
     "row_id",
@@ -442,13 +440,28 @@ _REVIEW_FIELDS = [
 _REVIEW_STATUSES = frozenset({MatchStatus.REVIEW_REQUIRED, MatchStatus.UNRESOLVED})
 
 
-def _match_row_ids(rows: list[dict[str, Any]], id_column: str | None) -> list[str]:
+def _match_row_ids(
+    rows: Sequence[dict[str, Any]], id_column: str | None, offset: int = 0
+) -> list[str]:
     if id_column:
         return [
-            str(row.get(id_column) or "").strip() or str(index + 1)
+            str(row.get(id_column) or "").strip() or str(offset + index + 1)
             for index, row in enumerate(rows)
         ]
-    return [str(index + 1) for index in range(len(rows))]
+    return [str(offset + index + 1) for index in range(len(rows))]
+
+
+def _chunked(
+    rows: Iterator[dict[str, Any]], size: int
+) -> Iterator[list[dict[str, Any]]]:
+    chunk: list[dict[str, Any]] = []
+    for row in rows:
+        chunk.append(row)
+        if len(chunk) >= size:
+            yield chunk
+            chunk = []
+    if chunk:
+        yield chunk
 
 
 def _read_decisions(path: Path) -> dict[str, str]:
@@ -472,15 +485,10 @@ def _apply_decision(
     result: BatchMatchResult,
     row_id: str,
     decisions: dict[str, str],
-    registry: PortRegistry,
 ) -> BatchMatchResult:
     chosen = decisions.get(row_id)
     if chosen is None:
         return result
-    if chosen not in registry:
-        raise ValueError(
-            f"decision for row {row_id!r} names unknown registry ID {chosen!r}"
-        )
     return dataclasses.replace(
         result,
         status=MatchStatus.MANUALLY_RESOLVED,
@@ -491,61 +499,39 @@ def _apply_decision(
     )
 
 
-def _selected_record(registry: PortRegistry, registry_id: str | None) -> Port | None:
-    if registry_id and registry_id in registry:
-        return registry.get(registry_id)
-    return None
+class _EnrichedWriter:
+    def __init__(self, path: Path, input_fieldnames: Sequence[str]) -> None:
+        self._fieldnames = list(input_fieldnames) + [
+            field for field in _ENRICHMENT_FIELDS if field not in input_fieldnames
+        ]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self._handle = path.open("w", newline="", encoding="utf-8")
+        self._writer = csv.DictWriter(self._handle, fieldnames=self._fieldnames)
+        self._writer.writeheader()
 
-
-def _write_enriched(
-    path: Path,
-    input_fieldnames: Sequence[str],
-    rows: list[dict[str, Any]],
-    results: list[BatchMatchResult],
-    registry: PortRegistry,
-) -> None:
-    fieldnames = list(input_fieldnames) + [
-        field for field in _ENRICHED_FIELDS if field not in input_fieldnames
-    ]
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
+    def write(
+        self,
+        rows: Sequence[dict[str, Any]],
+        results: Sequence[BatchMatchResult],
+        registry: PortRegistry,
+    ) -> None:
         for row, result in zip(rows, results, strict=True):
-            record = _selected_record(registry, result.selected_registry_id)
-            enriched = dict(row)
-            enriched.update(
-                {
-                    "sea_mile_status": str(result.status),
-                    "sea_mile_reason_code": str(result.reason_code),
-                    "sea_mile_registry_id": result.selected_registry_id or "",
-                    "sea_mile_name": record.name if record else "",
-                    "sea_mile_country_code": record.country_code if record else "",
-                    "sea_mile_latitude": (
-                        record.latitude
-                        if record and record.latitude is not None
-                        else ""
-                    ),
-                    "sea_mile_longitude": (
-                        record.longitude
-                        if record and record.longitude is not None
-                        else ""
-                    ),
-                    "sea_mile_unlocode": (
-                        record.unlocode if record and record.unlocode else ""
-                    ),
-                }
-            )
-            writer.writerow(enriched)
+            self._writer.writerow({**row, **_result_enrichment(registry, result)})
+
+    def close(self) -> None:
+        self._handle.close()
 
 
-def _write_review(
-    path: Path, row_ids: list[str], results: list[BatchMatchResult]
-) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=_REVIEW_FIELDS)
-        writer.writeheader()
+class _ReviewWriter:
+    def __init__(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self._handle = path.open("w", newline="", encoding="utf-8")
+        self._writer = csv.DictWriter(self._handle, fieldnames=_REVIEW_FIELDS)
+        self._writer.writeheader()
+
+    def write(
+        self, row_ids: Sequence[str], results: Sequence[BatchMatchResult]
+    ) -> None:
         for row_id, result in zip(row_ids, results, strict=True):
             if result.status not in _REVIEW_STATUSES:
                 continue
@@ -557,10 +543,10 @@ def _write_review(
                 "reason_code": str(result.reason_code),
             }
             if not result.candidates:
-                writer.writerow(base)
+                self._writer.writerow(base)
                 continue
             for candidate in result.candidates:
-                writer.writerow(
+                self._writer.writerow(
                     {
                         **base,
                         "candidate_registry_id": candidate.registry_id,
@@ -579,21 +565,37 @@ def _write_review(
                     }
                 )
 
+    def close(self) -> None:
+        self._handle.close()
 
-def _print_match_summary(
-    results: list[BatchMatchResult], args: argparse.Namespace
+
+def _print_stream_summary(
+    args: argparse.Namespace, total: int, counts: Counter[str]
 ) -> None:
     if args.output:
-        print(f"wrote {len(results)} rows to {args.output}")
+        print(f"wrote {total} rows to {args.output}")
     if args.review:
-        review = sum(1 for result in results if result.status in _REVIEW_STATUSES)
+        review = counts[str(MatchStatus.REVIEW_REQUIRED)]
+        review += counts[str(MatchStatus.UNRESOLVED)]
         print(f"wrote {review} rows needing review to {args.review}")
-    counts = Counter(str(result.status) for result in results)
     print(", ".join(f"{status}: {count}" for status, count in sorted(counts.items())))
 
 
 def _cmd_match(args: argparse.Namespace) -> int:
     registry = _load_registry(args)
+    decisions = _read_decisions(args.decisions) if args.decisions else None
+    if decisions is not None:
+        for row_id, chosen in decisions.items():
+            if chosen not in registry:
+                raise ValueError(
+                    f"decision for row {row_id!r} names unknown registry ID {chosen!r}"
+                )
+    hold_results = bool(args.json) or not (args.output or args.review)
+
+    collected: list[BatchMatchResult] = []
+    counts: Counter[str] = Counter()
+    total = 0
+
     with args.input.open(newline="", encoding="utf-8-sig") as handle:
         reader = csv.DictReader(handle)
         fieldnames = reader.fieldnames or []
@@ -603,36 +605,49 @@ def _cmd_match(args: argparse.Namespace) -> int:
                     f"input has no column {column!r}; "
                     f"columns are {', '.join(fieldnames) or 'none'}"
                 )
-        rows: list[dict[str, Any]] = list(reader)
 
-    names = [str(row.get(args.name_column) or "").strip() for row in rows]
-    country_codes: list[str | None] | None = None
-    if args.country_column:
-        country_codes = [
-            (str(row.get(args.country_column) or "").strip() or None) for row in rows
-        ]
-    results = registry.match_names(names, country_codes=country_codes)
-
-    row_ids = _match_row_ids(rows, args.id_column)
-    if args.decisions:
-        decisions = _read_decisions(args.decisions)
-        results = [
-            _apply_decision(result, row_id, decisions, registry)
-            for result, row_id in zip(results, row_ids, strict=True)
-        ]
-
-    if args.output:
-        _write_enriched(args.output, fieldnames, rows, results, registry)
-    if args.review:
-        _write_review(args.review, row_ids, results)
+        enriched = _EnrichedWriter(args.output, fieldnames) if args.output else None
+        review = _ReviewWriter(args.review) if args.review else None
+        try:
+            offset = 0
+            for chunk in _chunked(reader, _MATCH_CHUNK_SIZE):
+                names = [str(row.get(args.name_column) or "").strip() for row in chunk]
+                country_codes: list[str | None] | None = None
+                if args.country_column:
+                    country_codes = [
+                        (str(row.get(args.country_column) or "").strip() or None)
+                        for row in chunk
+                    ]
+                results = registry.match_names(names, country_codes=country_codes)
+                row_ids = _match_row_ids(chunk, args.id_column, offset)
+                offset += len(chunk)
+                if decisions is not None:
+                    results = [
+                        _apply_decision(result, row_id, decisions)
+                        for result, row_id in zip(results, row_ids, strict=True)
+                    ]
+                if enriched is not None:
+                    enriched.write(chunk, results, registry)
+                if review is not None:
+                    review.write(row_ids, results)
+                for result in results:
+                    counts[str(result.status)] += 1
+                total += len(results)
+                if hold_results:
+                    collected.extend(results)
+        finally:
+            if enriched is not None:
+                enriched.close()
+            if review is not None:
+                review.close()
 
     if args.json:
-        _emit_json(args, [result.to_dict() for result in results])
+        _emit_json(args, [result.to_dict() for result in collected])
         return 0
     if args.output or args.review:
-        _print_match_summary(results, args)
+        _print_stream_summary(args, total, counts)
         return 0
-    if not results:
+    if not collected:
         print("no rows")
         return 0
     _print_table(
@@ -646,7 +661,7 @@ def _cmd_match(args: argparse.Namespace) -> int:
                 result.selected_registry_id or "-",
                 result.reason,
             )
-            for result in results
+            for result in collected
         ],
     )
     return 0

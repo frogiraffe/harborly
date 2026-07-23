@@ -263,6 +263,47 @@ class _CoordinateIndex:
     cartesian: np.ndarray
 
 
+_ENRICHMENT_FIELDS: tuple[str, ...] = (
+    "sea_mile_status",
+    "sea_mile_reason_code",
+    "sea_mile_registry_id",
+    "sea_mile_name",
+    "sea_mile_country_code",
+    "sea_mile_latitude",
+    "sea_mile_longitude",
+    "sea_mile_unlocode",
+)
+
+
+def _series_cell(value: object) -> str:
+    if pd.isna(value):
+        return ""
+    return str(value).strip()
+
+
+def _result_enrichment(
+    registry: PortRegistry, result: BatchMatchResult
+) -> dict[str, object]:
+    record: Port | None = None
+    registry_id = result.selected_registry_id
+    if registry_id and registry_id in registry:
+        record = registry.get(registry_id)
+    return {
+        "sea_mile_status": str(result.status),
+        "sea_mile_reason_code": str(result.reason_code),
+        "sea_mile_registry_id": registry_id or "",
+        "sea_mile_name": record.name if record else "",
+        "sea_mile_country_code": record.country_code if record else "",
+        "sea_mile_latitude": (
+            record.latitude if record and record.latitude is not None else ""
+        ),
+        "sea_mile_longitude": (
+            record.longitude if record and record.longitude is not None else ""
+        ),
+        "sea_mile_unlocode": record.unlocode if record and record.unlocode else "",
+    }
+
+
 class PortRegistry:
     """Search and resolve ports from locally stored normalized snapshots."""
 
@@ -704,6 +745,47 @@ class PortRegistry:
                 )
             )
         return results
+
+    def match_series(
+        self,
+        names: pd.Series,
+        *,
+        country_codes: pd.Series | None = None,
+    ) -> list[BatchMatchResult]:
+        """Match a pandas Series of names, one decision per element."""
+
+        resolved_names = [_series_cell(value) for value in names]
+        resolved_countries: list[str | None] | None = None
+        if country_codes is not None:
+            resolved_countries = [
+                (_series_cell(value) or None) for value in country_codes
+            ]
+        return self.match_names(resolved_names, country_codes=resolved_countries)
+
+    def match_dataframe(
+        self,
+        frame: pd.DataFrame,
+        *,
+        name_column: str,
+        country_column: str | None = None,
+    ) -> pd.DataFrame:
+        """Return a copy of the frame with appended sea_mile_ match columns."""
+
+        if name_column not in frame.columns:
+            raise KeyError(f"frame has no column {name_column!r}")
+        if country_column is not None and country_column not in frame.columns:
+            raise KeyError(f"frame has no column {country_column!r}")
+        countries = frame[country_column] if country_column is not None else None
+        results = self.match_series(frame[name_column], country_codes=countries)
+        columns: dict[str, list[object]] = {field: [] for field in _ENRICHMENT_FIELDS}
+        for result in results:
+            fields = _result_enrichment(self, result)
+            for field in _ENRICHMENT_FIELDS:
+                columns[field].append(fields[field])
+        enriched = frame.copy()
+        for field in _ENRICHMENT_FIELDS:
+            enriched[field] = columns[field]
+        return enriched
 
     def _search_uncached(
         self,

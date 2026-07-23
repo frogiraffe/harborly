@@ -852,3 +852,50 @@ def test_canonical_ids_are_order_independent() -> None:
     )
 
     assert forward == backward
+
+
+def test_match_series_agrees_with_match_names(registry: PortRegistry) -> None:
+    names = ["Mersin", "Piraeus"]
+    series_results = registry.match_series(pd.Series(names))
+    list_results = registry.match_names(names)
+    assert [result.selected_registry_id for result in series_results] == [
+        result.selected_registry_id for result in list_results
+    ]
+    assert [str(result.status) for result in series_results] == [
+        str(result.status) for result in list_results
+    ]
+
+
+def test_match_series_treats_missing_values_as_empty(registry: PortRegistry) -> None:
+    results = registry.match_series(pd.Series(["Mersin", None, float("nan")]))
+    assert [result.selected_registry_id for result in results] == ["WPI:1", None, None]
+
+
+def test_match_series_applies_the_country_filter(registry: PortRegistry) -> None:
+    results = registry.match_series(
+        pd.Series(["Piraeus"]), country_codes=pd.Series(["GR"])
+    )
+    assert results[0].selected_registry_id == "WPI:2"
+
+
+def test_match_dataframe_appends_enrichment_columns(registry: PortRegistry) -> None:
+    frame = pd.DataFrame({"port": ["Mersin"], "ref": ["X-1"]})
+    enriched = registry.match_dataframe(frame, name_column="port")
+    assert list(enriched["ref"]) == ["X-1"]
+    assert enriched.loc[0, "sea_mile_status"] == "auto_resolved"
+    assert enriched.loc[0, "sea_mile_registry_id"] == "WPI:1"
+    assert enriched.loc[0, "sea_mile_name"] == "Mersin"
+    assert enriched.loc[0, "sea_mile_unlocode"] == "TRMER"
+    assert "sea_mile_status" not in frame.columns
+
+
+def test_match_dataframe_uses_the_country_column(registry: PortRegistry) -> None:
+    frame = pd.DataFrame({"port": ["Piraeus"], "cc": ["GR"]})
+    enriched = registry.match_dataframe(frame, name_column="port", country_column="cc")
+    assert enriched.loc[0, "sea_mile_registry_id"] == "WPI:2"
+
+
+def test_match_dataframe_rejects_an_unknown_column(registry: PortRegistry) -> None:
+    frame = pd.DataFrame({"port": ["Mersin"]})
+    with pytest.raises(KeyError):
+        registry.match_dataframe(frame, name_column="missing")

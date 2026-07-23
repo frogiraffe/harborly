@@ -595,6 +595,35 @@ def test_match_decision_with_unknown_id_is_an_error(tmp_path, capsys) -> None:
     assert "unknown registry ID" in capsys.readouterr().err
 
 
+def test_match_bad_decision_writes_no_partial_output(tmp_path, capsys) -> None:
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+    input_csv = tmp_path / "in.csv"
+    input_csv.write_text("row_id,name\n1,Mersin\n", encoding="utf-8")
+    decisions_csv = tmp_path / "decisions.csv"
+    decisions_csv.write_text("row_id,chosen_registry_id\n1,WPI:999\n", encoding="utf-8")
+    output_csv = tmp_path / "out.csv"
+
+    status = main(
+        [
+            "--data-dir",
+            str(data_directory),
+            "match",
+            str(input_csv),
+            "--id-column",
+            "row_id",
+            "--decisions",
+            str(decisions_csv),
+            "--output",
+            str(output_csv),
+        ]
+    )
+
+    assert status == 2
+    assert "unknown registry ID" in capsys.readouterr().err
+    assert not output_csv.exists()
+
+
 def test_json_error_output_is_structured(tmp_path, capsys) -> None:
     data_directory = tmp_path / "registry"
     write_registry(data_directory)
@@ -619,3 +648,65 @@ def test_text_error_still_goes_to_stderr(tmp_path, capsys) -> None:
     assert status == 2
     assert captured.out == ""
     assert "sea-mile: error:" in captured.err
+
+
+def test_match_output_streams_across_chunks(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("sea_mile.cli._MATCH_CHUNK_SIZE", 2)
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+    input_csv = tmp_path / "in.csv"
+    input_csv.write_text(
+        "row_id,port_name\n1,Mersin\n2,Mersin\n3,Mersin\n4,Mersin\n5,Mersin\n",
+        encoding="utf-8",
+    )
+    output_csv = tmp_path / "out.csv"
+
+    status = main(
+        [
+            "--data-dir",
+            str(data_directory),
+            "match",
+            str(input_csv),
+            "--name-column",
+            "port_name",
+            "--id-column",
+            "row_id",
+            "--output",
+            str(output_csv),
+        ]
+    )
+
+    assert status == 0
+    rows = list(csv.DictReader(output_csv.open(encoding="utf-8")))
+    assert [row["row_id"] for row in rows] == ["1", "2", "3", "4", "5"]
+    assert all(row["sea_mile_registry_id"] == "WPI:1" for row in rows)
+
+
+def test_match_review_row_ids_continue_across_chunks(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("sea_mile.cli._MATCH_CHUNK_SIZE", 1)
+    data_directory = tmp_path / "registry"
+    write_ambiguous_registry(data_directory)
+    input_csv = tmp_path / "in.csv"
+    input_csv.write_text(
+        "port_name,country\nHamilton,US\nHamilton,US\nHamilton,US\n", encoding="utf-8"
+    )
+    review_csv = tmp_path / "review.csv"
+
+    status = main(
+        [
+            "--data-dir",
+            str(data_directory),
+            "match",
+            str(input_csv),
+            "--name-column",
+            "port_name",
+            "--country-column",
+            "country",
+            "--review",
+            str(review_csv),
+        ]
+    )
+
+    assert status == 0
+    rows = list(csv.DictReader(review_csv.open(encoding="utf-8")))
+    assert sorted({row["row_id"] for row in rows}) == ["1", "2", "3"]
