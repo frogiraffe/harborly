@@ -17,6 +17,11 @@ versioning.
   local raw snapshots against it before building, for an offline reproducible build that
   fails loudly on drift.
 
+### Changed
+
+- The registry build now writes its Parquet files and manifest through temporary files
+  and an atomic rename, so a failed build no longer leaves a half-written registry.
+
 ## [0.3.0] - 2026-07-23
 
 The first hardened release since 0.1.0. It makes the `--json` output a versioned,

@@ -38,6 +38,18 @@ def registry_content_hash(registry: pd.DataFrame, aliases: pd.DataFrame) -> str:
     return digest.hexdigest()
 
 
+def _write_parquet_atomic(frame: pd.DataFrame, path: Path) -> None:
+    temp = path.with_name(path.name + ".part")
+    frame.to_parquet(temp, index=False)
+    temp.replace(path)
+
+
+def _write_text_atomic(path: Path, text: str) -> None:
+    temp = path.with_name(path.name + ".part")
+    temp.write_text(text, encoding="utf-8")
+    temp.replace(path)
+
+
 UNLOCODE_COLUMNS = [
     "change",
     "country_code",
@@ -278,8 +290,10 @@ def build_reference_registry(reference_root: str | Path) -> dict[str, object]:
         [frame for _, frame in provider_frames.values()], ignore_index=True
     ).drop_duplicates()
     processed_root.mkdir(parents=True, exist_ok=True)
-    registry.to_parquet(processed_root / "port_registry.parquet", index=False)
-    aliases.to_parquet(processed_root / "port_aliases.parquet", index=False)
+    # Write to temporary files and rename, so a failed build never leaves a
+    # half-written registry, and the manifest a reader checks first lands last.
+    _write_parquet_atomic(registry, processed_root / "port_registry.parquet")
+    _write_parquet_atomic(aliases, processed_root / "port_aliases.parquet")
     manifest: dict[str, object] = {
         "registry_schema_version": REGISTRY_SCHEMA_VERSION,
         "registry_content_hash": registry_content_hash(registry, aliases),
@@ -297,7 +311,8 @@ def build_reference_registry(reference_root: str | Path) -> dict[str, object]:
         ),
         "coordinate_conflict_records": int(registry["coordinate_conflict"].sum()),
     }
-    (processed_root / "registry_manifest.json").write_text(
-        json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+    _write_text_atomic(
+        processed_root / "registry_manifest.json",
+        json.dumps(manifest, indent=2) + "\n",
     )
     return manifest
