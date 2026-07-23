@@ -6,6 +6,13 @@ versioning.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-23
+
+The first hardened release since 0.1.0. It makes the `--json` output a versioned,
+schema-checked contract, adds explainable and reviewable bulk matching, and ships a
+curated regression dataset. It carries the breaking JSON-envelope change, which is
+allowed before 1.0.
+
 ### Added
 
 - A curated golden identity dataset under `tests/golden/` and a test that runs it,
