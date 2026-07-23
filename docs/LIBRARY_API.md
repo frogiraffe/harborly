@@ -34,6 +34,12 @@ build_reference_registry("reference")
 `sea-mile data verify` checks a local build. The `verify_reference_data` function in
 `sea_mile.validation` returns the same report.
 
+The build manifest records a `registry_schema_version` and a deterministic
+`registry_content_hash`. When it loads a directory, `PortRegistry.from_directory` reads
+the manifest and refuses a schema version this build of sea-mile does not support,
+rather than failing later on a missing or renamed column. The content hash is
+order-independent, so a rebuild from the same sources produces the same hash.
+
 ## Port records
 
 A `Port` object is one provider record. It is not a cross-source consensus record.

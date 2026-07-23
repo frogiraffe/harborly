@@ -669,6 +669,8 @@ def _print_download_manifest(manifest: dict[str, Any]) -> None:
 
 
 def _print_build_manifest(manifest: dict[str, Any]) -> None:
+    print(f"registry_schema_version: {manifest['registry_schema_version']}")
+    print(f"registry_content_hash: {manifest['registry_content_hash']}")
     print(f"registry_rows: {manifest['registry_rows']}")
     print(f"alias_rows: {manifest['alias_rows']}")
     for provider, counts in manifest["providers"].items():

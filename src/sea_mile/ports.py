@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator, Sequence
 from dataclasses import asdict, dataclass
 from functools import cached_property, lru_cache
@@ -46,6 +47,8 @@ _REGISTRY_COLUMNS = {
     "coordinate_conflict",
 }
 _ALIAS_COLUMNS = {"registry_id", "provider", "alias", "alias_key", "alias_type"}
+# Processed-registry schema versions this build of sea-mile can read.
+SUPPORTED_REGISTRY_SCHEMA_VERSIONS = frozenset({1})
 _PROVIDER_PRIORITY = {
     "NGA_WPI": 0,
     "UN_LOCODE": 1,
@@ -100,6 +103,29 @@ def _optional_float(value: Any) -> float | None:
         return None
     number = float(value)
     return number if isfinite(number) else None
+
+
+def _validate_registry_schema(manifest_path: Path) -> None:
+    """Refuse a processed registry whose schema this build cannot read.
+
+    A missing or unversioned manifest is allowed, so hand-built frames and
+    older local builds keep loading.
+    """
+
+    if not manifest_path.exists():
+        return
+    try:
+        manifest = json.loads(manifest_path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return
+    version = manifest.get("registry_schema_version")
+    if version is None or version in SUPPORTED_REGISTRY_SCHEMA_VERSIONS:
+        return
+    raise RegistryDataError(
+        f"registry schema version {version} is not readable by this sea-mile, "
+        f"which supports {sorted(SUPPORTED_REGISTRY_SCHEMA_VERSIONS)}. "
+        "rebuild the registry with: sea-mile data build"
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -345,6 +371,7 @@ class PortRegistry:
         coordinate_agreement_nmi: float = 25.0,
     ) -> PortRegistry:
         directory = Path(directory)
+        _validate_registry_schema(directory / "registry_manifest.json")
         return cls.from_parquet(
             directory / "port_registry.parquet",
             directory / "port_aliases.parquet",

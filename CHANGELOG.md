@@ -6,6 +6,13 @@ versioning.
 
 ## [Unreleased]
 
+### Added
+
+- A `registry_schema_version` and a deterministic `registry_content_hash` in the build
+  manifest, plus a load-time check that refuses a processed registry whose schema this
+  build of sea-mile cannot read. The content hash is order-independent, so two builds
+  from the same sources produce the same hash.
+
 ## [0.3.0] - 2026-07-23
 
 The first hardened release since 0.1.0. It makes the `--json` output a versioned,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from zipfile import ZipFile
@@ -14,6 +15,28 @@ from sea_mile.geonames import load_geonames_port_archive
 from sea_mile.normalization import canonical_key, normalize_display_text
 from sea_mile.osm import load_osm_port_archive
 from sea_mile.reference import parse_unlocode_coordinates, parse_wpi_dms
+
+# The on-disk format of the processed registry. A reader refuses a version it does
+# not support instead of failing on a missing or renamed column.
+REGISTRY_SCHEMA_VERSION = 1
+
+
+def registry_content_hash(registry: pd.DataFrame, aliases: pd.DataFrame) -> str:
+    """Return a deterministic content hash of the normalized registry.
+
+    Two builds from the same sources produce the same hash regardless of row
+    order, so it identifies a build and lets a rebuild be checked for drift.
+    """
+
+    registry_csv = registry.sort_values("registry_id").to_csv(index=False)
+    aliases_csv = aliases.sort_values(["registry_id", "alias_key", "alias"]).to_csv(
+        index=False
+    )
+    digest = hashlib.sha256()
+    digest.update(registry_csv.encode())
+    digest.update(aliases_csv.encode())
+    return digest.hexdigest()
+
 
 UNLOCODE_COLUMNS = [
     "change",
@@ -258,6 +281,8 @@ def build_reference_registry(reference_root: str | Path) -> dict[str, object]:
     registry.to_parquet(processed_root / "port_registry.parquet", index=False)
     aliases.to_parquet(processed_root / "port_aliases.parquet", index=False)
     manifest: dict[str, object] = {
+        "registry_schema_version": REGISTRY_SCHEMA_VERSION,
+        "registry_content_hash": registry_content_hash(registry, aliases),
         "registry_rows": len(registry),
         "alias_rows": len(aliases),
         "providers": {
