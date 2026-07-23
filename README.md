@@ -116,7 +116,26 @@ The `matrix` command prints the pairwise sea distance between two or more ports.
 `export` command writes matching records as CSV or GeoJSON, for a `--query`, a
 `--country`, or both. The `match` command reads a CSV with a name column and an
 optional country column and prints one decision per row: `auto_resolved`,
-`review_required`, or `unresolved`.
+`review_required`, `unresolved`, or `manually_resolved`.
+
+### Match review workflow
+
+For data cleaning, `match` can write files instead of a table. `--output` writes your
+input rows back with appended `sea_mile_*` columns, so downstream joins keep working.
+`--review` writes only the rows that need a human, one row per candidate, so you can
+see the conflicting records. `--id-column` names a stable id in your input, and one is
+generated from the row number when you leave it out.
+
+```bash
+uv run sea-mile match ports.csv --name-column port_name --country-column country --id-column row_id --output matched.csv --review review.csv
+```
+
+Mark your choices in a decisions file with `row_id` and `chosen_registry_id` columns,
+then apply them. Reviewed rows become `manually_resolved`.
+
+```bash
+uv run sea-mile match ports.csv --name-column port_name --id-column row_id --decisions decisions.csv --output matched.csv
+```
 
 Install the `tui` extra for an interactive search:
 

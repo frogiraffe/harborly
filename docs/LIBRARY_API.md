@@ -145,7 +145,8 @@ human `reason`. The `status` is a `MatchStatus` value, the `confidence_tier` is 
 `ConfidenceTier` value from `A` to `D`, and the `reason_code` is a `MatchReason` value.
 Branch automation on `reason_code`, not on the `reason` text, which may change. The
 `MatchReason` values are `unique_exact_wpi`, `unique_exact_unlocode`,
-`coordinate_conflict`, `multiple_identities`, and `no_candidate`.
+`coordinate_conflict`, `multiple_identities`, and `no_candidate`, plus `manual_decision`
+when the CLI review workflow applies a reviewed choice.
 
 Each result also carries `candidates`, a tuple of `MatchCandidate` records. Each holds
 the `registry_id`, `provider`, `name`, `country_code`, coordinates, and `unlocode` of

@@ -8,6 +8,10 @@ versioning.
 
 ### Added
 
+- A `match` review workflow. `--output` writes the input rows back with appended
+  `sea_mile_*` columns, `--review` writes the rows needing a human one row per
+  candidate, and `--decisions` applies a reviewed `row_id`/`chosen_registry_id` file,
+  marking those rows `manually_resolved`. `--id-column` names a stable input id.
 - `docs/OUTPUT_SCHEMAS.md` documenting the JSON envelope, the `data` shape of each
   command, and the error codes.
 - `docs/schemas/envelope-1.schema.json`, a JSON Schema for the envelope that the test

@@ -17,6 +17,7 @@ class MatchStatus(StrEnum):
     AUTO_RESOLVED = "auto_resolved"
     REVIEW_REQUIRED = "review_required"
     UNRESOLVED = "unresolved"
+    MANUALLY_RESOLVED = "manually_resolved"
 
 
 class ConfidenceTier(StrEnum):
@@ -32,6 +33,7 @@ class MatchReason(StrEnum):
     COORDINATE_CONFLICT = "coordinate_conflict"
     MULTIPLE_IDENTITIES = "multiple_identities"
     NO_CANDIDATE = "no_candidate"
+    MANUAL_DECISION = "manual_decision"
 
 
 @dataclass(frozen=True, slots=True)

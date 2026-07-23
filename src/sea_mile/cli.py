@@ -10,12 +10,14 @@ import json
 import logging
 import os
 import sys
+from collections import Counter
 from collections.abc import Sequence
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
 from sea_mile.exceptions import SeaMileError
+from sea_mile.matching import BatchMatchResult, MatchReason, MatchStatus
 from sea_mile.ports import Port, PortGroup, PortRegistry, source_short_label
 
 logger = logging.getLogger("sea_mile")
@@ -406,19 +408,197 @@ def _cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
+_ENRICHED_FIELDS = [
+    "sea_mile_status",
+    "sea_mile_reason_code",
+    "sea_mile_registry_id",
+    "sea_mile_name",
+    "sea_mile_country_code",
+    "sea_mile_latitude",
+    "sea_mile_longitude",
+    "sea_mile_unlocode",
+]
+
+_REVIEW_FIELDS = [
+    "row_id",
+    "input_name",
+    "input_country",
+    "status",
+    "reason_code",
+    "candidate_registry_id",
+    "candidate_provider",
+    "candidate_name",
+    "candidate_country_code",
+    "candidate_latitude",
+    "candidate_longitude",
+    "candidate_unlocode",
+]
+
+_REVIEW_STATUSES = frozenset({MatchStatus.REVIEW_REQUIRED, MatchStatus.UNRESOLVED})
+
+
+def _match_row_ids(rows: list[dict[str, Any]], id_column: str | None) -> list[str]:
+    if id_column:
+        return [
+            str(row.get(id_column) or "").strip() or str(index + 1)
+            for index, row in enumerate(rows)
+        ]
+    return [str(index + 1) for index in range(len(rows))]
+
+
+def _read_decisions(path: Path) -> dict[str, str]:
+    with path.open(newline="", encoding="utf-8-sig") as handle:
+        reader = csv.DictReader(handle)
+        fields = reader.fieldnames or []
+        if "row_id" not in fields or "chosen_registry_id" not in fields:
+            raise ValueError(
+                "decisions file needs a 'row_id' and a 'chosen_registry_id' column"
+            )
+        decisions: dict[str, str] = {}
+        for row in reader:
+            row_id = str(row.get("row_id") or "").strip()
+            chosen = str(row.get("chosen_registry_id") or "").strip()
+            if row_id and chosen:
+                decisions[row_id] = chosen
+    return decisions
+
+
+def _apply_decision(
+    result: BatchMatchResult,
+    row_id: str,
+    decisions: dict[str, str],
+    registry: PortRegistry,
+) -> BatchMatchResult:
+    chosen = decisions.get(row_id)
+    if chosen is None:
+        return result
+    if chosen not in registry:
+        raise ValueError(
+            f"decision for row {row_id!r} names unknown registry ID {chosen!r}"
+        )
+    return dataclasses.replace(
+        result,
+        status=MatchStatus.MANUALLY_RESOLVED,
+        selected_registry_id=chosen,
+        reason_code=MatchReason.MANUAL_DECISION,
+        reason="resolved from the decisions file",
+        rules_applied=(*result.rules_applied, "manual_decision"),
+    )
+
+
+def _selected_record(registry: PortRegistry, registry_id: str | None) -> Port | None:
+    if registry_id and registry_id in registry:
+        return registry.get(registry_id)
+    return None
+
+
+def _write_enriched(
+    path: Path,
+    input_fieldnames: Sequence[str],
+    rows: list[dict[str, Any]],
+    results: list[BatchMatchResult],
+    registry: PortRegistry,
+) -> None:
+    fieldnames = list(input_fieldnames) + [
+        field for field in _ENRICHED_FIELDS if field not in input_fieldnames
+    ]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for row, result in zip(rows, results, strict=True):
+            record = _selected_record(registry, result.selected_registry_id)
+            enriched = dict(row)
+            enriched.update(
+                {
+                    "sea_mile_status": str(result.status),
+                    "sea_mile_reason_code": str(result.reason_code),
+                    "sea_mile_registry_id": result.selected_registry_id or "",
+                    "sea_mile_name": record.name if record else "",
+                    "sea_mile_country_code": record.country_code if record else "",
+                    "sea_mile_latitude": (
+                        record.latitude
+                        if record and record.latitude is not None
+                        else ""
+                    ),
+                    "sea_mile_longitude": (
+                        record.longitude
+                        if record and record.longitude is not None
+                        else ""
+                    ),
+                    "sea_mile_unlocode": (
+                        record.unlocode if record and record.unlocode else ""
+                    ),
+                }
+            )
+            writer.writerow(enriched)
+
+
+def _write_review(
+    path: Path, row_ids: list[str], results: list[BatchMatchResult]
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=_REVIEW_FIELDS)
+        writer.writeheader()
+        for row_id, result in zip(row_ids, results, strict=True):
+            if result.status not in _REVIEW_STATUSES:
+                continue
+            base = {
+                "row_id": row_id,
+                "input_name": result.query,
+                "input_country": result.country_code or "",
+                "status": str(result.status),
+                "reason_code": str(result.reason_code),
+            }
+            if not result.candidates:
+                writer.writerow(base)
+                continue
+            for candidate in result.candidates:
+                writer.writerow(
+                    {
+                        **base,
+                        "candidate_registry_id": candidate.registry_id,
+                        "candidate_provider": candidate.provider,
+                        "candidate_name": candidate.name,
+                        "candidate_country_code": candidate.country_code,
+                        "candidate_latitude": (
+                            candidate.latitude if candidate.latitude is not None else ""
+                        ),
+                        "candidate_longitude": (
+                            candidate.longitude
+                            if candidate.longitude is not None
+                            else ""
+                        ),
+                        "candidate_unlocode": candidate.unlocode or "",
+                    }
+                )
+
+
+def _print_match_summary(
+    results: list[BatchMatchResult], args: argparse.Namespace
+) -> None:
+    if args.output:
+        print(f"wrote {len(results)} rows to {args.output}")
+    if args.review:
+        review = sum(1 for result in results if result.status in _REVIEW_STATUSES)
+        print(f"wrote {review} rows needing review to {args.review}")
+    counts = Counter(str(result.status) for result in results)
+    print(", ".join(f"{status}: {count}" for status, count in sorted(counts.items())))
+
+
 def _cmd_match(args: argparse.Namespace) -> int:
     registry = _load_registry(args)
     with args.input.open(newline="", encoding="utf-8-sig") as handle:
         reader = csv.DictReader(handle)
         fieldnames = reader.fieldnames or []
-        if args.name_column not in fieldnames:
-            raise ValueError(
-                f"input has no column {args.name_column!r}; "
-                f"columns are {', '.join(fieldnames) or 'none'}"
-            )
-        if args.country_column and args.country_column not in fieldnames:
-            raise ValueError(f"input has no column {args.country_column!r}")
-        rows = list(reader)
+        for column in (args.name_column, args.country_column, args.id_column):
+            if column and column not in fieldnames:
+                raise ValueError(
+                    f"input has no column {column!r}; "
+                    f"columns are {', '.join(fieldnames) or 'none'}"
+                )
+        rows: list[dict[str, Any]] = list(reader)
 
     names = [str(row.get(args.name_column) or "").strip() for row in rows]
     country_codes: list[str | None] | None = None
@@ -428,8 +608,24 @@ def _cmd_match(args: argparse.Namespace) -> int:
         ]
     results = registry.match_names(names, country_codes=country_codes)
 
+    row_ids = _match_row_ids(rows, args.id_column)
+    if args.decisions:
+        decisions = _read_decisions(args.decisions)
+        results = [
+            _apply_decision(result, row_id, decisions, registry)
+            for result, row_id in zip(results, row_ids, strict=True)
+        ]
+
+    if args.output:
+        _write_enriched(args.output, fieldnames, rows, results, registry)
+    if args.review:
+        _write_review(args.review, row_ids, results)
+
     if args.json:
         _emit_json(args, [result.to_dict() for result in results])
+        return 0
+    if args.output or args.review:
+        _print_match_summary(results, args)
         return 0
     if not results:
         print("no rows")
@@ -602,6 +798,24 @@ def _parser() -> argparse.ArgumentParser:
     )
     match_cmd.add_argument(
         "--country-column", help="optional column holding a two-letter country code"
+    )
+    match_cmd.add_argument(
+        "--id-column", help="column holding a stable row id used for review decisions"
+    )
+    match_cmd.add_argument(
+        "--output",
+        type=Path,
+        help="write the input rows plus sea_mile_* columns to this CSV",
+    )
+    match_cmd.add_argument(
+        "--review",
+        type=Path,
+        help="write rows needing review to this CSV, one row per candidate",
+    )
+    match_cmd.add_argument(
+        "--decisions",
+        type=Path,
+        help="apply a decisions CSV with row_id and chosen_registry_id columns",
     )
     match_cmd.set_defaults(func=_cmd_match)
 

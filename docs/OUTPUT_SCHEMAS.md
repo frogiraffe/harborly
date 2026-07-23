@@ -63,12 +63,14 @@ Some `data` fields carry a fixed set of string values.
 
 | Field | Values |
 | --- | --- |
-| `status` | `auto_resolved`, `review_required`, `unresolved` |
+| `status` | `auto_resolved`, `review_required`, `unresolved`, `manually_resolved` |
 | `confidence_tier` | `A`, `B`, `C`, `D` |
-| `reason_code` | `unique_exact_wpi`, `unique_exact_unlocode`, `coordinate_conflict`, `multiple_identities`, `no_candidate` |
+| `reason_code` | `unique_exact_wpi`, `unique_exact_unlocode`, `coordinate_conflict`, `multiple_identities`, `no_candidate`, `manual_decision` |
 
 A confidence tier is a similarity signal, not a calibrated probability. The `reason_code`
-is stable for automation, while the `reason` text is human-readable and may change.
+is stable for automation, while the `reason` text is human-readable and may change. The
+`manually_resolved` status and the `manual_decision` reason appear only when the `match`
+review workflow applies a decisions file.
 
 ### `route` quality flag
 

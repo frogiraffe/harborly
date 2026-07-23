@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 
 import pandas as pd
@@ -58,6 +59,64 @@ def write_registry(directory) -> None:
                 "provider": "NGA_WPI",
                 "alias": "Piraeus",
                 "alias_key": "piraeus",
+                "alias_type": "primary",
+            },
+        ]
+    )
+    registry.to_parquet(directory / "port_registry.parquet", index=False)
+    aliases.to_parquet(directory / "port_aliases.parquet", index=False)
+
+
+def write_ambiguous_registry(directory) -> None:
+    directory.mkdir()
+    registry = pd.DataFrame(
+        [
+            {
+                "registry_id": "WPI:2",
+                "provider": "NGA_WPI",
+                "provider_id": "2",
+                "country_code": "US",
+                "canonical_name": "Hamilton",
+                "latitude": 39.4,
+                "longitude": -84.6,
+                "unlocode": None,
+                "function_code": "port",
+                "source_version": "test",
+                "coordinate_resolution": "arc_second",
+                "variant_count": 1,
+                "coordinate_conflict": False,
+            },
+            {
+                "registry_id": "UNLOCODE:USHAM",
+                "provider": "UN_LOCODE",
+                "provider_id": "USHAM",
+                "country_code": "US",
+                "canonical_name": "Hamilton",
+                "latitude": 43.9,
+                "longitude": -75.5,
+                "unlocode": "USHAM",
+                "function_code": "1-----",
+                "source_version": "test",
+                "coordinate_resolution": "arc_minute",
+                "variant_count": 1,
+                "coordinate_conflict": False,
+            },
+        ]
+    )
+    aliases = pd.DataFrame(
+        [
+            {
+                "registry_id": "WPI:2",
+                "provider": "NGA_WPI",
+                "alias": "Hamilton",
+                "alias_key": "hamilton",
+                "alias_type": "primary",
+            },
+            {
+                "registry_id": "UNLOCODE:USHAM",
+                "provider": "UN_LOCODE",
+                "alias": "Hamilton",
+                "alias_key": "hamilton",
                 "alias_type": "primary",
             },
         ]
@@ -389,6 +448,127 @@ def test_json_commands_emit_one_valid_document(
     assert envelope["schema_version"] == "1"
     assert envelope["warnings"] == []
     assert isinstance(envelope["data"], list if returns_list else dict)
+
+
+def test_match_output_enriches_input_and_preserves_columns(tmp_path) -> None:
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+    input_csv = tmp_path / "in.csv"
+    input_csv.write_text("port_name,ref\nMersin,X-1\n", encoding="utf-8")
+    output_csv = tmp_path / "out.csv"
+
+    status = main(
+        [
+            "--data-dir",
+            str(data_directory),
+            "match",
+            str(input_csv),
+            "--name-column",
+            "port_name",
+            "--output",
+            str(output_csv),
+        ]
+    )
+
+    assert status == 0
+    row = next(csv.DictReader(output_csv.open(encoding="utf-8")))
+    assert row["ref"] == "X-1"
+    assert row["port_name"] == "Mersin"
+    assert row["sea_mile_status"] == "auto_resolved"
+    assert row["sea_mile_registry_id"] == "WPI:1"
+    assert row["sea_mile_name"] == "Mersin"
+
+
+def test_match_review_writes_one_row_per_candidate(tmp_path) -> None:
+    data_directory = tmp_path / "registry"
+    write_ambiguous_registry(data_directory)
+    input_csv = tmp_path / "in.csv"
+    input_csv.write_text("row_id,port_name,country\n7,Hamilton,US\n", encoding="utf-8")
+    review_csv = tmp_path / "review.csv"
+
+    status = main(
+        [
+            "--data-dir",
+            str(data_directory),
+            "match",
+            str(input_csv),
+            "--name-column",
+            "port_name",
+            "--country-column",
+            "country",
+            "--id-column",
+            "row_id",
+            "--review",
+            str(review_csv),
+        ]
+    )
+
+    assert status == 0
+    rows = list(csv.DictReader(review_csv.open(encoding="utf-8")))
+    assert [row["candidate_registry_id"] for row in rows] == ["WPI:2", "UNLOCODE:USHAM"]
+    assert all(row["row_id"] == "7" for row in rows)
+    assert all(row["reason_code"] == "coordinate_conflict" for row in rows)
+
+
+def test_match_applies_a_reviewed_decision(tmp_path, capsys) -> None:
+    data_directory = tmp_path / "registry"
+    write_ambiguous_registry(data_directory)
+    input_csv = tmp_path / "in.csv"
+    input_csv.write_text("row_id,port_name,country\n7,Hamilton,US\n", encoding="utf-8")
+    decisions_csv = tmp_path / "decisions.csv"
+    decisions_csv.write_text(
+        "row_id,chosen_registry_id\n7,UNLOCODE:USHAM\n", encoding="utf-8"
+    )
+
+    status = main(
+        [
+            "--data-dir",
+            str(data_directory),
+            "match",
+            str(input_csv),
+            "--name-column",
+            "port_name",
+            "--country-column",
+            "country",
+            "--id-column",
+            "row_id",
+            "--decisions",
+            str(decisions_csv),
+            "--json",
+        ]
+    )
+
+    assert status == 0
+    row = json.loads(capsys.readouterr().out)["data"][0]
+    assert row["status"] == "manually_resolved"
+    assert row["selected_registry_id"] == "UNLOCODE:USHAM"
+    assert row["reason_code"] == "manual_decision"
+    assert row["rules_applied"][-1] == "manual_decision"
+
+
+def test_match_decision_with_unknown_id_is_an_error(tmp_path, capsys) -> None:
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+    input_csv = tmp_path / "in.csv"
+    input_csv.write_text("row_id,name\n1,Mersin\n", encoding="utf-8")
+    decisions_csv = tmp_path / "decisions.csv"
+    decisions_csv.write_text("row_id,chosen_registry_id\n1,WPI:999\n", encoding="utf-8")
+
+    status = main(
+        [
+            "--data-dir",
+            str(data_directory),
+            "match",
+            str(input_csv),
+            "--id-column",
+            "row_id",
+            "--decisions",
+            str(decisions_csv),
+        ]
+    )
+
+    assert status == 2
+    assert "unknown registry ID" in capsys.readouterr().err
 
 
 def test_json_error_output_is_structured(tmp_path, capsys) -> None:
