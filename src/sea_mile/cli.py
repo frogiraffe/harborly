@@ -10,12 +10,14 @@ import json
 import logging
 import os
 import sys
+from collections import Counter
 from collections.abc import Sequence
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
 from sea_mile.exceptions import SeaMileError
+from sea_mile.matching import BatchMatchResult, MatchReason, MatchStatus
 from sea_mile.ports import Port, PortGroup, PortRegistry, source_short_label
 
 logger = logging.getLogger("sea_mile")
@@ -79,6 +81,35 @@ def _print_json(value: object) -> None:
     print(json.dumps(value, ensure_ascii=False, indent=2))
 
 
+OUTPUT_SCHEMA_VERSION = "1"
+
+
+def _command_label(args: argparse.Namespace) -> str:
+    if args.command == "data":
+        return f"data {args.data_command}"
+    return str(args.command)
+
+
+def _emit_json(
+    args: argparse.Namespace, data: object, *, warnings: list[str] | None = None
+) -> None:
+    """Print one command result inside the versioned output envelope."""
+
+    _print_json(
+        {
+            "schema_version": OUTPUT_SCHEMA_VERSION,
+            "command": _command_label(args),
+            "data": data,
+            "warnings": warnings or [],
+        }
+    )
+
+
+def _error_code(error: Exception) -> str:
+    code = getattr(error, "code", None)
+    return code if isinstance(code, str) else "usage_error"
+
+
 def _print_table(headers: Sequence[str], rows: Sequence[Sequence[str]]) -> None:
     widths = [len(header) for header in headers]
     for row in rows:
@@ -95,6 +126,7 @@ def _port_lines(port: Port) -> list[str]:
     lines = [
         f"name: {port.name}",
         f"registry_id: {port.registry_id}",
+        f"canonical_id: {port.canonical_id}",
         f"provider: {port.provider} ({port.provider_id})",
         f"country: {port.country_code}",
         f"unlocode: {port.unlocode or '-'}",
@@ -123,12 +155,13 @@ def _cmd_info(args: argparse.Namespace) -> int:
     registry = _load_registry(args)
     data_directory = str(args.data_dir.resolve())
     if args.json:
-        _print_json(
+        _emit_json(
+            args,
             {
                 "registry_records": len(registry),
                 "providers": registry.providers,
                 "data_directory": data_directory,
-            }
+            },
         )
         return 0
     print(f"registry_records: {len(registry)}")
@@ -157,7 +190,7 @@ def _cmd_search(args: argparse.Namespace) -> int:
             minimum_score=args.minimum_score,
         )
         if args.json:
-            _print_json([result.to_dict() for result in results])
+            _emit_json(args, [result.to_dict() for result in results])
             return 0
         if not results:
             print("no matches")
@@ -186,7 +219,7 @@ def _cmd_search(args: argparse.Namespace) -> int:
         minimum_score=args.minimum_score,
     )
     if args.json:
-        _print_json([group.to_dict() for group in groups])
+        _emit_json(args, [group.to_dict() for group in groups])
         return 0
     if not groups:
         print("no matches")
@@ -212,7 +245,7 @@ def _cmd_show(args: argparse.Namespace) -> int:
     registry = _load_registry(args)
     port = registry.resolve(args.port, country_code=args.country_code)
     if args.json:
-        _print_json(port.to_dict())
+        _emit_json(args, port.to_dict())
         return 0
     for line in _port_lines(port):
         print(line)
@@ -230,7 +263,7 @@ def _cmd_near(args: argparse.Namespace) -> int:
             max_distance_nmi=args.max_distance_nmi,
         )
         if args.json:
-            _print_json([result.to_dict() for result in results])
+            _emit_json(args, [result.to_dict() for result in results])
             return 0
         if not results:
             print("no matches")
@@ -258,7 +291,7 @@ def _cmd_near(args: argparse.Namespace) -> int:
         max_distance_nmi=args.max_distance_nmi,
     )
     if args.json:
-        _print_json([result.to_dict() for result in groups])
+        _emit_json(args, [result.to_dict() for result in groups])
         return 0
     if not groups:
         print("no matches")
@@ -292,7 +325,7 @@ def _cmd_route(args: argparse.Namespace) -> int:
         print(f"sea-mile: error: {error}", file=sys.stderr)
         return 2
     if args.json:
-        _print_json(result.summary())
+        _emit_json(args, result.summary())
     else:
         detour = (
             f"{result.detour_ratio:.3f}" if result.detour_ratio is not None else "-"
@@ -320,6 +353,8 @@ def _cmd_route(args: argparse.Namespace) -> int:
 
 
 def _cmd_matrix(args: argparse.Namespace) -> int:
+    if len(args.ports) < 2:
+        raise ValueError("matrix needs two or more ports")
     from sea_mile.router import SeaRouter
 
     registry = _load_registry(args)
@@ -331,7 +366,7 @@ def _cmd_matrix(args: argparse.Namespace) -> int:
         return 2
     labels = [port.registry_id for port in ports]
     if args.json:
-        _print_json({"ports": labels, "distances_nmi": matrix})
+        _emit_json(args, {"ports": labels, "distances_nmi": matrix})
         return 0
     _print_table(
         ("FROM/TO", *labels),
@@ -373,19 +408,197 @@ def _cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
+_ENRICHED_FIELDS = [
+    "sea_mile_status",
+    "sea_mile_reason_code",
+    "sea_mile_registry_id",
+    "sea_mile_name",
+    "sea_mile_country_code",
+    "sea_mile_latitude",
+    "sea_mile_longitude",
+    "sea_mile_unlocode",
+]
+
+_REVIEW_FIELDS = [
+    "row_id",
+    "input_name",
+    "input_country",
+    "status",
+    "reason_code",
+    "candidate_registry_id",
+    "candidate_provider",
+    "candidate_name",
+    "candidate_country_code",
+    "candidate_latitude",
+    "candidate_longitude",
+    "candidate_unlocode",
+]
+
+_REVIEW_STATUSES = frozenset({MatchStatus.REVIEW_REQUIRED, MatchStatus.UNRESOLVED})
+
+
+def _match_row_ids(rows: list[dict[str, Any]], id_column: str | None) -> list[str]:
+    if id_column:
+        return [
+            str(row.get(id_column) or "").strip() or str(index + 1)
+            for index, row in enumerate(rows)
+        ]
+    return [str(index + 1) for index in range(len(rows))]
+
+
+def _read_decisions(path: Path) -> dict[str, str]:
+    with path.open(newline="", encoding="utf-8-sig") as handle:
+        reader = csv.DictReader(handle)
+        fields = reader.fieldnames or []
+        if "row_id" not in fields or "chosen_registry_id" not in fields:
+            raise ValueError(
+                "decisions file needs a 'row_id' and a 'chosen_registry_id' column"
+            )
+        decisions: dict[str, str] = {}
+        for row in reader:
+            row_id = str(row.get("row_id") or "").strip()
+            chosen = str(row.get("chosen_registry_id") or "").strip()
+            if row_id and chosen:
+                decisions[row_id] = chosen
+    return decisions
+
+
+def _apply_decision(
+    result: BatchMatchResult,
+    row_id: str,
+    decisions: dict[str, str],
+    registry: PortRegistry,
+) -> BatchMatchResult:
+    chosen = decisions.get(row_id)
+    if chosen is None:
+        return result
+    if chosen not in registry:
+        raise ValueError(
+            f"decision for row {row_id!r} names unknown registry ID {chosen!r}"
+        )
+    return dataclasses.replace(
+        result,
+        status=MatchStatus.MANUALLY_RESOLVED,
+        selected_registry_id=chosen,
+        reason_code=MatchReason.MANUAL_DECISION,
+        reason="resolved from the decisions file",
+        rules_applied=(*result.rules_applied, "manual_decision"),
+    )
+
+
+def _selected_record(registry: PortRegistry, registry_id: str | None) -> Port | None:
+    if registry_id and registry_id in registry:
+        return registry.get(registry_id)
+    return None
+
+
+def _write_enriched(
+    path: Path,
+    input_fieldnames: Sequence[str],
+    rows: list[dict[str, Any]],
+    results: list[BatchMatchResult],
+    registry: PortRegistry,
+) -> None:
+    fieldnames = list(input_fieldnames) + [
+        field for field in _ENRICHED_FIELDS if field not in input_fieldnames
+    ]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for row, result in zip(rows, results, strict=True):
+            record = _selected_record(registry, result.selected_registry_id)
+            enriched = dict(row)
+            enriched.update(
+                {
+                    "sea_mile_status": str(result.status),
+                    "sea_mile_reason_code": str(result.reason_code),
+                    "sea_mile_registry_id": result.selected_registry_id or "",
+                    "sea_mile_name": record.name if record else "",
+                    "sea_mile_country_code": record.country_code if record else "",
+                    "sea_mile_latitude": (
+                        record.latitude
+                        if record and record.latitude is not None
+                        else ""
+                    ),
+                    "sea_mile_longitude": (
+                        record.longitude
+                        if record and record.longitude is not None
+                        else ""
+                    ),
+                    "sea_mile_unlocode": (
+                        record.unlocode if record and record.unlocode else ""
+                    ),
+                }
+            )
+            writer.writerow(enriched)
+
+
+def _write_review(
+    path: Path, row_ids: list[str], results: list[BatchMatchResult]
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=_REVIEW_FIELDS)
+        writer.writeheader()
+        for row_id, result in zip(row_ids, results, strict=True):
+            if result.status not in _REVIEW_STATUSES:
+                continue
+            base = {
+                "row_id": row_id,
+                "input_name": result.query,
+                "input_country": result.country_code or "",
+                "status": str(result.status),
+                "reason_code": str(result.reason_code),
+            }
+            if not result.candidates:
+                writer.writerow(base)
+                continue
+            for candidate in result.candidates:
+                writer.writerow(
+                    {
+                        **base,
+                        "candidate_registry_id": candidate.registry_id,
+                        "candidate_provider": candidate.provider,
+                        "candidate_name": candidate.name,
+                        "candidate_country_code": candidate.country_code,
+                        "candidate_latitude": (
+                            candidate.latitude if candidate.latitude is not None else ""
+                        ),
+                        "candidate_longitude": (
+                            candidate.longitude
+                            if candidate.longitude is not None
+                            else ""
+                        ),
+                        "candidate_unlocode": candidate.unlocode or "",
+                    }
+                )
+
+
+def _print_match_summary(
+    results: list[BatchMatchResult], args: argparse.Namespace
+) -> None:
+    if args.output:
+        print(f"wrote {len(results)} rows to {args.output}")
+    if args.review:
+        review = sum(1 for result in results if result.status in _REVIEW_STATUSES)
+        print(f"wrote {review} rows needing review to {args.review}")
+    counts = Counter(str(result.status) for result in results)
+    print(", ".join(f"{status}: {count}" for status, count in sorted(counts.items())))
+
+
 def _cmd_match(args: argparse.Namespace) -> int:
     registry = _load_registry(args)
     with args.input.open(newline="", encoding="utf-8-sig") as handle:
         reader = csv.DictReader(handle)
         fieldnames = reader.fieldnames or []
-        if args.name_column not in fieldnames:
-            raise ValueError(
-                f"input has no column {args.name_column!r}; "
-                f"columns are {', '.join(fieldnames) or 'none'}"
-            )
-        if args.country_column and args.country_column not in fieldnames:
-            raise ValueError(f"input has no column {args.country_column!r}")
-        rows = list(reader)
+        for column in (args.name_column, args.country_column, args.id_column):
+            if column and column not in fieldnames:
+                raise ValueError(
+                    f"input has no column {column!r}; "
+                    f"columns are {', '.join(fieldnames) or 'none'}"
+                )
+        rows: list[dict[str, Any]] = list(reader)
 
     names = [str(row.get(args.name_column) or "").strip() for row in rows]
     country_codes: list[str | None] | None = None
@@ -395,8 +608,24 @@ def _cmd_match(args: argparse.Namespace) -> int:
         ]
     results = registry.match_names(names, country_codes=country_codes)
 
+    row_ids = _match_row_ids(rows, args.id_column)
+    if args.decisions:
+        decisions = _read_decisions(args.decisions)
+        results = [
+            _apply_decision(result, row_id, decisions, registry)
+            for result, row_id in zip(results, row_ids, strict=True)
+        ]
+
+    if args.output:
+        _write_enriched(args.output, fieldnames, rows, results, registry)
+    if args.review:
+        _write_review(args.review, row_ids, results)
+
     if args.json:
-        _print_json([result.to_dict() for result in results])
+        _emit_json(args, [result.to_dict() for result in results])
+        return 0
+    if args.output or args.review:
+        _print_match_summary(results, args)
         return 0
     if not results:
         print("no rows")
@@ -471,28 +700,34 @@ def _cmd_data(args: argparse.Namespace) -> int:
 
         report = verify_reference_data(args.reference_root)
         if args.json:
-            _print_json(report)
+            _emit_json(args, report)
         else:
             _print_verify_report(report)
         return 0 if report["status"] == "passed" else 1
+    payload: dict[str, Any] = {}
     if args.data_command in {"download", "prepare"}:
         from sea_mile.source_data import download_reference_data
 
         download_manifest = download_reference_data(
             args.reference_root, refresh=getattr(args, "refresh", False)
         )
-        if args.json:
-            _print_json(download_manifest)
-        else:
+        payload["download"] = download_manifest
+        if not args.json:
             _print_download_manifest(download_manifest)
     if args.data_command in {"build", "prepare"}:
         from sea_mile.registry_build import build_reference_registry
 
         build_manifest = build_reference_registry(args.reference_root)
-        if args.json:
-            _print_json(build_manifest)
-        else:
+        payload["build"] = build_manifest
+        if not args.json:
             _print_build_manifest(build_manifest)
+    if args.json:
+        # prepare emits both manifests as one document. download and build each
+        # emit their single manifest at the top level, keeping their prior shape.
+        _emit_json(
+            args,
+            payload if args.data_command == "prepare" else payload[args.data_command],
+        )
     return 0
 
 
@@ -531,7 +766,6 @@ def _parser() -> argparse.ArgumentParser:
 
     tui = subparsers.add_parser(
         "tui",
-        parents=[common],
         help="launch an interactive terminal port search (needs the tui extra)",
     )
     tui.set_defaults(func=_cmd_tui)
@@ -564,6 +798,24 @@ def _parser() -> argparse.ArgumentParser:
     )
     match_cmd.add_argument(
         "--country-column", help="optional column holding a two-letter country code"
+    )
+    match_cmd.add_argument(
+        "--id-column", help="column holding a stable row id used for review decisions"
+    )
+    match_cmd.add_argument(
+        "--output",
+        type=Path,
+        help="write the input rows plus sea_mile_* columns to this CSV",
+    )
+    match_cmd.add_argument(
+        "--review",
+        type=Path,
+        help="write rows needing review to this CSV, one row per candidate",
+    )
+    match_cmd.add_argument(
+        "--decisions",
+        type=Path,
+        help="apply a decisions CSV with row_id and chosen_registry_id columns",
     )
     match_cmd.set_defaults(func=_cmd_match)
 
@@ -615,9 +867,7 @@ def _parser() -> argparse.ArgumentParser:
     matrix.add_argument("ports", nargs="+", help="two or more port IDs or UN/LOCODEs")
     matrix.set_defaults(func=_cmd_matrix)
 
-    export = subparsers.add_parser(
-        "export", parents=[common], help="export matching port records"
-    )
+    export = subparsers.add_parser("export", help="export matching port records")
     export.add_argument("--query", help="port name to search for")
     export.add_argument("--country", dest="country_code")
     export.add_argument("--limit", type=int, default=1000)
@@ -673,7 +923,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         return args.func(args)
     except (SeaMileError, ValueError) as error:
-        print(f"sea-mile: error: {error}", file=sys.stderr)
+        if getattr(args, "json", False):
+            _print_json(
+                {
+                    "schema_version": OUTPUT_SCHEMA_VERSION,
+                    "command": _command_label(args),
+                    "error": {
+                        "code": _error_code(error),
+                        "message": str(error),
+                        "details": {},
+                    },
+                }
+            )
+        else:
+            print(f"sea-mile: error: {error}", file=sys.stderr)
         return 2
 
 

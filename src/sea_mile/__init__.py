@@ -2,6 +2,7 @@
 
 from typing import TYPE_CHECKING
 
+from .canonical import assign_canonical_ids
 from .exceptions import (
     AmbiguousPortError,
     PortCoordinateError,
@@ -14,6 +15,8 @@ from .matching import (
     BatchMatchResult,
     ConfidenceTier,
     ExactMatchDecision,
+    MatchCandidate,
+    MatchReason,
     MatchStatus,
     decide_exact_match,
 )
@@ -59,6 +62,8 @@ __all__ = [
     "ConfidenceTier",
     "CoordinateCheck",
     "ExactMatchDecision",
+    "MatchCandidate",
+    "MatchReason",
     "MatchStatus",
     "NearbyPortGroup",
     "NearbyPortResult",
@@ -73,6 +78,7 @@ __all__ = [
     "SeaRoute",
     "SeaRouter",
     "SourceDataError",
+    "assign_canonical_ids",
     "build_reference_registry",
     "canonical_key",
     "decide_exact_match",

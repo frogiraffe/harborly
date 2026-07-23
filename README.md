@@ -19,7 +19,8 @@ Do not use it for navigation, voyage planning, or a safety decision.
 - Match a CSV of port names in bulk, with a review flag for unsafe matches.
 - Calculate a sea route between ports or raw coordinates, and a distance matrix.
 - Export matching records as CSV or GeoJSON.
-- Read machine-readable JSON from every command with `--json`.
+- Read machine-readable JSON from the search, inspection, routing, matching, and data
+  commands with `--json`.
 
 ## Install
 
@@ -65,8 +66,45 @@ uv run sea-mile match ports.csv --country-column country
 uv run sea-mile data verify
 ```
 
-Add `--json` after any command for machine-readable output. Add `--verbose` before a
-command to log progress to stderr, and `--version` to print the version.
+Add `--json` for machine-readable output on `info`, `search`, `show`, `near`, `route`,
+`matrix`, `match`, and the `data` commands. The `export` command selects its output
+with `--format`, and `tui` is interactive, so neither takes `--json`. Add `--verbose`
+before a command to log progress to stderr, and `--version` to print the version.
+
+### JSON output
+
+Each `--json` response is a versioned envelope. Read `schema_version` first, then the
+`data` field.
+
+```json
+{
+  "schema_version": "1",
+  "command": "search",
+  "data": [],
+  "warnings": []
+}
+```
+
+A recoverable error carries an `error` object instead of `data`, and the command
+exits 2.
+
+```json
+{
+  "schema_version": "1",
+  "command": "show",
+  "error": { "code": "port_not_found", "message": "no exact port match", "details": {} }
+}
+```
+
+See [Output schemas](docs/OUTPUT_SCHEMAS.md) for the `data` shape of each command and
+the full list of error codes.
+
+### Exit codes
+
+- `0`: the command completed, including a search or match that found no results.
+- `1`: `data verify` ran and one or more of its checks failed.
+- `2`: a usage, data, resolution, or missing-dependency error. The message goes to
+  stderr.
 
 The `route` command prints the sea distance and the great-circle lower bound in
 nautical miles, plus the detour ratio, the routing engine version, the algorithm, and
@@ -78,7 +116,26 @@ The `matrix` command prints the pairwise sea distance between two or more ports.
 `export` command writes matching records as CSV or GeoJSON, for a `--query`, a
 `--country`, or both. The `match` command reads a CSV with a name column and an
 optional country column and prints one decision per row: `auto_resolved`,
-`review_required`, or `unresolved`.
+`review_required`, `unresolved`, or `manually_resolved`.
+
+### Match review workflow
+
+For data cleaning, `match` can write files instead of a table. `--output` writes your
+input rows back with appended `sea_mile_*` columns, so downstream joins keep working.
+`--review` writes only the rows that need a human, one row per candidate, so you can
+see the conflicting records. `--id-column` names a stable id in your input, and one is
+generated from the row number when you leave it out.
+
+```bash
+uv run sea-mile match ports.csv --name-column port_name --country-column country --id-column row_id --output matched.csv --review review.csv
+```
+
+Mark your choices in a decisions file with `row_id` and `chosen_registry_id` columns,
+then apply them. Reviewed rows become `manually_resolved`.
+
+```bash
+uv run sea-mile match ports.csv --name-column port_name --id-column row_id --decisions decisions.csv --output matched.csv
+```
 
 Install the `tui` extra for an interactive search:
 

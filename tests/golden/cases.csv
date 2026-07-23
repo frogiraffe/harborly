@@ -1,0 +1,26 @@
+name,country,expect_status,expect_registry_id,expect_reason_code,category,note
+Mersin,TR,auto_resolved,WPI:MERSIN,unique_exact_wpi,one_port_multiple_providers,WPI and LOCODE and GeoNames agree
+Piraeus,GR,auto_resolved,WPI:PIRAEUS,unique_exact_wpi,clean_baseline,single clean official record
+Hamilton,US,review_required,,coordinate_conflict,same_name_different_place,Ohio versus upstate New York
+Newport,US,review_required,,multiple_identities,same_name_different_place,Rhode Island versus Oregon
+Ålesund,NO,auto_resolved,UNLOCODE:NOAES,unique_exact_unlocode,unlocode_only,accented query with only a LOCODE record
+Alesund,NO,auto_resolved,UNLOCODE:NOAES,unique_exact_unlocode,accents,accent-insensitive match of the same port
+Nocoord,XZ,unresolved,,no_candidate,missing_coordinates,LOCODE record carries no coordinate
+Bombay,IN,unresolved,,no_candidate,historic_name,present only as a GeoNames alias
+Rotterdam,NL,auto_resolved,WPI:ROTTERDAM,unique_exact_wpi,clean_baseline,single clean official record
+Roterdam,NL,unresolved,,no_candidate,typo,bulk match is exact and does not fuzzy-correct
+Pireus,GR,unresolved,,no_candidate,transliteration,not an exact alias of Piraeus
+Santos,BR,auto_resolved,WPI:SANTOS,unique_exact_wpi,city_port,city and port share the name
+Dubai,AE,unresolved,,no_candidate,city_name_not_port_name,the port is named Jebel Ali
+Jebel Ali,AE,auto_resolved,WPI:JEBELALI,unique_exact_wpi,clean_baseline,port name resolves cleanly
+Mersin,GR,unresolved,,no_candidate,wrong_country,Mersin is in Turkey not Greece
+Izmir,TR,auto_resolved,WPI:IZMIR,unique_exact_wpi,accents,dotless i normalizes to the dotted record
+İzmir,TR,auto_resolved,WPI:IZMIR,unique_exact_wpi,accents,dotted capital I normalizes correctly
+Felixstowe,GB,review_required,,multiple_identities,terminal_vs_city,city and terminal share the name
+Tripoli,LY,auto_resolved,WPI:TRIPOLILY,unique_exact_wpi,same_name_different_country,Tripoli in Libya
+Tripoli,LB,auto_resolved,WPI:TRIPOLILB,unique_exact_wpi,same_name_different_country,Tripoli in Lebanon
+Goteborg,SE,auto_resolved,WPI:GOTEBORG,unique_exact_wpi,accents,umlaut normalizes to the plain form
+Gothenburg,SE,unresolved,,no_candidate,exonym,English exonym is not an exact alias
+Durres,AL,review_required,,coordinate_conflict,shared_unlocode_conflict,same code ALDRZ with disagreeing coordinates
+Istanbul,TR,auto_resolved,WPI:ISTANBUL,unique_exact_wpi,accents,dotted capital I in the city name
+,XX,unresolved,,no_candidate,empty_query,an empty input name resolves to nothing

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/frogiraffe/sea-mile/schemas/envelope-1.schema.json",
+  "title": "sea-mile CLI JSON envelope, version 1",
+  "description": "The document every sea-mile command prints to stdout with --json.",
+  "type": "object",
+  "required": ["schema_version", "command"],
+  "properties": {
+    "schema_version": {
+      "const": "1"
+    },
+    "command": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "oneOf": [
+    {
+      "title": "success",
+      "required": ["data", "warnings"],
+      "not": {
+        "required": ["error"]
+      },
+      "properties": {
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "title": "error",
+      "required": ["error"],
+      "not": {
+        "required": ["data"]
+      },
+      "properties": {
+        "error": {
+          "type": "object",
+          "required": ["code", "message", "details"],
+          "properties": {
+            "code": {
+              "type": "string",
+              "minLength": 1
+            },
+            "message": {
+              "type": "string"
+            },
+            "details": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

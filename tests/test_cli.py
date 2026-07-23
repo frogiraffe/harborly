@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import csv
 import json
 
 import pandas as pd
+import pytest
 
 from sea_mile.cli import main
 
@@ -65,13 +67,74 @@ def write_registry(directory) -> None:
     aliases.to_parquet(directory / "port_aliases.parquet", index=False)
 
 
+def write_ambiguous_registry(directory) -> None:
+    directory.mkdir()
+    registry = pd.DataFrame(
+        [
+            {
+                "registry_id": "WPI:2",
+                "provider": "NGA_WPI",
+                "provider_id": "2",
+                "country_code": "US",
+                "canonical_name": "Hamilton",
+                "latitude": 39.4,
+                "longitude": -84.6,
+                "unlocode": None,
+                "function_code": "port",
+                "source_version": "test",
+                "coordinate_resolution": "arc_second",
+                "variant_count": 1,
+                "coordinate_conflict": False,
+            },
+            {
+                "registry_id": "UNLOCODE:USHAM",
+                "provider": "UN_LOCODE",
+                "provider_id": "USHAM",
+                "country_code": "US",
+                "canonical_name": "Hamilton",
+                "latitude": 43.9,
+                "longitude": -75.5,
+                "unlocode": "USHAM",
+                "function_code": "1-----",
+                "source_version": "test",
+                "coordinate_resolution": "arc_minute",
+                "variant_count": 1,
+                "coordinate_conflict": False,
+            },
+        ]
+    )
+    aliases = pd.DataFrame(
+        [
+            {
+                "registry_id": "WPI:2",
+                "provider": "NGA_WPI",
+                "alias": "Hamilton",
+                "alias_key": "hamilton",
+                "alias_type": "primary",
+            },
+            {
+                "registry_id": "UNLOCODE:USHAM",
+                "provider": "UN_LOCODE",
+                "alias": "Hamilton",
+                "alias_key": "hamilton",
+                "alias_type": "primary",
+            },
+        ]
+    )
+    registry.to_parquet(directory / "port_registry.parquet", index=False)
+    aliases.to_parquet(directory / "port_aliases.parquet", index=False)
+
+
 def test_info_and_search_emit_machine_readable_json(tmp_path, capsys) -> None:
     data_directory = tmp_path / "registry"
     write_registry(data_directory)
 
     assert main(["--data-dir", str(data_directory), "info", "--json"]) == 0
     info = json.loads(capsys.readouterr().out)
-    assert info["registry_records"] == 2
+    assert info["schema_version"] == "1"
+    assert info["command"] == "info"
+    assert info["warnings"] == []
+    assert info["data"]["registry_records"] == 2
 
     assert (
         main(
@@ -87,7 +150,7 @@ def test_info_and_search_emit_machine_readable_json(tmp_path, capsys) -> None:
         )
         == 0
     )
-    results = json.loads(capsys.readouterr().out)
+    results = json.loads(capsys.readouterr().out)["data"]
     assert results[0]["best_id"] == "WPI:1"
     assert results[0]["sources"] == ["NGA_WPI"]
 
@@ -108,7 +171,7 @@ def test_info_and_search_emit_machine_readable_json(tmp_path, capsys) -> None:
         )
         == 0
     )
-    nearest = json.loads(capsys.readouterr().out)
+    nearest = json.loads(capsys.readouterr().out)["data"]
     assert nearest[0]["best_id"] == "WPI:1"
     assert "distance_nmi" in nearest[0]
 
@@ -196,7 +259,7 @@ def test_route_can_write_geojson(tmp_path, capsys) -> None:
     )
 
     assert status == 0
-    summary = json.loads(capsys.readouterr().out)
+    summary = json.loads(capsys.readouterr().out)["data"]
     feature = json.loads(output.read_text())
     assert summary["distance_nmi"] > 0
     assert feature["properties"]["routing_units"] == "nautical_miles"
@@ -221,10 +284,16 @@ def test_match_resolves_names_from_csv(tmp_path, capsys) -> None:
     )
 
     assert status == 0
-    results = {row["query"]: row for row in json.loads(capsys.readouterr().out)}
+    results = {row["query"]: row for row in json.loads(capsys.readouterr().out)["data"]}
     assert results["Mersin"]["status"] == "auto_resolved"
     assert results["Mersin"]["selected_registry_id"] == "WPI:1"
+    assert results["Mersin"]["reason_code"] == "unique_exact_wpi"
+    assert results["Mersin"]["rules_applied"] == ["single_exact_wpi"]
+    assert [c["registry_id"] for c in results["Mersin"]["candidates"]] == ["WPI:1"]
     assert results["Atlantis"]["status"] == "unresolved"
+    assert results["Atlantis"]["reason_code"] == "no_candidate"
+    assert results["Atlantis"]["rules_applied"] == ["no_official_candidate"]
+    assert results["Atlantis"]["candidates"] == []
 
 
 def test_match_reports_missing_name_column(tmp_path, capsys) -> None:
@@ -279,8 +348,6 @@ def test_export_needs_a_filter(tmp_path, capsys) -> None:
 
 
 def test_matrix_reports_pairwise_distance(tmp_path, capsys) -> None:
-    import pytest
-
     pytest.importorskip("searoute", reason="matrix needs the routing extra")
     data_directory = tmp_path / "registry"
     write_registry(data_directory)
@@ -288,7 +355,7 @@ def test_matrix_reports_pairwise_distance(tmp_path, capsys) -> None:
     status = main(
         ["--data-dir", str(data_directory), "matrix", "TRMER", "GRPIR", "--json"]
     )
-    payload = json.loads(capsys.readouterr().out)
+    payload = json.loads(capsys.readouterr().out)["data"]
 
     assert status == 0
     assert payload["ports"] == ["WPI:1", "WPI:2"]
@@ -303,3 +370,228 @@ def test_data_build_reports_missing_sources_without_loading_registry(
 
     assert status == 2
     assert "run data download first" in capsys.readouterr().err
+
+
+def test_data_prepare_json_is_one_valid_document(tmp_path, capsys, monkeypatch) -> None:
+    download_manifest = {"retrieved_at_utc": "test", "sources": {}}
+    build_manifest = {"registry_rows": 2, "providers": {}}
+    monkeypatch.setattr(
+        "sea_mile.source_data.download_reference_data",
+        lambda *args, **kwargs: download_manifest,
+    )
+    monkeypatch.setattr(
+        "sea_mile.registry_build.build_reference_registry",
+        lambda *args, **kwargs: build_manifest,
+    )
+
+    status = main(["data", "prepare", "--reference-root", str(tmp_path), "--json"])
+
+    assert status == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "data prepare"
+    assert payload["data"] == {"download": download_manifest, "build": build_manifest}
+
+
+def test_data_download_json_keeps_flat_manifest_shape(
+    tmp_path, capsys, monkeypatch
+) -> None:
+    download_manifest = {"retrieved_at_utc": "test", "sources": {}}
+    monkeypatch.setattr(
+        "sea_mile.source_data.download_reference_data",
+        lambda *args, **kwargs: download_manifest,
+    )
+
+    status = main(["data", "download", "--reference-root", str(tmp_path), "--json"])
+
+    assert status == 0
+    assert json.loads(capsys.readouterr().out)["data"] == download_manifest
+
+
+@pytest.mark.parametrize("command", [["export", "--country", "TR"], ["tui"]])
+def test_non_json_commands_reject_the_json_flag(tmp_path, command) -> None:
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+
+    with pytest.raises(SystemExit):
+        main(["--data-dir", str(data_directory), *command, "--json"])
+
+
+def test_matrix_requires_two_or_more_ports(tmp_path, capsys) -> None:
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+
+    status = main(["--data-dir", str(data_directory), "matrix", "TRMER"])
+
+    assert status == 2
+    assert "two or more ports" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("command", "returns_list"),
+    [
+        (["info"], False),
+        (["search", "Mersin"], True),
+        (["show", "TRMER"], False),
+        (["near", "36.8", "34.65"], True),
+    ],
+)
+def test_json_commands_emit_one_valid_document(
+    tmp_path, capsys, command, returns_list
+) -> None:
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+
+    status = main(["--data-dir", str(data_directory), *command, "--json"])
+
+    assert status == 0
+    envelope = json.loads(capsys.readouterr().out)
+    assert envelope["schema_version"] == "1"
+    assert envelope["warnings"] == []
+    assert isinstance(envelope["data"], list if returns_list else dict)
+
+
+def test_match_output_enriches_input_and_preserves_columns(tmp_path) -> None:
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+    input_csv = tmp_path / "in.csv"
+    input_csv.write_text("port_name,ref\nMersin,X-1\n", encoding="utf-8")
+    output_csv = tmp_path / "out.csv"
+
+    status = main(
+        [
+            "--data-dir",
+            str(data_directory),
+            "match",
+            str(input_csv),
+            "--name-column",
+            "port_name",
+            "--output",
+            str(output_csv),
+        ]
+    )
+
+    assert status == 0
+    row = next(csv.DictReader(output_csv.open(encoding="utf-8")))
+    assert row["ref"] == "X-1"
+    assert row["port_name"] == "Mersin"
+    assert row["sea_mile_status"] == "auto_resolved"
+    assert row["sea_mile_registry_id"] == "WPI:1"
+    assert row["sea_mile_name"] == "Mersin"
+
+
+def test_match_review_writes_one_row_per_candidate(tmp_path) -> None:
+    data_directory = tmp_path / "registry"
+    write_ambiguous_registry(data_directory)
+    input_csv = tmp_path / "in.csv"
+    input_csv.write_text("row_id,port_name,country\n7,Hamilton,US\n", encoding="utf-8")
+    review_csv = tmp_path / "review.csv"
+
+    status = main(
+        [
+            "--data-dir",
+            str(data_directory),
+            "match",
+            str(input_csv),
+            "--name-column",
+            "port_name",
+            "--country-column",
+            "country",
+            "--id-column",
+            "row_id",
+            "--review",
+            str(review_csv),
+        ]
+    )
+
+    assert status == 0
+    rows = list(csv.DictReader(review_csv.open(encoding="utf-8")))
+    assert [row["candidate_registry_id"] for row in rows] == ["WPI:2", "UNLOCODE:USHAM"]
+    assert all(row["row_id"] == "7" for row in rows)
+    assert all(row["reason_code"] == "coordinate_conflict" for row in rows)
+
+
+def test_match_applies_a_reviewed_decision(tmp_path, capsys) -> None:
+    data_directory = tmp_path / "registry"
+    write_ambiguous_registry(data_directory)
+    input_csv = tmp_path / "in.csv"
+    input_csv.write_text("row_id,port_name,country\n7,Hamilton,US\n", encoding="utf-8")
+    decisions_csv = tmp_path / "decisions.csv"
+    decisions_csv.write_text(
+        "row_id,chosen_registry_id\n7,UNLOCODE:USHAM\n", encoding="utf-8"
+    )
+
+    status = main(
+        [
+            "--data-dir",
+            str(data_directory),
+            "match",
+            str(input_csv),
+            "--name-column",
+            "port_name",
+            "--country-column",
+            "country",
+            "--id-column",
+            "row_id",
+            "--decisions",
+            str(decisions_csv),
+            "--json",
+        ]
+    )
+
+    assert status == 0
+    row = json.loads(capsys.readouterr().out)["data"][0]
+    assert row["status"] == "manually_resolved"
+    assert row["selected_registry_id"] == "UNLOCODE:USHAM"
+    assert row["reason_code"] == "manual_decision"
+    assert row["rules_applied"][-1] == "manual_decision"
+
+
+def test_match_decision_with_unknown_id_is_an_error(tmp_path, capsys) -> None:
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+    input_csv = tmp_path / "in.csv"
+    input_csv.write_text("row_id,name\n1,Mersin\n", encoding="utf-8")
+    decisions_csv = tmp_path / "decisions.csv"
+    decisions_csv.write_text("row_id,chosen_registry_id\n1,WPI:999\n", encoding="utf-8")
+
+    status = main(
+        [
+            "--data-dir",
+            str(data_directory),
+            "match",
+            str(input_csv),
+            "--id-column",
+            "row_id",
+            "--decisions",
+            str(decisions_csv),
+        ]
+    )
+
+    assert status == 2
+    assert "unknown registry ID" in capsys.readouterr().err
+
+
+def test_json_error_output_is_structured(tmp_path, capsys) -> None:
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+
+    status = main(["--data-dir", str(data_directory), "show", "Nowhere", "--json"])
+
+    assert status == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "show"
+    assert payload["error"]["code"] == "port_not_found"
+    assert payload["error"]["message"]
+    assert payload["error"]["details"] == {}
+
+
+def test_text_error_still_goes_to_stderr(tmp_path, capsys) -> None:
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+
+    status = main(["--data-dir", str(data_directory), "show", "Nowhere"])
+
+    captured = capsys.readouterr()
+    assert status == 2
+    assert captured.out == ""
+    assert "sea-mile: error:" in captured.err

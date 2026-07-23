@@ -8,6 +8,7 @@ from zipfile import ZipFile
 
 import pandas as pd
 
+from sea_mile.canonical import assign_canonical_ids
 from sea_mile.exceptions import RegistryDataError
 from sea_mile.geonames import load_geonames_port_archive
 from sea_mile.normalization import canonical_key, normalize_display_text
@@ -249,6 +250,7 @@ def build_reference_registry(reference_root: str | Path) -> dict[str, object]:
     registry = _reconcile_registry_duplicates(
         pd.concat([frame for frame, _ in provider_frames.values()], ignore_index=True)
     )
+    registry["canonical_id"] = assign_canonical_ids(registry)
     aliases = pd.concat(
         [frame for _, frame in provider_frames.values()], ignore_index=True
     ).drop_duplicates()

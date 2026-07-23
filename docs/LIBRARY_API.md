@@ -45,6 +45,7 @@ The main fields are:
 - `latitude`, `longitude`, and `coordinate_resolution`.
 - `function_code` and `source_version`.
 - `variant_count` and `coordinate_conflict`.
+- `canonical_id`, a stable ID shared by every record for the same physical port.
 
 `Port.to_geojson_feature` returns one GeoJSON point feature. The feature properties
 keep the provider and source fields.
@@ -79,6 +80,16 @@ or UN/LOCODE record for the same place. A `PortGroup` holds:
 
 `group_for` returns the `PortGroup` for a single UN/LOCODE code or registry ID. Use it
 to read every source record for one known port.
+
+### Canonical IDs
+
+Every record carries a stable `canonical_id`, so one physical port has one identifier
+across sources and across rebuilds. A port with a UN/LOCODE code uses the code as its
+canonical ID. A code-less port attaches to a nearby coded record of the same name when
+there is one, and otherwise gets a deterministic `SM-<hash>` from its country, name,
+and rounded coordinate. `registry.resolve_canonical("TRMER")` returns the `PortGroup`
+for a canonical ID. `assign_canonical_ids` computes the IDs for a registry frame, which
+the build stores in the Parquet file. `PortGroup` also exposes `canonical_id`.
 
 `resolve` is stricter than `search`. It accepts a registry ID, a UN/LOCODE code, or
 one unambiguous exact alias. It does not pick a fuzzy result on its own. When two or
@@ -129,9 +140,20 @@ results = registry.match_names(["Mersin", "Hamilton"], country_codes=["TR", "US"
 ```
 
 Each `BatchMatchResult` holds the input `query`, the `country_code`, a `status`, a
-`confidence_tier`, the `selected_registry_id`, and a short `reason`. The `status` is a
-`MatchStatus` value, and the `confidence_tier` is a `ConfidenceTier` value from `A` to
-`D`.
+`confidence_tier`, the `selected_registry_id`, a stable `reason_code`, and a short
+human `reason`. The `status` is a `MatchStatus` value, the `confidence_tier` is a
+`ConfidenceTier` value from `A` to `D`, and the `reason_code` is a `MatchReason` value.
+Branch automation on `reason_code`, not on the `reason` text, which may change. The
+`MatchReason` values are `unique_exact_wpi`, `unique_exact_unlocode`,
+`coordinate_conflict`, `multiple_identities`, and `no_candidate`, plus `manual_decision`
+when the CLI review workflow applies a reviewed choice.
+
+Each result also carries `candidates`, a tuple of `MatchCandidate` records. Each holds
+the `registry_id`, `provider`, `name`, `country_code`, coordinates, and `unlocode` of
+one exact match that informed the decision, so a review step can show the evidence
+behind a `review_required` or `unresolved` outcome. It also carries `rules_applied`, the
+ordered tuple of decision-rule tokens that fired, such as `single_exact_wpi` then
+`coordinate_conflict_detected`.
 
 `match_names` uses `decide_exact_match` under the hood. A single exact WPI match and a
 single exact UN/LOCODE match are not always the same physical port. Real places can
