@@ -4,6 +4,27 @@ This page describes the public API of `sea_mile`. The library builds a local por
 registry, searches it, and calculates an approximate sea route. Routing uses the
 searoute package.
 
+## Public API surface
+
+The stable top-level exports are the core types: `Port`, `PortGroup`, `PortRegistry`,
+`SeaRoute`, `SeaRouter`, `BatchMatchResult`, `MatchStatus`, `ConfidenceTier`,
+`MatchReason`, `RouteQualityFlag`, and the `SeaMileError` family (`RegistryDataError`,
+`SourceDataError`, `PortNotFoundError`, `AmbiguousPortError`, `PortCoordinateError`,
+`RoutingError`).
+
+The lower-level helpers below still import from `sea_mile` for one release, with a
+`DeprecationWarning`, and stay available from their own modules. Import them from the
+module going forward.
+
+- `sea_mile.quality`: `validate_coordinate`, `CoordinateCheck`, `great_circle_nmi`.
+- `sea_mile.normalization`: `canonical_key`, `normalize_display_text`.
+- `sea_mile.reference`: `parse_wpi_dms`, `parse_unlocode_coordinates`.
+- `sea_mile.matching`: `decide_exact_match`, `ExactMatchDecision`, `MatchCandidate`.
+- `sea_mile.ports`: `PortSearchResult`, `NearbyPortResult`, `NearbyPortGroup`.
+- `sea_mile.canonical`: `assign_canonical_ids`.
+- `sea_mile.registry_build`: `build_reference_registry`.
+- `sea_mile.source_data`: `download_reference_data`.
+
 ## Data lifecycle
 
 The wheel does not include a port registry. You build your own local copy:
@@ -25,7 +46,8 @@ the read commands at a different processed registry.
 The Python calls are `download_reference_data` and `build_reference_registry`:
 
 ```python
-from sea_mile import build_reference_registry, download_reference_data
+from sea_mile.registry_build import build_reference_registry
+from sea_mile.source_data import download_reference_data
 
 download_reference_data("reference")
 build_reference_registry("reference")

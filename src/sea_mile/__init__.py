@@ -1,8 +1,8 @@
 """Public API for source-aware port search and approximate sea routing."""
 
+import warnings
 from typing import TYPE_CHECKING
 
-from .canonical import assign_canonical_ids
 from .exceptions import (
     AmbiguousPortError,
     PortCoordinateError,
@@ -15,66 +15,80 @@ from .exceptions import (
 from .matching import (
     BatchMatchResult,
     ConfidenceTier,
-    ExactMatchDecision,
-    MatchCandidate,
     MatchReason,
     MatchStatus,
-    decide_exact_match,
 )
-from .normalization import canonical_key, normalize_display_text
-from .ports import (
-    NearbyPortGroup,
-    NearbyPortResult,
-    Port,
-    PortGroup,
-    PortRegistry,
-    PortSearchResult,
-)
-from .quality import CoordinateCheck, great_circle_nmi, validate_coordinate
-from .reference import parse_unlocode_coordinates, parse_wpi_dms
-from .registry_build import build_reference_registry
+from .ports import Port, PortGroup, PortRegistry
 from .routing import RouteQualityFlag
 
 if TYPE_CHECKING:
     from .router import SeaRoute, SeaRouter
-    from .source_data import download_reference_data
 
-# Lazily imported so search-only use does not load searoute, networkx, or httpx.
+# Core, lazily imported so search-only use does not load searoute, networkx, or httpx.
 _LAZY_EXPORTS = {
     "SeaRoute": "sea_mile.router",
     "SeaRouter": "sea_mile.router",
+}
+
+# Names that left the top-level namespace in 0.7. They still import from here for one
+# release, with a warning, and stay available from the modules named below.
+_DEPRECATED_EXPORTS = {
+    "CoordinateCheck": "sea_mile.quality",
+    "ExactMatchDecision": "sea_mile.matching",
+    "MatchCandidate": "sea_mile.matching",
+    "NearbyPortGroup": "sea_mile.ports",
+    "NearbyPortResult": "sea_mile.ports",
+    "PortSearchResult": "sea_mile.ports",
+    "assign_canonical_ids": "sea_mile.canonical",
+    "build_reference_registry": "sea_mile.registry_build",
+    "canonical_key": "sea_mile.normalization",
+    "decide_exact_match": "sea_mile.matching",
     "download_reference_data": "sea_mile.source_data",
+    "great_circle_nmi": "sea_mile.quality",
+    "normalize_display_text": "sea_mile.normalization",
+    "parse_unlocode_coordinates": "sea_mile.reference",
+    "parse_wpi_dms": "sea_mile.reference",
+    "validate_coordinate": "sea_mile.quality",
 }
 
 
 def __getattr__(name: str) -> object:
-    module_name = _LAZY_EXPORTS.get(name)
-    if module_name is None:
-        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     from importlib import import_module
 
-    value = getattr(import_module(module_name), name)
-    globals()[name] = value
-    return value
+    module_name = _LAZY_EXPORTS.get(name)
+    if module_name is not None:
+        value = getattr(import_module(module_name), name)
+        globals()[name] = value
+        return value
+
+    module_name = _DEPRECATED_EXPORTS.get(name)
+    if module_name is not None:
+        warnings.warn(
+            f"sea_mile.{name} is deprecated at the top level. "
+            f"Import it from {module_name} instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return getattr(import_module(module_name), name)
+
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted([*__all__, *_LAZY_EXPORTS, *_DEPRECATED_EXPORTS])
 
 
 __all__ = [
     "AmbiguousPortError",
     "BatchMatchResult",
     "ConfidenceTier",
-    "CoordinateCheck",
-    "ExactMatchDecision",
-    "MatchCandidate",
     "MatchReason",
     "MatchStatus",
-    "NearbyPortGroup",
-    "NearbyPortResult",
     "Port",
     "PortCoordinateError",
     "PortGroup",
     "PortNotFoundError",
     "PortRegistry",
-    "PortSearchResult",
     "RegistryDataError",
     "RouteQualityFlag",
     "RoutingError",
@@ -82,14 +96,4 @@ __all__ = [
     "SeaRoute",
     "SeaRouter",
     "SourceDataError",
-    "assign_canonical_ids",
-    "build_reference_registry",
-    "canonical_key",
-    "decide_exact_match",
-    "download_reference_data",
-    "great_circle_nmi",
-    "normalize_display_text",
-    "parse_unlocode_coordinates",
-    "parse_wpi_dms",
-    "validate_coordinate",
 ]

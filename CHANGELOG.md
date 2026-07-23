@@ -51,6 +51,22 @@ versioning.
 - `sea-mile match` now reads its input in chunks and appends the `--output` and `--review`
   rows as it goes, so a large input no longer loads into memory all at once. The written
   output is unchanged.
+- The top-level `sea_mile.__all__` now lists the core types only, so the advertised public
+  surface is smaller. The names it dropped still import from `sea_mile` with a warning for
+  one release. See Deprecated below and the Public API surface section in the library docs.
+
+### Deprecated
+
+- Importing these lower-level helpers from the top-level `sea_mile` namespace now warns and
+  will stop working after one release. Import them from their modules instead.
+  - `sea_mile.quality`: `validate_coordinate`, `CoordinateCheck`, `great_circle_nmi`.
+  - `sea_mile.normalization`: `canonical_key`, `normalize_display_text`.
+  - `sea_mile.reference`: `parse_wpi_dms`, `parse_unlocode_coordinates`.
+  - `sea_mile.matching`: `decide_exact_match`, `ExactMatchDecision`, `MatchCandidate`.
+  - `sea_mile.ports`: `PortSearchResult`, `NearbyPortResult`, `NearbyPortGroup`.
+  - `sea_mile.canonical`: `assign_canonical_ids`.
+  - `sea_mile.registry_build`: `build_reference_registry`.
+  - `sea_mile.source_data`: `download_reference_data`.
 
 ## [0.3.0] - 2026-07-23
 

@@ -153,7 +153,8 @@ uv run sea-mile data build --lock sea-mile.lock.json
 The lock records provenance and detects drift. It does not re-fetch an old upstream
 snapshot, because the WPI endpoint is dynamic and GeoNames serves the latest dump.
 
-Install the `tui` extra for an interactive search:
+Install the `tui` extra for an experimental interactive search. The terminal UI is not
+part of the stable API and may change.
 
 ```bash
 uv sync --extra tui
