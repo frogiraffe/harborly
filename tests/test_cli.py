@@ -265,6 +265,30 @@ def test_route_can_write_geojson(tmp_path, capsys) -> None:
     assert feature["properties"]["routing_units"] == "nautical_miles"
 
 
+def test_route_error_envelope_carries_a_stable_reason(
+    tmp_path, capsys, monkeypatch
+) -> None:
+    from sea_mile.exceptions import RoutingError, RoutingErrorReason
+
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+
+    def boom(self, origin, destination):
+        raise RoutingError(
+            "backend blew up", reason=RoutingErrorReason.MALFORMED_BACKEND_RESULT
+        )
+
+    monkeypatch.setattr("sea_mile.router.SeaRouter.route", boom)
+    status = main(
+        ["--data-dir", str(data_directory), "route", "TRMER", "GRPIR", "--json"]
+    )
+
+    envelope = json.loads(capsys.readouterr().out)
+    assert status == 2
+    assert envelope["error"]["code"] == "routing_error"
+    assert envelope["error"]["details"] == {"reason": "malformed_backend_result"}
+
+
 def test_match_resolves_names_from_csv(tmp_path, capsys) -> None:
     data_directory = tmp_path / "registry"
     write_registry(data_directory)

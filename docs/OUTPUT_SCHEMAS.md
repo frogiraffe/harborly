@@ -47,13 +47,14 @@ A recoverable error replaces `data` with `error`, and the process exits 2.
 | `port_not_found` | No port matches the identifier or exact name. |
 | `ambiguous_port` | More than one independent port identity matches. |
 | `port_coordinate` | A selected port has no usable routing coordinate. |
+| `routing_error` | The routing backend failed, returned an unusable result, or produced an implausible route. |
 | `registry_data_error` | The local registry files are missing or invalid. |
 | `source_data_error` | A public snapshot could not be downloaded or read. |
 | `usage_error` | A bad argument or a missing filter, such as a one-port `matrix`. |
 
 The `message` is human text and may change between releases. Automation should branch on
-`code`, not on `message`. The `details` object is reserved for structured context and
-may be empty.
+`code`, not on `message`. The `details` object holds structured context and is empty for
+most errors. A `routing_error` fills it with a stable `reason`, described below.
 
 ## Enumerated values
 
@@ -74,11 +75,30 @@ review workflow applies a decisions file.
 
 ### `route` quality flag
 
+The `quality_flag` is a `RouteQualityFlag` value. Only these appear on a returned route.
+
 | Value | Meaning |
 | --- | --- |
 | `ok` | The route passed the basic plausibility checks. |
 | `high_detour_ratio` | The route is far longer than the great-circle lower bound. |
 | `coincident_endpoints` | The origin and destination are the same point. |
+
+The other `RouteQualityFlag` values describe a route that fails the plausibility check,
+which raises a `routing_error` instead of returning.
+
+### `routing_error` reason
+
+A `routing_error` carries a stable `reason` in its `details`, so automation can tell the
+failure modes apart without reading the human `message`.
+
+| `details.reason` | Raised when |
+| --- | --- |
+| `backend_call_failed` | The routing backend raised while computing the route. |
+| `malformed_backend_result` | The backend returned a result sea-mile cannot use, such as a missing length or geometry. |
+| `implausible_route` | The route failed the physical plausibility check. |
+
+A missing routing extra is not a `routing_error`. A route call without the extra raises
+`ImportError`, which the CLI prints to `stderr` with exit code 2.
 
 ## Command data shapes
 

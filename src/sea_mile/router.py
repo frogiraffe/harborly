@@ -7,10 +7,20 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
-from sea_mile.exceptions import PortCoordinateError
+from sea_mile._routing_backend import (
+    RoutingConfig,
+    SeaRouteBackend,
+    _RoutingBackend,
+)
+from sea_mile.exceptions import (
+    PortCoordinateError,
+    RoutingError,
+    RoutingErrorReason,
+    SeaMileError,
+)
 from sea_mile.ports import Port, PortRegistry
 from sea_mile.quality import great_circle_nmi, validate_coordinate
-from sea_mile.routing import assess_route_length
+from sea_mile.routing import RouteQualityFlag, assess_route_length
 
 
 def _coordinate_port(label: str, latitude: float, longitude: float) -> Port:
@@ -38,7 +48,7 @@ class SeaRoute:
     distance_nmi: float
     great_circle_nmi: float
     detour_ratio: float | None
-    quality_flag: str
+    quality_flag: RouteQualityFlag
     geometry: dict[str, Any]
     engine: str
     engine_version: str
@@ -53,7 +63,7 @@ class SeaRoute:
             "distance_nmi": self.distance_nmi,
             "great_circle_nmi": self.great_circle_nmi,
             "detour_ratio": self.detour_ratio,
-            "quality_flag": self.quality_flag,
+            "quality_flag": str(self.quality_flag),
             "engine": self.engine,
             "engine_version": self.engine_version,
             "algorithm": self.algorithm,
@@ -82,10 +92,14 @@ class SeaRouter:
         algorithm: str = "astar",
         backend: str = "networkx",
         restrictions: tuple[str, ...] = ("northwest",),
+        _routing_backend: _RoutingBackend | None = None,
     ) -> None:
         self.algorithm = algorithm
         self.backend = backend
         self.restrictions = restrictions
+        self._backend: _RoutingBackend = (
+            _routing_backend if _routing_backend is not None else SeaRouteBackend()
+        )
         # Memoized per instance, keyed on the ports and the config, so a
         # repeated pair in a batch skips recomputation.
         self._route_cached = lru_cache(maxsize=4096)(self._route_uncached)
@@ -103,13 +117,6 @@ class SeaRouter:
         backend: str,
         restrictions: tuple[str, ...],
     ) -> SeaRoute:
-        try:
-            import searoute
-        except ImportError as error:
-            raise ImportError(
-                "sea routing needs the 'routing' extra "
-                "(pip install 'sea-mile[routing]' or uv sync --extra routing)"
-            ) from error
         self._require_coordinates(origin)
         self._require_coordinates(destination)
         assert origin.latitude is not None and origin.longitude is not None
@@ -120,31 +127,45 @@ class SeaRouter:
             destination.latitude,
             destination.longitude,
         )
-        feature = searoute.searoute(
-            [origin.longitude, origin.latitude],
-            [destination.longitude, destination.latitude],
-            units="naut",
-            append_orig_dest=True,
-            restrictions=list(restrictions),
+        config = RoutingConfig(
             algorithm=algorithm,
-            backend=backend,
+            graph_backend=backend,
+            restrictions=restrictions,
         )
-        distance = float(feature.properties["length"])
-        assessment = assess_route_length(distance, great_circle)
+        try:
+            result = self._backend.route(
+                (origin.latitude, origin.longitude),
+                (destination.latitude, destination.longitude),
+                config,
+            )
+        except (SeaMileError, ImportError):
+            raise
+        except Exception as error:
+            raise RoutingError(
+                f"routing backend {self._backend.name!r} failed: {error}",
+                reason=RoutingErrorReason.BACKEND_CALL_FAILED,
+            ) from error
+        if not isinstance(result.geometry, dict):
+            raise RoutingError(
+                f"routing backend {self._backend.name!r} returned an unusable geometry",
+                reason=RoutingErrorReason.MALFORMED_BACKEND_RESULT,
+            )
+        assessment = assess_route_length(result.distance_nmi, great_circle)
         if not assessment.is_valid:
-            raise PortCoordinateError(
-                f"route failed plausibility check: {assessment.flag}"
+            raise RoutingError(
+                f"route failed the plausibility check: {assessment.flag}",
+                reason=RoutingErrorReason.IMPLAUSIBLE_ROUTE,
             )
         return SeaRoute(
             origin=origin,
             destination=destination,
-            distance_nmi=distance,
+            distance_nmi=result.distance_nmi,
             great_circle_nmi=great_circle,
             detour_ratio=assessment.detour_ratio,
             quality_flag=assessment.flag,
-            geometry=feature.geometry,
-            engine="searoute",
-            engine_version=searoute.__version__,
+            geometry=result.geometry,
+            engine=self._backend.name,
+            engine_version=self._backend.version,
             algorithm=algorithm,
             backend=backend,
             restrictions=restrictions,

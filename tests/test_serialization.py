@@ -19,6 +19,7 @@ from sea_mile.ports import (
     PortSearchResult,
 )
 from sea_mile.router import SeaRoute
+from sea_mile.routing import RouteQualityFlag
 
 
 def _port() -> Port:
@@ -66,7 +67,7 @@ def _route() -> SeaRoute:
         distance_nmi=1.0,
         great_circle_nmi=1.0,
         detour_ratio=1.0,
-        quality_flag="ok",
+        quality_flag=RouteQualityFlag.OK,
         geometry={"type": "LineString", "coordinates": [[34.65, 36.8], [34.65, 36.8]]},
         engine="searoute",
         engine_version="1.6.0",

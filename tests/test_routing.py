@@ -1,6 +1,6 @@
 import unittest
 
-from sea_mile.routing import assess_route_length
+from sea_mile.routing import RouteQualityFlag, assess_route_length
 
 
 class RouteAssessmentTests(unittest.TestCase):
@@ -8,7 +8,8 @@ class RouteAssessmentTests(unittest.TestCase):
         result = assess_route_length(90.0, 100.0)
 
         self.assertFalse(result.is_valid)
-        self.assertEqual(result.flag, "below_great_circle_lower_bound")
+        self.assertEqual(result.flag, RouteQualityFlag.BELOW_GREAT_CIRCLE_LOWER_BOUND)
+        self.assertIsInstance(result.flag, RouteQualityFlag)
 
     def test_large_but_possible_detour_is_flagged_without_rejection(self):
         result = assess_route_length(310.0, 100.0)

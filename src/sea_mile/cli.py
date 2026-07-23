@@ -110,6 +110,11 @@ def _error_code(error: Exception) -> str:
     return code if isinstance(code, str) else "usage_error"
 
 
+def _error_details(error: Exception) -> dict[str, str]:
+    reason = getattr(error, "reason", None)
+    return {"reason": str(reason)} if reason is not None else {}
+
+
 def _print_table(headers: Sequence[str], rows: Sequence[Sequence[str]]) -> None:
     widths = [len(header) for header in headers]
     for row in rows:
@@ -972,7 +977,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "error": {
                         "code": _error_code(error),
                         "message": str(error),
-                        "details": {},
+                        "details": _error_details(error),
                     },
                 }
             )

@@ -17,10 +17,29 @@ versioning.
   local raw snapshots against it before building, for an offline reproducible build that
   fails loudly on drift.
 
+- A `RouteQualityFlag` enum. A `SeaRoute` now carries its `quality_flag` as this stable
+  enum instead of a bare string, so automation can branch on it. The value is a string
+  subclass, so the JSON output and string comparisons are unchanged.
+
+- An internal routing backend boundary. `SeaRouter` now routes through a narrow internal
+  interface with a default searoute adapter, so the searoute dependency stays in one
+  place and a test can supply a fake backend. A route records the backend name and
+  version in `engine` and `engine_version`, and the effective routing configuration in
+  `algorithm`, `backend`, and `restrictions`. The interface is internal, not a public
+  extension point, and the JSON output is unchanged.
+- A `RoutingError` exception, with error code `routing_error`. A routing backend that
+  fails, returns an unusable result, or produces a route that fails the plausibility
+  check now raises this controlled error instead of leaking a third-party exception. It
+  carries a stable `reason`, one of `backend_call_failed`, `malformed_backend_result`, or
+  `implausible_route`, exposed in the `--json` error `details`, so automation can tell the
+  failure modes apart without reading the message.
+
 ### Changed
 
 - The registry build now writes its Parquet files and manifest through temporary files
   and an atomic rename, so a failed build no longer leaves a half-written registry.
+- A route that fails the plausibility check now raises `RoutingError` instead of
+  `PortCoordinateError`, so a failed route is distinct from a bad input coordinate.
 
 ## [0.3.0] - 2026-07-23
 

@@ -78,6 +78,15 @@ route. A sea-mile route does not account for draft, water depth, weather, a traf
 separation scheme, a local notice, a vessel class, a port-entry rule, a closure, or a
 navigational hazard.
 
+The searoute backend does not expose the graph nodes it uses when it snaps an endpoint
+to its routing network. sea-mile therefore does not report or estimate snapped
+coordinates. A route keeps the origin and destination you passed in. sea-mile never
+presents a snapped point as the real one, and it does not guess where the snap landed.
+
+sea-mile routes through a small internal backend interface, with searoute as the default
+backend. The route records the backend name and version in `engine` and `engine_version`.
+The interface is internal. It is not a public plugin point.
+
 ## Optional extras
 
 - `routing`: searoute, for sea routing and the distance matrix.
