@@ -150,7 +150,9 @@ Branch automation on `reason_code`, not on the `reason` text, which may change. 
 Each result also carries `candidates`, a tuple of `MatchCandidate` records. Each holds
 the `registry_id`, `provider`, `name`, `country_code`, coordinates, and `unlocode` of
 one exact match that informed the decision, so a review step can show the evidence
-behind a `review_required` or `unresolved` outcome.
+behind a `review_required` or `unresolved` outcome. It also carries `rules_applied`, the
+ordered tuple of decision-rule tokens that fired, such as `single_exact_wpi` then
+`coordinate_conflict_detected`.
 
 `match_names` uses `decide_exact_match` under the hood. A single exact WPI match and a
 single exact UN/LOCODE match are not always the same physical port. Real places can

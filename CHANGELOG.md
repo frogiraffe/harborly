@@ -18,6 +18,8 @@ versioning.
   the human `reason` text.
 - A `candidates` list of `MatchCandidate` records on every `BatchMatchResult` and in the
   `match --json` output, exposing the exact records that informed each decision.
+- A `rules_applied` trace on every `BatchMatchResult` and in the `match --json` output,
+  recording the ordered decision-rule tokens that produced each outcome.
 - Documented the `match` status, confidence-tier, and reason-code values, and the
   `route` quality flags.
 

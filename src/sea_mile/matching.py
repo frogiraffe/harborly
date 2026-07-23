@@ -41,6 +41,7 @@ class ExactMatchDecision:
     selected_registry_id: str | None
     reason_code: MatchReason
     reason: str
+    rules_applied: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +77,7 @@ class BatchMatchResult:
     selected_registry_id: str | None
     reason_code: MatchReason
     reason: str
+    rules_applied: tuple[str, ...] = ()
     candidates: tuple[MatchCandidate, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
@@ -87,6 +89,7 @@ class BatchMatchResult:
             "selected_registry_id": self.selected_registry_id,
             "reason_code": str(self.reason_code),
             "reason": self.reason,
+            "rules_applied": list(self.rules_applied),
             "candidates": [candidate.to_dict() for candidate in self.candidates],
         }
 
@@ -131,8 +134,10 @@ def decide_exact_match(
     wpi_ids = sorted(set(wpi_registry_ids))
     unlocode_ids = sorted(set(unlocode_registry_ids_with_coordinates))
     if len(wpi_ids) == 1:
+        rules = ["single_exact_wpi"]
         reason = "unique exact WPI alias match"
         if len(unlocode_ids) == 1:
+            rules.append("single_exact_unlocode")
             agreement = _location_agreement(
                 wpi_ids[0],
                 unlocode_ids[0],
@@ -140,15 +145,22 @@ def decide_exact_match(
                 coordinate_agreement_nmi,
             )
             if agreement is False:
+                rules.append("coordinate_conflict_detected")
                 return ExactMatchDecision(
                     MatchStatus.REVIEW_REQUIRED,
                     ConfidenceTier.C,
                     None,
                     MatchReason.COORDINATE_CONFLICT,
                     "exact WPI and UN/LOCODE matches disagree on location",
+                    tuple(rules),
                 )
             if agreement is None:
+                rules.append("coordinate_unchecked")
                 reason += " (location unchecked, no coordinates supplied)"
+            else:
+                rules.append("coordinate_agreement_confirmed")
+        if country_requires_review:
+            rules.append("country_review_required")
         return ExactMatchDecision(
             MatchStatus.REVIEW_REQUIRED
             if country_requires_review
@@ -157,6 +169,7 @@ def decide_exact_match(
             wpi_ids[0],
             MatchReason.UNIQUE_EXACT_WPI,
             reason,
+            tuple(rules),
         )
     if len(wpi_ids) > 1:
         return ExactMatchDecision(
@@ -165,8 +178,12 @@ def decide_exact_match(
             None,
             MatchReason.MULTIPLE_IDENTITIES,
             "multiple exact WPI records",
+            ("multiple_exact_wpi",),
         )
     if len(unlocode_ids) == 1:
+        rules = ["single_exact_unlocode"]
+        if country_requires_review:
+            rules.append("country_review_required")
         return ExactMatchDecision(
             MatchStatus.REVIEW_REQUIRED
             if country_requires_review
@@ -175,6 +192,7 @@ def decide_exact_match(
             unlocode_ids[0],
             MatchReason.UNIQUE_EXACT_UNLOCODE,
             "unique exact UN/LOCODE port match with coordinates",
+            tuple(rules),
         )
     if len(unlocode_ids) > 1:
         return ExactMatchDecision(
@@ -183,6 +201,7 @@ def decide_exact_match(
             None,
             MatchReason.MULTIPLE_IDENTITIES,
             "multiple exact UN/LOCODE records",
+            ("multiple_exact_unlocode",),
         )
     return ExactMatchDecision(
         MatchStatus.UNRESOLVED,
@@ -190,6 +209,7 @@ def decide_exact_match(
         None,
         MatchReason.NO_CANDIDATE,
         "no exact official match",
+        ("no_official_candidate",),
     )
 
 

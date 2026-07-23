@@ -229,9 +229,11 @@ def test_match_resolves_names_from_csv(tmp_path, capsys) -> None:
     assert results["Mersin"]["status"] == "auto_resolved"
     assert results["Mersin"]["selected_registry_id"] == "WPI:1"
     assert results["Mersin"]["reason_code"] == "unique_exact_wpi"
+    assert results["Mersin"]["rules_applied"] == ["single_exact_wpi"]
     assert [c["registry_id"] for c in results["Mersin"]["candidates"]] == ["WPI:1"]
     assert results["Atlantis"]["status"] == "unresolved"
     assert results["Atlantis"]["reason_code"] == "no_candidate"
+    assert results["Atlantis"]["rules_applied"] == ["no_official_candidate"]
     assert results["Atlantis"]["candidates"] == []
 
 

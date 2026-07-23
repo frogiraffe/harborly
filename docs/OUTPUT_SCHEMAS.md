@@ -88,7 +88,7 @@ is stable for automation, while the `reason` text is human-readable and may chan
 | `near` | array of grouped ports by distance, or source records with `--all-sources` |
 | `route` | object with the route summary, both distances, and a quality flag |
 | `matrix` | object with `ports` and `distances_nmi` |
-| `match` | array of one decision per input row, each with a `candidates` list |
+| `match` | array of one decision per input row, each with `rules_applied` and `candidates` |
 | `data download` | the download manifest object |
 | `data build` | the build manifest object |
 | `data prepare` | object with `download` and `build` manifests |

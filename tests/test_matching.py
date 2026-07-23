@@ -90,6 +90,30 @@ class ExactMatchingTests(unittest.TestCase):
         )
         self.assertEqual(conflict.reason_code, MatchReason.COORDINATE_CONFLICT)
 
+    def test_rules_applied_trace_the_decision_path(self):
+        conflict = decide_exact_match(
+            ["WPI:1"],
+            ["UNLOCODE:1"],
+            coordinates_by_registry_id={
+                "WPI:1": (40.0, -74.0),
+                "UNLOCODE:1": (34.0, -118.0),
+            },
+        )
+        self.assertEqual(
+            conflict.rules_applied,
+            (
+                "single_exact_wpi",
+                "single_exact_unlocode",
+                "coordinate_conflict_detected",
+            ),
+        )
+        self.assertEqual(
+            decide_exact_match(["WPI:1"], []).rules_applied, ("single_exact_wpi",)
+        )
+        self.assertEqual(
+            decide_exact_match([], []).rules_applied, ("no_official_candidate",)
+        )
+
     def test_country_review_prevents_automatic_resolution(self):
         result = decide_exact_match(["WPI:1"], [], country_requires_review=True)
         self.assertEqual(result.status, "review_required")

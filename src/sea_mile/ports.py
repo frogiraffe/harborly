@@ -672,6 +672,7 @@ class PortRegistry:
                     selected_registry_id=decision.selected_registry_id,
                     reason_code=decision.reason_code,
                     reason=decision.reason,
+                    rules_applied=decision.rules_applied,
                     candidates=candidates,
                 )
             )
