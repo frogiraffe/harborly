@@ -993,7 +993,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     try:
         return args.func(args)
-    except (SeaMileError, ValueError) as error:
+    except KeyboardInterrupt:
+        print("sea-mile: interrupted", file=sys.stderr)
+        return 130
+    except (SeaMileError, ValueError, TimeoutError) as error:
         if getattr(args, "json", False):
             _print_json(
                 {
