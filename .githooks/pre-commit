@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Pre-commit gate mirroring .github/workflows/ci.yml's ruff steps.
+# Uses the project-pinned ruff via `uv run`, so the version matches CI
+# exactly and there is no local-vs-CI formatting drift.
+#
+# Enable once per clone:  git config core.hooksPath .githooks
+set -euo pipefail
+
+targets=(src tests scripts)
+
+if ! command -v uv >/dev/null 2>&1; then
+	echo "pre-commit: 'uv' not found on PATH; skipping ruff checks." >&2
+	exit 0
+fi
+
+if ! uv run ruff format --check "${targets[@]}"; then
+	echo >&2
+	echo "pre-commit: formatting check failed. Run:" >&2
+	echo "    uv run ruff format ${targets[*]}" >&2
+	echo "then 'git add' the changes and commit again." >&2
+	exit 1
+fi
+
+if ! uv run ruff check "${targets[@]}"; then
+	echo >&2
+	echo "pre-commit: lint check failed. Fix the issues above (many are" >&2
+	echo "auto-fixable with 'uv run ruff check --fix ${targets[*]}') and retry." >&2
+	exit 1
+fi

@@ -266,6 +266,13 @@ uv run pytest -q
 uv build
 ```
 
+Enable the pre-commit hook so the two ruff gates run before every commit
+(it uses the project-pinned ruff via `uv`, matching CI exactly):
+
+```bash
+git config core.hooksPath .githooks
+```
+
 Optional dependency groups:
 
 | Extra | Purpose |
