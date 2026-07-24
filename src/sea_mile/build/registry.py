@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterable
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -19,9 +20,8 @@ from sea_mile.sources import (
 )
 from sea_mile.text import canonical_key, normalize_display_text
 
-# The on-disk format of the processed registry. A reader refuses a version it does
-# not support instead of failing on a missing or renamed column.
 REGISTRY_SCHEMA_VERSION = 1
+_PROVIDER_ORDER = ("NGA_WPI", "UN_LOCODE", "GEONAMES", "OPENSTREETMAP")
 
 
 def registry_content_hash(registry: pd.DataFrame, aliases: pd.DataFrame) -> str:
@@ -256,34 +256,49 @@ def _reconcile_registry_duplicates(registry: pd.DataFrame) -> pd.DataFrame:
     return reconciled.reset_index(drop=True)
 
 
-def build_reference_registry(reference_root: str | Path) -> dict[str, object]:
+def build_reference_registry(
+    reference_root: str | Path,
+    *,
+    providers: Iterable[str] | None = None,
+    output_directory: str | Path | None = None,
+) -> dict[str, object]:
     """Build registry Parquet files from the latest local provider snapshots."""
 
     reference_root = Path(reference_root)
     raw_root = reference_root / "raw"
-    processed_root = reference_root / "processed"
-    wpi_path = _latest_snapshot(raw_root, "wpi", "UpdatedPub150.csv")
-    unlocode_path = _latest_snapshot(raw_root, "unlocode", "unlocode-*-artifacts.zip")
-    geonames_path = _latest_snapshot(raw_root, "geonames", "allCountries.zip")
-
-    wpi_registry, wpi_aliases = _load_wpi(wpi_path)
-    unlocode_registry, unlocode_aliases = _load_unlocode(unlocode_path)
-    geonames_registry, geonames_aliases = load_geonames_port_archive(
-        geonames_path,
-        source_version=f"daily-{geonames_path.parent.name}",
+    processed_root = (
+        Path(output_directory)
+        if output_directory is not None
+        else reference_root / "processed"
     )
-    provider_frames = {
-        "NGA_WPI": (wpi_registry, wpi_aliases),
-        "UN_LOCODE": (unlocode_registry, unlocode_aliases),
-        "GEONAMES": (geonames_registry, geonames_aliases),
-    }
+    selected = set(providers) if providers is not None else set(_PROVIDER_ORDER)
+    unknown = selected - set(_PROVIDER_ORDER)
+    if unknown:
+        raise ValueError(f"unknown registry providers: {sorted(unknown)}")
+    if not selected:
+        raise ValueError("at least one registry provider is required")
 
-    # OpenStreetMap is optional. It is used only when a local export is present.
-    osm_path = _optional_snapshot(raw_root, "osm", "*.geojson")
-    if osm_path is not None:
-        provider_frames["OPENSTREETMAP"] = load_osm_port_archive(
-            osm_path, source_version=f"osm-{osm_path.parent.name}"
+    provider_frames: dict[str, tuple[pd.DataFrame, pd.DataFrame]] = {}
+    if "NGA_WPI" in selected:
+        wpi_path = _latest_snapshot(raw_root, "wpi", "UpdatedPub150.csv")
+        provider_frames["NGA_WPI"] = _load_wpi(wpi_path)
+    if "UN_LOCODE" in selected:
+        unlocode_path = _latest_snapshot(
+            raw_root, "unlocode", "unlocode-*-artifacts.zip"
         )
+        provider_frames["UN_LOCODE"] = _load_unlocode(unlocode_path)
+    if "GEONAMES" in selected:
+        geonames_path = _latest_snapshot(raw_root, "geonames", "allCountries.zip")
+        provider_frames["GEONAMES"] = load_geonames_port_archive(
+            geonames_path,
+            source_version=f"daily-{geonames_path.parent.name}",
+        )
+    if "OPENSTREETMAP" in selected:
+        osm_path = _optional_snapshot(raw_root, "osm", "*.geojson")
+        if osm_path is not None:
+            provider_frames["OPENSTREETMAP"] = load_osm_port_archive(
+                osm_path, source_version=f"osm-{osm_path.parent.name}"
+            )
 
     registry = _reconcile_registry_duplicates(
         pd.concat([frame for frame, _ in provider_frames.values()], ignore_index=True)
@@ -293,8 +308,6 @@ def build_reference_registry(reference_root: str | Path) -> dict[str, object]:
         [frame for _, frame in provider_frames.values()], ignore_index=True
     ).drop_duplicates()
     processed_root.mkdir(parents=True, exist_ok=True)
-    # Write to temporary files and rename, so a failed build never leaves a
-    # half-written registry, and the manifest a reader checks first lands last.
     _write_parquet_atomic(registry, processed_root / "port_registry.parquet")
     _write_parquet_atomic(aliases, processed_root / "port_aliases.parquet")
     manifest: dict[str, object] = {
