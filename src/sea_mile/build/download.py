@@ -85,14 +85,16 @@ def sha256(path: Path) -> str:
 
 def _send_with_deadline(client: httpx.Client, url: str) -> httpx.Response:
     request = client.build_request("GET", url)
-    outcome: dict[str, object] = {}
+    response: httpx.Response | None = None
+    error: BaseException | None = None
     done = threading.Event()
 
     def worker() -> None:
+        nonlocal response, error
         try:
-            outcome["response"] = client.send(request, stream=True)
-        except BaseException as error:  # noqa: BLE001 - re-raised on the caller's thread
-            outcome["error"] = error
+            response = client.send(request, stream=True)
+        except BaseException as exc:  # noqa: BLE001 - re-raised on the caller's thread
+            error = exc
         finally:
             done.set()
 
@@ -104,10 +106,10 @@ def _send_with_deadline(client: httpx.Client, url: str) -> httpx.Response:
             "unreachable); the connection attempt keeps running in the "
             "background and is abandoned, not cancelled"
         )
-    error = outcome.get("error")
     if error is not None:
         raise error
-    return outcome["response"]  # type: ignore[return-value]
+    assert response is not None
+    return response
 
 
 @retry(
