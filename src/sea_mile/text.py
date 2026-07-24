@@ -8,7 +8,7 @@ _NON_ALPHANUMERIC = re.compile(r"[^0-9a-z]+")
 
 
 def normalize_display_text(value: object) -> str:
-    """Normalize Unicode and whitespace while preserving human-readable accents."""
+    """Normalize Unicode and whitespace while preserving accents."""
 
     normalized = unicodedata.normalize("NFKC", str(value or "")).strip()
     return _WHITESPACE.sub(" ", normalized)

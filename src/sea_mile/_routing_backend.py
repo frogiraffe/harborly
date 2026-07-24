@@ -1,9 +1,4 @@
-"""Internal routing backend boundary that isolates the searoute dependency.
-
-Nothing here is part of the public API. SeaRouter depends on the narrow
-`_RoutingBackend` interface so the searoute integration stays in one place and a
-test can supply a fake backend. Do not export these names.
-"""
+"""Internal routing backend protocol and searoute adapter."""
 
 from __future__ import annotations
 

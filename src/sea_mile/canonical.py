@@ -1,12 +1,4 @@
-"""Assign a stable canonical port identifier to every registry record.
-
-A record that carries a UN/LOCODE code uses that code as its canonical ID, so
-every source that shares the code converges on one identifier. A record without
-a code attaches to a nearby coded record of the same name when there is one, and
-otherwise gets a deterministic SM-<hash> derived from its country, name, and
-rounded coordinate. The result is stable across builds and independent of row
-order.
-"""
+"""Assign deterministic canonical identifiers to registry records."""
 
 from __future__ import annotations
 
