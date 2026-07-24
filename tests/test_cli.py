@@ -332,6 +332,17 @@ def test_match_reports_missing_name_column(tmp_path, capsys) -> None:
     assert "no column 'name'" in capsys.readouterr().err
 
 
+def test_near_rejects_a_port_name_instead_of_a_coordinate(tmp_path, capsys) -> None:
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+
+    with pytest.raises(SystemExit):
+        main(["--data-dir", str(data_directory), "near", "mersin", "34.65"])
+    stderr = capsys.readouterr().err
+    assert "not a coordinate" in stderr
+    assert "sea-mile search" in stderr
+
+
 def test_near_grouped_table_by_default(tmp_path, capsys) -> None:
     data_directory = tmp_path / "registry"
     write_registry(data_directory)

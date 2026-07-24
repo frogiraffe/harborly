@@ -78,6 +78,17 @@ def _default_data_directory() -> Path:
     return bundled_data_directory()
 
 
+def _coordinate(value: str) -> float:
+    try:
+        return float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"{value!r} is not a coordinate. 'near' takes a latitude and "
+            "longitude, not a port name: resolve one first with "
+            "'sea-mile search' or 'sea-mile show', then pass its coordinate."
+        ) from None
+
+
 def _default_reference_root() -> Path:
     project_reference = Path.cwd() / "data" / "reference"
     if project_reference.exists():
@@ -878,8 +889,8 @@ def _parser() -> argparse.ArgumentParser:
         parents=[common],
         help="find source-aware port records nearest to a coordinate",
     )
-    near.add_argument("latitude", type=float)
-    near.add_argument("longitude", type=float)
+    near.add_argument("latitude", type=_coordinate)
+    near.add_argument("longitude", type=_coordinate)
     near.add_argument("--country", dest="country_code")
     near.add_argument("--limit", type=int, default=10)
     near.add_argument("--max-distance-nmi", type=float)
