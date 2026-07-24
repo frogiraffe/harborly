@@ -4,7 +4,9 @@ from dataclasses import dataclass
 from math import asin, cos, radians, sin, sqrt
 from typing import Any
 
-_EARTH_RADIUS_NMI = 3440.065
+_MEAN_EARTH_RADIUS_KM = 6371.0087714
+_KM_PER_NMI = 1.852
+_EARTH_RADIUS_NMI = _MEAN_EARTH_RADIUS_KM / _KM_PER_NMI
 
 
 @dataclass(frozen=True, slots=True)

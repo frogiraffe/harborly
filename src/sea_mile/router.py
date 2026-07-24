@@ -117,16 +117,9 @@ class SeaRouter:
         backend: str,
         restrictions: tuple[str, ...],
     ) -> SeaRoute:
-        self._require_coordinates(origin)
-        self._require_coordinates(destination)
-        assert origin.latitude is not None and origin.longitude is not None
-        assert destination.latitude is not None and destination.longitude is not None
-        great_circle = great_circle_nmi(
-            origin.latitude,
-            origin.longitude,
-            destination.latitude,
-            destination.longitude,
-        )
+        origin_coordinates = self._coordinates(origin)
+        destination_coordinates = self._coordinates(destination)
+        great_circle = great_circle_nmi(*origin_coordinates, *destination_coordinates)
         config = RoutingConfig(
             algorithm=algorithm,
             graph_backend=backend,
@@ -134,8 +127,8 @@ class SeaRouter:
         )
         try:
             result = self._backend.route(
-                (origin.latitude, origin.longitude),
-                (destination.latitude, destination.longitude),
+                origin_coordinates,
+                destination_coordinates,
                 config,
             )
         except (SeaMileError, ImportError):
@@ -213,13 +206,16 @@ class SeaRouter:
         return matrix
 
     @staticmethod
-    def _require_coordinates(port: Port) -> None:
-        if not port.has_coordinates:
+    def _coordinates(port: Port) -> tuple[float, float]:
+        latitude = port.latitude
+        longitude = port.longitude
+        if latitude is None or longitude is None:
             raise PortCoordinateError(
                 f"port {port.registry_id} has no conflict-free coordinate"
             )
-        check = validate_coordinate(port.latitude, port.longitude)
+        check = validate_coordinate(latitude, longitude)
         if not check.is_valid:
             raise PortCoordinateError(
                 f"port {port.registry_id} has an invalid coordinate: {check.reason}"
             )
+        return float(latitude), float(longitude)
