@@ -248,9 +248,7 @@ def _download_parallel(
             with lock:
                 errors.append(exc)
 
-    threads = [
-        threading.Thread(target=worker) for _ in range(_PARALLEL_CONNECTIONS)
-    ]
+    threads = [threading.Thread(target=worker) for _ in range(_PARALLEL_CONNECTIONS)]
     for thread in threads:
         thread.start()
     for thread in threads:
