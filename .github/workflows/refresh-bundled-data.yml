@@ -1,0 +1,58 @@
+name: Refresh bundled registry data
+
+on:
+  schedule:
+    - cron: "0 6 1 * *" # 06:00 UTC on the 1st of every month
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          version: "latest"
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Download WPI + GeoNames source snapshots
+        run: uv run sea-mile data download --reference-root data/reference --refresh
+
+      - name: Rebuild the bundled registry
+        run: uv run python scripts/build_bundled_registry.py data/reference
+
+      - name: Check for changes
+        id: diff
+        run: |
+          git add src/sea_mile/data
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open a PR with the refreshed data
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          branch="refresh-bundled-data"
+          git checkout -B "$branch"
+          git commit -m "Refresh bundled WPI + GeoNames registry data"
+          git push --force origin "$branch"
+          gh pr create \
+            --title "Refresh bundled registry data" \
+            --body "Automated monthly refresh of the WPI + GeoNames registry bundled in the wheel (\`scripts/build_bundled_registry.py\`). Review the diff in \`src/sea_mile/data/\` before merging." \
+            --base main \
+            --head "$branch" \
+          || echo "a PR for $branch is already open; the push above updated it"
