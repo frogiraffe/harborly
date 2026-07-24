@@ -116,6 +116,7 @@ enum values for program logic. Error messages may change. See
 | `0` | Command completed. Empty search or match results are successful. |
 | `1` | `data verify` completed and reported one or more failed checks. |
 | `2` | Argument validation, registry access, resolution, routing, or dependency failure. |
+| `130` | Interrupted (`Ctrl-C`). |
 
 Diagnostics are written to standard error. JSON errors are written to standard
 output when `--json` is active.
@@ -188,6 +189,14 @@ sea-mile data verify
 
 The source download currently includes the approximately 400 MB GeoNames global
 archive. Existing snapshots are reused unless `--refresh` is specified.
+
+Each source connection, including DNS resolution, is bounded to 15 seconds; a
+stalled or unreachable host fails with a clear error after up to 5 retries
+instead of hanging indefinitely. Progress output includes throughput and an
+ETA. `Ctrl-C` exits immediately with a short message instead of a traceback.
+GeoNames' server does not run behind a CDN and applies a per-connection
+bandwidth limit well below most client connections; a slow GeoNames download
+is expected server-side behavior, not a sea-mile or network problem.
 
 For a reproducible local build:
 

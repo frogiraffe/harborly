@@ -46,6 +46,18 @@ Alias rows require:
 Provider integration occurs in `sea_mile.build.registry`. The source license
 must permit the intended processing and distribution mode.
 
+## Bundled registry refresh
+
+`.github/workflows/refresh-bundled-data.yml` rebuilds the WPI + GeoNames
+registry under `src/sea_mile/data/` (`scripts/build_bundled_registry.py`) on
+a GitHub-hosted runner monthly, or on demand via `workflow_dispatch`. It opens
+a PR against `main` only when `registry_content_hash` actually changes;
+the manifest's `snapshot_label`/`path` fields shift with the run date even
+when the underlying data doesn't, so a raw file diff is not used. Merging
+that PR does not publish a release by itself — `release.yml` only runs on a
+`v*` tag push, so bump the version as part of the merge if you want the
+refreshed data to reach PyPI.
+
 ## Commits
 
 Use an imperative subject. Explain externally observable behavior and the reason
