@@ -6,6 +6,7 @@ import hashlib
 import json
 import sys
 from datetime import UTC, datetime
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 import httpx
@@ -26,9 +27,21 @@ UNLOCODE_URL = (
 )
 GEONAMES_URL = "https://download.geonames.org/export/dump/allCountries.zip"
 
+_MIB = 1024 * 1024
+_MAX_DOWNLOAD_BYTES = {
+    WPI_URL: 64 * _MIB,
+    UNLOCODE_URL: 256 * _MIB,
+    GEONAMES_URL: 1024 * _MIB,
+}
 
-# Progress prints to stderr, and only for a terminal, to keep pipes and logs clean.
 _PROGRESS_STEP_BYTES = 8 * 1024 * 1024
+
+
+def _user_agent() -> str:
+    try:
+        return f"sea-mile/{version('sea-mile')} (local public reference download)"
+    except PackageNotFoundError:
+        return "sea-mile (local public reference download)"
 
 
 def _report_progress(name: str, received: int, total: int | None) -> None:
@@ -57,27 +70,50 @@ def sha256(path: Path) -> str:
     wait=wait_exponential(multiplier=1, min=2, max=16),
     reraise=True,
 )
-def _download(client: httpx.Client, url: str, destination: Path) -> None:
+def _download(
+    client: httpx.Client,
+    url: str,
+    destination: Path,
+    *,
+    max_bytes: int,
+) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     partial = destination.with_suffix(destination.suffix + ".part")
     partial.unlink(missing_ok=True)
     show_progress = sys.stderr.isatty()
-    with client.stream("GET", url) as response:
-        response.raise_for_status()
-        content_length = response.headers.get("Content-Length")
-        total = int(content_length) if content_length else None
-        received = 0
-        next_report = 0
-        with partial.open("wb") as handle:
-            for chunk in response.iter_bytes():
-                handle.write(chunk)
-                received += len(chunk)
-                if show_progress and received >= next_report:
-                    _report_progress(destination.name, received, total)
-                    next_report = received + _PROGRESS_STEP_BYTES
-        if show_progress:
-            _report_progress(destination.name, received, total)
-            sys.stderr.write("\n")
+    try:
+        with client.stream("GET", url) as response:
+            response.raise_for_status()
+            content_length = response.headers.get("Content-Length")
+            try:
+                total = int(content_length) if content_length else None
+            except ValueError:
+                total = None
+            if total is not None and total > max_bytes:
+                raise SourceDataError(
+                    f"{destination.name} exceeds the {max_bytes}-byte download limit"
+                )
+
+            received = 0
+            next_report = 0
+            with partial.open("wb") as handle:
+                for chunk in response.iter_bytes():
+                    received += len(chunk)
+                    if received > max_bytes:
+                        raise SourceDataError(
+                            f"{destination.name} exceeds the "
+                            f"{max_bytes}-byte download limit"
+                        )
+                    handle.write(chunk)
+                    if show_progress and received >= next_report:
+                        _report_progress(destination.name, received, total)
+                        next_report = received + _PROGRESS_STEP_BYTES
+            if show_progress:
+                _report_progress(destination.name, received, total)
+                sys.stderr.write("\n")
+    except Exception:
+        partial.unlink(missing_ok=True)
+        raise
     partial.replace(destination)
 
 
@@ -155,7 +191,7 @@ def download_reference_data(
         raw_root, "geonames", "allCountries.zip", label, refresh, explicit_label
     )
     downloads = [
-        (url, path)
+        (url, path, _MAX_DOWNLOAD_BYTES[url])
         for url, path in (
             (WPI_URL, wpi_path),
             (UNLOCODE_URL, unlocode_path),
@@ -163,20 +199,20 @@ def download_reference_data(
         )
         if refresh or not path.exists()
     ]
-    headers = {"User-Agent": "sea-mile/0.1 (local public reference download)"}
+    headers = {"User-Agent": _user_agent()}
     if downloads:
         try:
             with httpx.Client(
                 follow_redirects=True, timeout=180, headers=headers
             ) as client:
-                for url, path in downloads:
-                    _download(client, url, path)
+                for url, path, max_bytes in downloads:
+                    _download(client, url, path, max_bytes=max_bytes)
         except (httpx.HTTPError, OSError) as error:
             raise SourceDataError(
                 f"public reference download failed: {error}"
             ) from error
 
-    downloaded = {path for _, path in downloads}
+    downloaded = {path for _, path, _ in downloads}
     prior_sources: dict[str, object] = {}
     manifest_path = reference_root / "manifest.json"
     if manifest_path.exists():
