@@ -8,6 +8,7 @@ import sys
 from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+from time import monotonic
 
 import httpx
 from tenacity import (
@@ -44,14 +45,20 @@ def _user_agent() -> str:
         return "sea-mile (local public reference download)"
 
 
-def _report_progress(name: str, received: int, total: int | None) -> None:
+def _report_progress(
+    name: str, received: int, total: int | None, *, elapsed: float
+) -> None:
+    rate = received / elapsed if elapsed > 0 else 0.0
+    speed = f"{rate / 1e6:,.1f} MB/s" if rate > 0 else "-- MB/s"
     if total:
         percent = min(received * 100 // total, 100)
+        eta = f", eta {(total - received) / rate:,.0f}s" if rate > 0 else ""
         message = (
-            f"\r{name}: {received / 1e6:,.0f} / {total / 1e6:,.0f} MB ({percent}%)"
+            f"\r{name}: {received / 1e6:,.0f} / {total / 1e6:,.0f} MB "
+            f"({percent}%, {speed}{eta})"
         )
     else:
-        message = f"\r{name}: {received / 1e6:,.0f} MB"
+        message = f"\r{name}: {received / 1e6:,.0f} MB ({speed})"
     sys.stderr.write(message)
     sys.stderr.flush()
 
@@ -81,6 +88,10 @@ def _download(
     partial = destination.with_suffix(destination.suffix + ".part")
     partial.unlink(missing_ok=True)
     show_progress = sys.stderr.isatty()
+    start = monotonic()
+    if show_progress:
+        sys.stderr.write(f"{destination.name}: connecting...")
+        sys.stderr.flush()
     try:
         with client.stream("GET", url) as response:
             response.raise_for_status()
@@ -106,10 +117,17 @@ def _download(
                         )
                     handle.write(chunk)
                     if show_progress and received >= next_report:
-                        _report_progress(destination.name, received, total)
+                        _report_progress(
+                            destination.name,
+                            received,
+                            total,
+                            elapsed=monotonic() - start,
+                        )
                         next_report = received + _PROGRESS_STEP_BYTES
             if show_progress:
-                _report_progress(destination.name, received, total)
+                _report_progress(
+                    destination.name, received, total, elapsed=monotonic() - start
+                )
                 sys.stderr.write("\n")
     except Exception:
         partial.unlink(missing_ok=True)
@@ -203,7 +221,9 @@ def download_reference_data(
     if downloads:
         try:
             with httpx.Client(
-                follow_redirects=True, timeout=180, headers=headers
+                follow_redirects=True,
+                timeout=httpx.Timeout(10.0, read=30.0),
+                headers=headers,
             ) as client:
                 for url, path, max_bytes in downloads:
                     _download(client, url, path, max_bytes=max_bytes)
