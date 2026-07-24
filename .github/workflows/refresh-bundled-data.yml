@@ -23,20 +23,29 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
+      - name: Record the currently bundled registry hash
+        id: before
+        run: |
+          echo "hash=$(jq -r .registry_content_hash src/sea_mile/data/registry_manifest.json)" >> "$GITHUB_OUTPUT"
+
       - name: Download WPI + GeoNames source snapshots
         run: uv run sea-mile data download --reference-root data/reference --refresh
 
       - name: Rebuild the bundled registry
         run: uv run python scripts/build_bundled_registry.py data/reference
 
-      - name: Check for changes
+      - name: Check whether the registry content actually changed
         id: diff
         run: |
-          git add src/sea_mile/data
-          if git diff --cached --quiet; then
+          new_hash=$(jq -r .registry_content_hash src/sea_mile/data/registry_manifest.json)
+          echo "hash=$new_hash" >> "$GITHUB_OUTPUT"
+          if [ "$new_hash" = "${{ steps.before.outputs.hash }}" ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "registry_content_hash unchanged ($new_hash); the manifest's snapshot_label/path/sha256 fields still shift with today's date even when the port data itself doesn't, so those get discarded below."
+            git checkout -- src/sea_mile/data
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "registry_content_hash changed: ${{ steps.before.outputs.hash }} -> $new_hash"
           fi
 
       - name: Open a PR with the refreshed data
@@ -48,11 +57,15 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           branch="refresh-bundled-data"
           git checkout -B "$branch"
+          git add src/sea_mile/data
           git commit -m "Refresh bundled WPI + GeoNames registry data"
           git push --force origin "$branch"
-          gh pr create \
-            --title "Refresh bundled registry data" \
-            --body "Automated monthly refresh of the WPI + GeoNames registry bundled in the wheel (\`scripts/build_bundled_registry.py\`). Review the diff in \`src/sea_mile/data/\` before merging." \
-            --base main \
-            --head "$branch" \
-          || echo "a PR for $branch is already open; the push above updated it"
+          if [ "$(gh pr view "$branch" --json state -q .state 2>/dev/null)" = "OPEN" ]; then
+            echo "PR for $branch is already open; the push above updated it"
+          else
+            gh pr create \
+              --title "Refresh bundled registry data" \
+              --body "Automated refresh of the WPI + GeoNames registry bundled in the wheel (\`scripts/build_bundled_registry.py\`). registry_content_hash: \`${{ steps.before.outputs.hash }}\` -> \`${{ steps.diff.outputs.hash }}\`. Review the diff in \`src/sea_mile/data/\` before merging, and bump the package version as part of the merge." \
+              --base main \
+              --head "$branch"
+          fi
