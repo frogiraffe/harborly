@@ -39,8 +39,7 @@ jobs:
       - name: Ruff lint
         run: uv run ruff check src tests scripts
 
-      # numpy's stubs use PEP 695 syntax, which mypy only parses when the
-      # checking interpreter is 3.12+, so type-check once on the newest cell.
+      # NumPy stubs require a Python interpreter that parses PEP 695 syntax.
       - name: Mypy
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
         run: uv run mypy src
@@ -67,8 +66,8 @@ jobs:
           python3 -m venv /tmp/sea-mile-ci-smoke
           source /tmp/sea-mile-ci-smoke/bin/activate
           pip install --quiet dist/*.whl
-          sea-mile --help
-          python3 -c "from sea_mile import PortRegistry, SeaRouter"
+          sea-mile info --json
+          python3 -c "from sea_mile import PortRegistry, SeaRouter; assert len(PortRegistry.bundled()) > 0"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:

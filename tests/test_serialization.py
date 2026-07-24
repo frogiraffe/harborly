@@ -119,7 +119,7 @@ MODEL_DICTS = [
 @pytest.mark.parametrize("payload", MODEL_DICTS)
 def test_model_dict_is_json_native_and_stable(payload) -> None:
     # A dict that survives a JSON round-trip unchanged holds no tuples, enums,
-    # numpy scalars, or other values the envelope cannot serialize faithfully.
+    # NumPy scalars, or unsupported values.
     assert json.loads(json.dumps(payload)) == payload
 
 

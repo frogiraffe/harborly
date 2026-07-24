@@ -7,7 +7,7 @@ import pytest
 
 from sea_mile.build.registry import REGISTRY_SCHEMA_VERSION, registry_content_hash
 from sea_mile.exceptions import RegistryDataError
-from sea_mile.ports import PortRegistry
+from sea_mile.ports import PortRegistry, bundled_data_directory
 
 
 def _registry_frame() -> pd.DataFrame:
@@ -99,3 +99,11 @@ def test_from_directory_without_a_manifest_still_loads(tmp_path) -> None:
     _write_registry(directory)
 
     assert len(PortRegistry.from_directory(directory)) == 1
+
+
+def test_bundled_registry_is_loadable() -> None:
+    registry = PortRegistry.bundled()
+
+    assert len(registry) > 0
+    assert set(registry.providers) == {"NGA_WPI", "GEONAMES"}
+    assert bundled_data_directory().is_dir()

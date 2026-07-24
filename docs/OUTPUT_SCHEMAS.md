@@ -1,14 +1,14 @@
 # Output schemas
 
-Every command that supports `--json` prints one JSON document to stdout. The document
-is a versioned envelope. Automation should read `schema_version` first and then branch
-on whether `data` or `error` is present.
+Every command that supports `--json` writes one JSON document to standard output.
+The document conforms to the schema identified by `schema_version` and contains
+either `data` or `error`.
 
-A machine-readable JSON Schema for the envelope lives at
-[`schemas/envelope-1.schema.json`](schemas/envelope-1.schema.json), and the test suite
+A JSON Schema for this format lives at
+[`schemas/cli-output-1.schema.json`](schemas/cli-output-1.schema.json), and the test suite
 validates the output of every `--json` command against it.
 
-## Success envelope
+## Success document
 
 ```json
 {
@@ -21,12 +21,12 @@ validates the output of every `--json` command against it.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `schema_version` | string | Envelope version. It changes only on a breaking change. |
+| `schema_version` | string | Output schema version. |
 | `command` | string | The command that produced the document, such as `search` or `data prepare`. |
 | `data` | object or array | The command result. Its shape depends on the command. |
 | `warnings` | array of string | Non-fatal notes. Empty when there are none. |
 
-## Error envelope
+## Error document
 
 A recoverable error replaces `data` with `error`, and the process exits 2.
 
@@ -52,9 +52,9 @@ A recoverable error replaces `data` with `error`, and the process exits 2.
 | `source_data_error` | A public snapshot could not be downloaded or read. |
 | `usage_error` | A bad argument or a missing filter, such as a one-port `matrix`. |
 
-The `message` is human text and may change between releases. Automation should branch on
-`code`, not on `message`. The `details` object holds structured context and is empty for
-most errors. A `routing_error` fills it with a stable `reason`, described below.
+The `message` may change between releases. Clients should use `code` rather than
+matching message text. The `details` object holds structured context and is empty
+for most errors. A `routing_error` fills it with a stable `reason`, described below.
 
 ## Enumerated values
 
@@ -69,7 +69,7 @@ Some `data` fields carry a fixed set of string values.
 | `reason_code` | `unique_exact_wpi`, `unique_exact_unlocode`, `coordinate_conflict`, `multiple_identities`, `no_candidate`, `manual_decision` |
 
 A confidence tier is a similarity signal, not a calibrated probability. The `reason_code`
-is stable for automation, while the `reason` text is human-readable and may change. The
+is stable for automated checks, while the `reason` text may change. The
 `manually_resolved` status and the `manual_decision` reason appear only when the `match`
 review workflow applies a decisions file.
 
@@ -88,8 +88,8 @@ which raises a `routing_error` instead of returning.
 
 ### `routing_error` reason
 
-A `routing_error` carries a stable `reason` in its `details`, so automation can tell the
-failure modes apart without reading the human `message`.
+A `routing_error` carries a stable `reason` in `details`. Programmatic error
+handling must use this value rather than `message`.
 
 | `details.reason` | Raised when |
 | --- | --- |
@@ -117,5 +117,5 @@ A missing routing extra is not a `routing_error`. A route call without the extra
 | `data verify` | the verification report object |
 | `data lock` | the source lockfile object |
 
-The `export` command writes CSV or GeoJSON chosen with `--format`, and `tui` is
-interactive, so neither uses this envelope.
+The `export` command writes CSV or GeoJSON selected by `--format`. The `tui`
+command is interactive. Neither command implements `--json`.

@@ -1,10 +1,4 @@
-"""Exercise the real WPI, UN/LOCODE, and GeoNames parsers on format-accurate input.
-
-The rows are synthetic but use the exact on-disk layout of each source, so the
-real column names, DMS and arc-minute coordinate parsing, function-code
-filtering, and ZIP handling are covered without downloading or committing the
-source data.
-"""
+"""Validate source parsers against format-compatible synthetic fixtures."""
 
 from __future__ import annotations
 
@@ -81,7 +75,7 @@ def test_load_unlocode_filters_non_ports_and_parses_coordinates(tmp_path) -> Non
             "Test Harbour",
             "",
             "1-------",
-            "AI",
+            "AA",
             "0601",
             "",
             "1230N 03415E",
@@ -109,7 +103,7 @@ def test_load_unlocode_filters_non_ports_and_parses_coordinates(tmp_path) -> Non
             "Second Port",
             "",
             "12345---",
-            "AI",
+            "AA",
             "0601",
             "",
             "4500N 07045W",
@@ -123,7 +117,7 @@ def test_load_unlocode_filters_non_ports_and_parses_coordinates(tmp_path) -> Non
             "No Coordinate",
             "",
             "1-------",
-            "AI",
+            "AA",
             "0601",
             "",
             "",

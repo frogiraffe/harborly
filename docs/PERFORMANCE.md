@@ -1,25 +1,19 @@
 # Performance
 
-These are planning numbers, not guarantees. They come from `scripts/benchmark.py`,
-which builds a synthetic registry with a fixed seed and times the hot paths. Real
-timings depend on your hardware, your Python build, and the shape of your data, so
-treat every figure here as a rough budget and re-run the script on the machine you
-care about.
+`scripts/benchmark.py` builds a deterministic synthetic registry and measures
+registry construction, search, and nearest-port queries. Results are reference
+measurements, not service-level guarantees.
 
 ## Reference machine
 
-Every number below was measured on one laptop. Swap this block and the tables when
-you re-run on different hardware.
+Measurements were collected on:
 
 - CPU: AMD Ryzen 7 5800H, 8 cores, 16 threads
 - Memory: 13.5 GiB
 - OS: Linux, kernel 7.1.3 (CachyOS)
 - Python: 3.14.6
-- sea-mile: the 0.6 performance branch
+- sea-mile: 1.0
 - pandas 3.0.3, rapidfuzz 3.14.5, scipy 1.18.0
-
-The laptop runs on battery-aware frequency scaling, so a desktop with a fixed clock
-will usually post faster and steadier numbers.
 
 ## How to reproduce
 
@@ -28,10 +22,9 @@ python scripts/benchmark.py 40000
 python scripts/benchmark.py 40000 --no-kdtree
 ```
 
-The first run uses the scipy k-d tree from the `fast` extra. The second sets it aside
-and measures `nearest` on the plain scan path. Pass any record count as the first
-argument. Run-to-run variance is around ten to twenty percent, so read the numbers as
-ranges, not exact values.
+The first command uses the SciPy k-d tree from the `fast` extra. The second
+measures the vectorized scan path. The positional argument controls record count.
+Observed run-to-run variance was 10–20%.
 
 ## Build time and memory
 
@@ -72,14 +65,14 @@ search, so `--no-kdtree` leaves these rows unchanged.
 
 The k-d tree lookup stays near constant as the registry grows, while the plain scan
 grows in step with the record count. At 100,000 records the k-d tree is more than ten
-times faster for an open `nearest` query. Install the `fast` extra when you run
-coordinate lookups over a large registry.
+times faster for an open `nearest` query. The `fast` extra is recommended for
+large-registry coordinate workloads.
 
 A country filter closes most of the gap on its own. It narrows the candidates before
 the distance work, so `nearest` with a `country_code` reads about the same with or
 without the k-d tree. The k-d tree earns its place mainly on wide, unfiltered lookups.
 
-## What these numbers are not
+## Measurement limits
 
 - Not a service-level guarantee. They describe one machine on one day.
 - Not from real port data. The registry is synthetic and collision-heavy, which is
@@ -88,5 +81,5 @@ without the k-d tree. The k-d tree earns its place mainly on wide, unfiltered lo
   roughly 150 MB interpreter and pandas baseline to reason about the registry alone.
 - Not stable to the millisecond. Expect ten to twenty percent drift between runs.
 
-To get numbers that match your own deployment, run `scripts/benchmark.py` on that
-hardware with a record count close to your registry size.
+Deployment-specific measurements require running `scripts/benchmark.py` on the
+target hardware with a representative record count.

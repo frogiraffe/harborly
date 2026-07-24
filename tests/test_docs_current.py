@@ -75,8 +75,7 @@ def _subcommands(parser: argparse.ArgumentParser) -> dict[str, argparse.Argument
 def test_only_json_emitting_commands_accept_the_json_flag() -> None:
     commands = _subcommands(_parser())
 
-    # export selects output with --format, and tui is interactive. Neither emits
-    # the machine-readable JSON that --json promises, so they must not accept it.
+    # export selects output with --format, and tui is interactive.
     assert not _has_json_option(commands["export"])
     assert not _has_json_option(commands["tui"])
 
@@ -91,9 +90,7 @@ def test_only_json_emitting_commands_accept_the_json_flag() -> None:
 def test_readme_scopes_json_and_documents_exit_codes() -> None:
     readme = README.read_text().lower()
 
-    # The blanket "JSON on every command" claim was false and must not come back.
     assert "from every command" not in readme
     assert "after any command" not in readme
 
-    # Exit codes are part of the CLI contract, so they must be documented.
     assert "exit code" in readme

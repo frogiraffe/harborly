@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 from sea_mile.build.registry import (
     _provider_manifest_entry,
     _write_parquet_atomic,
     _write_text_atomic,
+    build_reference_registry,
 )
 
 
@@ -46,3 +48,13 @@ def test_atomic_text_write_leaves_no_partial_file(tmp_path) -> None:
 
     assert path.read_text() == "reproducible"
     assert not path.with_name(path.name + ".part").exists()
+
+
+def test_build_rejects_unknown_provider(tmp_path) -> None:
+    with pytest.raises(ValueError, match="unknown registry providers"):
+        build_reference_registry(tmp_path, providers=("UNKNOWN",))
+
+
+def test_build_rejects_empty_provider_set(tmp_path) -> None:
+    with pytest.raises(ValueError, match="at least one"):
+        build_reference_registry(tmp_path, providers=())

@@ -1,10 +1,10 @@
 # Data dictionary
 
 Every field a public model serializes through `to_dict`, with its type, whether it
-can be null, its unit, and its meaning. These names are part of the versioned JSON
-envelope (`schema_version` 1). They do not change without a schema version bump. For
+can be null, its unit, and its meaning. These names are part of JSON output
+schema version 1. Incompatible changes require a schema version increment. For
 the enum value lists (status, confidence tier, reason code, quality flag) and the
-envelope shape, see [Output schemas](OUTPUT_SCHEMAS.md).
+JSON document structure, see [Output schemas](OUTPUT_SCHEMAS.md).
 
 Coordinates are WGS84 decimal degrees. Distances are nautical miles. A null latitude
 or longitude means the source gave no conflict-free coordinate, never zero.
@@ -16,7 +16,7 @@ One provider record. It is not a cross-source consensus record.
 | Field | Type | Null | Meaning |
 | --- | --- | --- | --- |
 | `registry_id` | string | no | Stable record id, `PROVIDER:provider_id` (for example `WPI:44860`). |
-| `provider` | string | no | Source provider, one of `NGA_WPI`, `UN_LOCODE`, `GEONAMES`, `OSM`. |
+| `provider` | string | no | Source provider, one of `NGA_WPI`, `UN_LOCODE`, `GEONAMES`, `OPENSTREETMAP`. |
 | `provider_id` | string | no | The record id within its provider. |
 | `country_code` | string | no | ISO 3166-1 alpha-2, uppercase, empty when the source gave none. |
 | `name` | string | no | Display name, Unicode-normalized with accents preserved. |
@@ -38,7 +38,7 @@ search row is a `Port` with its match provenance.
 | Field | Type | Null | Meaning |
 | --- | --- | --- | --- |
 | `matched_alias` | string | no | The alias string that matched the query. |
-| `match_method` | string | no | How it matched, one of `exact`, `prefix`, `fuzzy`, `unlocode`. |
+| `match_method` | string | no | How it matched, one of `exact_alias`, `prefix_alias`, `fuzzy_alias`, `exact_unlocode`. |
 | `name_score` | number | no | Similarity of the query to the matched alias, 0 to 100. |
 
 ## PortGroup
@@ -74,7 +74,7 @@ derived from these fields.
 | `confidence_tier` | string | no | `A` to `D`, higher letters are weaker evidence. |
 | `selected_registry_id` | string | yes | The chosen `registry_id`, null when unresolved. |
 | `reason_code` | string | no | Stable machine reason for the decision, the `MatchReason` enum. |
-| `reason` | string | no | Human-readable reason. Free text, not for automation. |
+| `reason` | string | no | Explanatory text. Not stable for automated checks. |
 | `rules_applied` | array of string | no | The ordered decision-rule tokens that produced the outcome. |
 | `candidates` | array of MatchCandidate | no | The records that informed the decision. |
 
@@ -101,7 +101,7 @@ One `route` result. `origin` and `destination` are `Port` objects.
 | `origin` | Port | no | The origin port record. |
 | `destination` | Port | no | The destination port record. |
 | `distance_nmi` | number | no | Sea distance along the graph route. |
-| `great_circle_nmi` | number | no | Great-circle lower bound between the endpoints. |
+| `great_circle_nmi` | number | no | Haversine distance using the 6,371.0087714 km mean Earth radius. |
 | `detour_ratio` | number | yes | `distance_nmi` over `great_circle_nmi`, null when the bound is zero. |
 | `quality_flag` | string | no | Route quality, the `RouteQualityFlag` enum. |
 | `engine` | string | no | The routing package that produced the route, for example `searoute`. |
@@ -116,7 +116,7 @@ library it ran on. All three are recorded so a route is reproducible.
 
 ## Match output columns
 
-`sea-mile match --output` appends these columns to your input rows. Each maps to a
+`sea-mile match --output` appends these columns to the input rows. Each maps to a
 `BatchMatchResult` field, so downstream joins keep the original columns.
 
 | Column | Source field |

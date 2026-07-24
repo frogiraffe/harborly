@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sea-mile"
-version = "1.0.0"
+version = "1.0.1"
 description = "Reproducible, source-aware port identity resolution with approximate sea-route distances"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -55,7 +55,6 @@ sea-mile = "sea_mile.cli:main"
 Homepage = "https://github.com/frogiraffe/sea-mile"
 Repository = "https://github.com/frogiraffe/sea-mile"
 Issues = "https://github.com/frogiraffe/sea-mile/issues"
-Changelog = "https://github.com/frogiraffe/sea-mile/blob/main/CHANGELOG.md"
 
 [tool.setuptools]
 package-dir = { "" = "src" }

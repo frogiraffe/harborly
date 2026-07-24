@@ -1,92 +1,85 @@
 # sea-mile
 
-sea-mile is a Python library and command-line tool for reproducible, source-aware port
-identity resolution with approximate analytical sea-route distances. It builds a local
-port registry from public sources, resolves a name or a code to one physical port across
-providers, and calculates an approximate sea route between two ports in nautical miles.
+sea-mile is a Python library and command-line interface for source-aware port
+identity resolution and approximate analytical sea-route distances. It provides:
 
-Routing uses the searoute package. A sea-mile route is for analysis and map display.
-Do not use it for navigation, voyage planning, or a safety decision.
+- a bundled registry derived from NGA World Port Index and GeoNames;
+- exact, prefix, and fuzzy alias search;
+- cross-source port grouping and ambiguity detection;
+- nearest-port queries;
+- CSV matching with an explicit review stage;
+- approximate sea routes and distance matrices in nautical miles;
+- CSV, GeoJSON, and JSON output.
 
-## Features
+Routing uses `searoute`. Results are suitable for analysis and map display, not
+navigation, voyage planning, or safety-critical decisions.
 
-- Build a local registry from NGA World Port Index, UNECE UN/LOCODE, GeoNames, and an
-  optional OpenStreetMap export.
-- Search port names and aliases with exact, prefix, and fuzzy matching.
-- Group records from different sources into one physical port.
-- Resolve a UN/LOCODE code or a provider record ID.
-- Find the nearest ports to a coordinate.
-- Match a CSV of port names in bulk, with a review flag for unsafe matches.
-- Calculate a sea route between ports or raw coordinates, and a distance matrix.
-- Export matching records as CSV or GeoJSON.
-- Read machine-readable JSON from the search, inspection, routing, matching, and data
-  commands with `--json`.
+## Installation
 
-## Non-goals
-
-sea-mile is deliberately narrow, and staying narrow is what keeps its results
-trustworthy. It does not do, and will not add:
-
-- navigation, voyage planning, or any safety decision
-- AIS, live vessel positions, weather, tides, or draft
-- live port closures or passage restrictions as real-time data
-- machine-learned matching, a hosted API, or a web UI
-
-A sea-mile route is an approximate graph distance for analysis and map display.
-
-## Install
-
-sea-mile uses [uv](https://docs.astral.sh/uv/). Set up the project and build the
-local data:
+Install the command with routing support:
 
 ```bash
-uv sync --dev
-uv run sea-mile data prepare
+uv tool install 'sea-mile[routing]'
 ```
 
-`data prepare` downloads each source once and builds two local Parquet files. Later
-runs reuse the existing download. Pass `--refresh` to download the sources again. The
-GeoNames archive is large, about 420 MB, and this repository does not store it.
+The wheel includes a 2.1 MB registry containing 20,070 WPI and GeoNames records,
+so search and routing commands work without a data download.
 
-To get a bare `sea-mile` command on your PATH, install it as a tool:
+For a source checkout:
 
 ```bash
-uv tool install .
-sea-mile info
+uv sync --extra routing
+uv run sea-mile info
 ```
 
-Sea routing needs the `routing` extra. Install it with `uv tool install '.[routing]'`
-or `uv sync --extra routing` in the project.
+`uv run` selects the project environment. It is not required after `uv tool
+install` or another installation method that places `sea-mile` on `PATH`.
 
 ## Command line
 
-Grouped output is the default for `search` and `near`. One row is one physical port,
-and the `SOURCES` column shows which providers describe it. Add `--all-sources` to see
-one row per source record.
+The CLI loads registry data in this order:
+
+1. `--data-dir`;
+2. `SEA_MILE_DATA_DIR`;
+3. `data/reference/processed` in the current checkout;
+4. the registry distributed with the package.
+
+Core commands:
+
+| Command | Operation |
+| --- | --- |
+| `info` | Report registry size, provider counts, and the active data directory. |
+| `search` | Rank alias matches and return one row per physical port. |
+| `show` | Resolve a registry ID, canonical ID, UN/LOCODE, or exact alias. |
+| `near` | Sort coordinate-bearing records using great-circle distance. |
+| `route` | Calculate an approximate route between identifiers or coordinates. |
+| `matrix` | Calculate pairwise route distances for two or more ports. |
+| `match` | Resolve CSV rows and emit review artifacts. |
+| `export` | Export selected provider records as CSV or GeoJSON. |
+| `data` | Download, build, lock, or verify a local registry. |
 
 ```bash
-uv run sea-mile info
-uv run sea-mile search Mersin --country TR
-uv run sea-mile search Mersin --country TR --all-sources
-uv run sea-mile show TRMER
-uv run sea-mile near 39.87 26.16 --country TR --limit 5
-uv run sea-mile route TRMER GRPIR --geojson route.geojson
-uv run sea-mile route 36.8,34.65 37.94,23.63
-uv run sea-mile matrix TRMER GRPIR TRIST
-uv run sea-mile export --country TR --format geojson --output tr.geojson
-uv run sea-mile match ports.csv --country-column country
-uv run sea-mile data verify
+sea-mile info
+sea-mile search Mersin --country TR
+sea-mile search Mersin --country TR --all-sources
+sea-mile show TRMER
+sea-mile near 39.87 26.16 --country TR --limit 5
+sea-mile route TRMER GRPIR --geojson route.geojson
+sea-mile route 36.8,34.65 37.94,23.63
+sea-mile matrix TRMER GRPIR TRIST
+sea-mile export --country TR --format geojson --output tr.geojson
+sea-mile match ports.csv --country-column country
 ```
 
-Add `--json` for machine-readable output on `info`, `search`, `show`, `near`, `route`,
-`matrix`, `match`, and the `data` commands. The `export` command selects its output
-with `--format`, and `tui` is interactive, so neither takes `--json`. Add `--verbose`
-before a command to log progress to stderr, and `--version` to print the version.
+`search` and `near` return one grouped physical port per row. `--all-sources`
+returns individual provider records. `--verbose` enables progress logging on
+standard error.
 
 ### JSON output
 
-Each `--json` response is a versioned envelope. Read `schema_version` first, then the
-`data` field.
+`--json` emits one JSON document conforming to output schema version 1.
+`schema_version` identifies the JSON format, `command` identifies the operation,
+and `data` contains the result.
 
 ```json
 {
@@ -97,92 +90,123 @@ Each `--json` response is a versioned envelope. Read `schema_version` first, the
 }
 ```
 
-A recoverable error carries an `error` object instead of `data`, and the command
-exits 2.
+Recoverable failures replace `data` with a structured `error` object:
 
 ```json
 {
   "schema_version": "1",
   "command": "show",
-  "error": { "code": "port_not_found", "message": "no exact port match", "details": {} }
+  "error": {
+    "code": "port_not_found",
+    "message": "no exact port match",
+    "details": {}
+  }
 }
 ```
 
-See [Output schemas](docs/OUTPUT_SCHEMAS.md) for the `data` shape of each command and
-the full list of error codes, and [Data dictionary](docs/DATA_DICTIONARY.md) for every
-serialized field with its type, nullability, and unit.
+Clients should check `schema_version` and use `error.code` and the documented
+enum values for program logic. Error messages may change. See
+[Output schemas](docs/OUTPUT_SCHEMAS.md) and
+[Data dictionary](docs/DATA_DICTIONARY.md).
 
 ### Exit codes
 
-- `0`: the command completed, including a search or match that found no results.
-- `1`: `data verify` ran and one or more of its checks failed.
-- `2`: a usage, data, resolution, or missing-dependency error. The message goes to
-  stderr.
+| Status | Meaning |
+| --- | --- |
+| `0` | Command completed. Empty search or match results are successful. |
+| `1` | `data verify` completed and reported one or more failed checks. |
+| `2` | Argument validation, registry access, resolution, routing, or dependency failure. |
 
-The `route` command prints the sea distance and the great-circle lower bound in
-nautical miles, plus the detour ratio, the routing engine version, the algorithm, and
-a quality flag. The origin and destination each accept a port ID, a UN/LOCODE code, or
-a `lat,lon` coordinate. For example, `TRMER` (Mersin) to `GRPIR` (Piraeus) is about
-594 nautical miles, and the great-circle lower bound is about 528.
+Diagnostics are written to standard error. JSON errors are written to standard
+output when `--json` is active.
 
-The `matrix` command prints the pairwise sea distance between two or more ports. The
-`export` command writes matching records as CSV or GeoJSON, for a `--query`, a
-`--country`, or both. The `match` command reads a CSV with a name column and an
-optional country column and prints one decision per row: `auto_resolved`,
-`review_required`, `unresolved`, or `manually_resolved`.
+### Route metrics
 
-### Match review workflow
+`route` reports:
 
-For data cleaning, `match` can write files instead of a table. `--output` writes your
-input rows back with appended `sea_mile_*` columns, so downstream joins keep working.
-`--review` writes only the rows that need a human, one row per candidate, so you can
-see the conflicting records. `--id-column` names a stable id in your input, and one is
-generated from the row number when you leave it out.
+- `distance_nmi`: route length on the routing graph;
+- `great_circle_nmi`: Haversine distance between the input coordinates;
+- `detour_ratio`: `distance_nmi / great_circle_nmi`;
+- routing engine, version, algorithm, backend, and restrictions;
+- a route quality flag.
 
-```bash
-uv run sea-mile match ports.csv --name-column port_name --country-column country --id-column row_id --output matched.csv --review review.csv
-```
+`great_circle_nmi` uses the Haversine formula and the 6,371.0087714 km mean
+Earth radius specified by
+[ITU-R P.1511-3](https://www.itu.int/rec/R-REC-P.1511/en). It is the shortest
+arc between the two coordinates when Earth is approximated as a sphere. The
+value does not account for land or routing restrictions, so it provides a
+lower-bound check for the graph route. A 0.5-nautical-mile tolerance covers
+numerical and graph-resolution effects.
 
-Mark your choices in a decisions file with `row_id` and `chosen_registry_id` columns,
-then apply them. Reviewed rows become `manually_resolved`.
+### Match review
 
-```bash
-uv run sea-mile match ports.csv --name-column port_name --id-column row_id --decisions decisions.csv --output matched.csv
-```
-
-### Reproducible builds
-
-`sea-mile data lock` writes `sea-mile.lock.json`, pinning each source snapshot's URL,
-label, size, and SHA-256 from the download manifest. `sea-mile data build --lock
-sea-mile.lock.json` verifies the local raw snapshots against the lock before building,
-so a build fails loudly when a source drifted and repeats exactly from present files
-without a network fetch.
+The file workflow preserves input row identity and separates deterministic
+matches from manual decisions.
 
 ```bash
-uv run sea-mile data lock
-uv run sea-mile data build --lock sea-mile.lock.json
+sea-mile match ports.csv \
+  --name-column port_name \
+  --country-column country \
+  --id-column row_id \
+  --output matched.csv \
+  --review review.csv
 ```
 
-The lock records provenance and detects drift. It does not re-fetch an old upstream
-snapshot, because the WPI endpoint is dynamic and GeoNames serves the latest dump.
+`matched.csv` contains the input columns plus `sea_mile_*` result columns.
+`review.csv` contains one row per candidate for rows with status
+`review_required`. If `--id-column` is omitted, the input row number is used as
+the stable row identifier.
 
-Install the `tui` extra for an experimental interactive search. The terminal UI is not
-part of the stable API and may change.
+Manual decisions use a CSV with two required columns:
+
+| Column | Value |
+| --- | --- |
+| `row_id` | Identifier from the input or review file. |
+| `chosen_registry_id` | Selected provider-qualified registry ID. |
 
 ```bash
-uv sync --extra tui
-uv run sea-mile tui
+sea-mile match ports.csv \
+  --name-column port_name \
+  --id-column row_id \
+  --decisions decisions.csv \
+  --output matched.csv
 ```
 
-Type a name or a UN/LOCODE code, browse the grouped ports with the arrow keys, and
-read the source records for the highlighted port in the detail pane.
+Applied decisions receive status `manually_resolved`. Candidate evidence and
+rule tokens remain available in JSON output.
+
+### Local registry builds
+
+The bundled registry is sufficient for normal use. A local build adds the
+official UN/LOCODE release and may include a user-supplied OpenStreetMap
+GeoJSON export:
+
+```bash
+sea-mile data prepare
+sea-mile data verify
+```
+
+The source download currently includes the approximately 400 MB GeoNames global
+archive. Existing snapshots are reused unless `--refresh` is specified.
+
+For a reproducible local build:
+
+```bash
+sea-mile data lock
+sea-mile data build --lock sea-mile.lock.json
+```
+
+`data lock` records each source URL, snapshot label, byte size, and SHA-256
+digest. `data build --lock` verifies all local raw snapshots before processing.
+The lock authenticates equality with the recorded local snapshot; it does not
+authenticate the initial upstream download or retrieve historical snapshots.
 
 ## Python API
 
 ```python
 from sea_mile import PortRegistry, SeaRouter
 
-registry = PortRegistry.from_directory("data/reference/processed")
+registry = PortRegistry.bundled()
 
 groups = registry.search_grouped("Mersin", country_code="TR")
 origin = registry.resolve("TRMER")
@@ -193,38 +217,39 @@ print(route.distance_nmi)
 feature = route.to_geojson_feature()
 ```
 
-Use `search` or `search_grouped` to inspect candidates first. Then pass a UN/LOCODE
-code or a provider record ID such as `WPI:44860` to `resolve`. `resolve` does not
-choose between two independent records when they disagree on location. It raises
-`AmbiguousPortError`, and the CLI `show` and `route` commands raise the same error.
+Use `PortRegistry.from_directory(path)` for a locally built registry. `resolve`
+accepts exact identifiers and aliases; it does not select a fuzzy match.
+Conflicting identities raise `AmbiguousPortError`.
 
-Read [Library API](docs/LIBRARY_API.md) and
-[Sources and limitations](docs/SOURCES_AND_LIMITATIONS.md) for the full data contract.
-See the [Stability policy](docs/STABILITY.md) for what is frozen at 1.0 and the
-[Migration guide](docs/MIGRATION.md) for moving off deprecated names.
+[Library API](docs/LIBRARY_API.md) documents call behavior and error semantics.
+[Data dictionary](docs/DATA_DICTIONARY.md) defines the serialized fields.
+[API compatibility](docs/API_COMPATIBILITY.md) defines the versioned public
+interfaces.
 
 ## Data sources and licensing
 
-sea-mile ships code only. It downloads each source to your machine and redistributes
-no source data.
+The wheel contains normalized WPI and GeoNames records:
 
-- NGA World Port Index. A work of the United States federal government.
-- UNECE UN/LOCODE. Published by the UN Economic Commission for Europe.
-- GeoNames. Licensed under Creative Commons Attribution 4.0. This product contains
-  GeoNames data, available from https://www.geonames.org/.
-- OpenStreetMap. Optional and user-supplied, licensed under the ODbL. sea-mile does
-  not download it.
+- NGA World Port Index, a United States Government work;
+- GeoNames, licensed under CC BY 4.0 with attribution.
 
-See [Sources and limitations](docs/SOURCES_AND_LIMITATIONS.md) for the coverage,
-attribution, and routing details.
+UN/LOCODE is downloaded only for local builds and is not redistributed in the
+wheel. OpenStreetMap data is optional and user-supplied.
+
+See [Sources, attribution, and limitations](docs/SOURCES_AND_LIMITATIONS.md) and
+the bundled registry manifest for snapshot-level provenance.
 
 ## Development
 
-The library needs only the core dependencies. The test suite and the `scripts` folder
-also need the optional extras.
+Create the complete development environment:
 
 ```bash
-uv sync --dev --extra analysis --extra tui --extra fast --extra routing
+uv sync --dev --extra analysis --extra fast --extra routing --extra tui
+```
+
+Run the validation suite:
+
+```bash
 uv run ruff format --check src tests scripts
 uv run ruff check src tests scripts
 uv run mypy src
@@ -232,19 +257,14 @@ uv run pytest -q
 uv build
 ```
 
-The extras are `routing` (searoute for sea routing), `tui` (textual for the terminal
-search), `fast` (scipy for a k-d tree in `nearest`), and `analysis` (pyproj for the
-`data verify` route cross-check). The demo builder in `scripts` needs the `routing`
-extra.
+Optional dependency groups:
 
-`sea-mile data verify` recomputes the build checks from your local snapshots. It
-checks the source checksums, the registry integrity rules, and the WPI and UN/LOCODE
-coordinate agreement. When pyproj is installed, it also checks the `TRMER` to `GRPIR`
-route against an independent WGS84 calculation.
+| Extra | Purpose |
+| --- | --- |
+| `routing` | `searoute` route calculation. |
+| `tui` | Textual terminal interface. |
+| `fast` | SciPy k-d tree for unfiltered nearest-port queries. |
+| `analysis` | PyProj cross-check used by `data verify`. |
 
-The test suite includes `tests/test_docs_current.py`, which fails when a CLI command or
-a public export is not documented, so the docs stay current with the code.
-
-Run `python scripts/benchmark.py` to time registry build, search, and `nearest` on a
-synthetic registry. See [Performance](docs/PERFORMANCE.md) for numbers on a reference
-machine, the memory and latency budgets, and how much the scipy k-d tree helps.
+Run `uv run python scripts/benchmark.py` for the synthetic performance suite.
+See [Performance](docs/PERFORMANCE.md) for the measurement method.

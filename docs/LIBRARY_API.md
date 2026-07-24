@@ -12,10 +12,7 @@ The stable top-level exports are the core types: `Port`, `PortGroup`, `PortRegis
 `SourceDataError`, `PortNotFoundError`, `AmbiguousPortError`, `PortCoordinateError`,
 `RoutingError`).
 
-The lower-level helpers below still import from the top-level `sea_mile` namespace for
-one release, with a `DeprecationWarning`, and several of their modules were renamed or
-grouped in 0.7. Import them from the module named here going forward. The old module
-paths also keep working for one release and warn on import.
+Lower-level APIs are imported from their defining modules:
 
 - `sea_mile.geo`: `validate_coordinate`, `CoordinateCheck`, `great_circle_nmi`.
 - `sea_mile.text`: `canonical_key`, `normalize_display_text`.
@@ -27,21 +24,28 @@ paths also keep working for one release and warn on import.
 
 ## Data lifecycle
 
-The wheel does not include a port registry. You build your own local copy:
+The wheel includes a registry derived from WPI and GeoNames:
+
+```python
+from sea_mile import PortRegistry
+
+registry = PortRegistry.bundled()
+```
+
+`PortRegistry.from_directory(path)` loads an alternate processed registry.
+
+The CLI selects `--data-dir`, `SEA_MILE_DATA_DIR`,
+`data/reference/processed` in the current directory, then the bundled registry.
+
+A local build adds UN/LOCODE and may add a local OpenStreetMap export:
 
 ```bash
 sea-mile data download
 sea-mile data build
 ```
 
-Run both steps together with `sea-mile data prepare`. `download` reuses an existing
-snapshot. Pass `--refresh` to download the sources again. Both commands print a short
-readable summary. Pass `--json` to print the full manifests.
-
-An installed library writes the registry under
-`~/.local/share/sea-mile/reference/`. In a checkout with a `data/reference/` folder,
-the CLI uses that folder. Set the `SEA_MILE_DATA_DIR` environment variable to point
-the read commands at a different processed registry.
+`sea-mile data prepare` executes both operations. Existing snapshots are reused
+unless `--refresh` is specified. `--json` returns the complete manifests.
 
 The Python calls are `download_reference_data` and `build_reference_registry`:
 
@@ -52,7 +56,7 @@ download_reference_data("reference")
 build_reference_registry("reference")
 ```
 
-`sea-mile data verify` checks a local build. The `verify_reference_data` function in
+`sea-mile data verify` checks a local build. `verify_reference_data` in
 `sea_mile.validation` returns the same report.
 
 The build manifest records a `registry_schema_version` and a deterministic
@@ -63,8 +67,7 @@ order-independent, so a rebuild from the same sources produces the same hash.
 
 `sea-mile data lock` writes `sea-mile.lock.json` from the download manifest, pinning
 each source's URL, snapshot label, size, and SHA-256. `sea-mile data build --lock`
-verifies the local raw snapshots against the lock before building and fails on a
-mismatch, so a build repeats exactly and offline from present files. The
+verifies local raw snapshots before building and aborts on a mismatch. The
 `write_source_lock`, `load_source_lock`, and `lock_mismatches` functions in
 `sea_mile.build` expose the same behavior.
 
@@ -152,9 +155,8 @@ input coordinate. `nearest_grouped` returns `NearbyPortGroup` objects instead. E
 holds a `PortGroup` and the nearest distance, so one physical port appears once even
 when several sources describe it.
 
-This search finds candidate ports. It does not prove that a named place is the correct
-port. Check the name, the country, the function code, the source, and a map before you
-accept a result.
+This search produces candidates; it does not establish port identity. Acceptance
+requires review of name, country, function code, source, and coordinates.
 
 When the `fast` extra (scipy) is installed, an unfiltered `nearest` call uses a k-d
 tree. A `country_code` filter uses the full scan. Both paths return the same ranked
@@ -178,12 +180,13 @@ results = registry.match_names(["Mersin", "Hamilton"], country_codes=["TR", "US"
 
 Each `BatchMatchResult` holds the input `query`, the `country_code`, a `status`, a
 `confidence_tier`, the `selected_registry_id`, a stable `reason_code`, and a short
-human `reason`. The `status` is a `MatchStatus` value, the `confidence_tier` is a
-`ConfidenceTier` value from `A` to `D`, and the `reason_code` is a `MatchReason` value.
-Branch automation on `reason_code`, not on the `reason` text, which may change. The
-`MatchReason` values are `unique_exact_wpi`, `unique_exact_unlocode`,
-`coordinate_conflict`, `multiple_identities`, and `no_candidate`, plus `manual_decision`
-when the CLI review workflow applies a reviewed choice.
+explanatory `reason`. The `status` is a `MatchStatus` value, the `confidence_tier`
+is a `ConfidenceTier` value from `A` to `D`, and the `reason_code` is a
+`MatchReason` value. Programmatic handling must use `reason_code`; `reason` text
+may change. The `MatchReason` values are `unique_exact_wpi`,
+`unique_exact_unlocode`, `coordinate_conflict`, `multiple_identities`, and
+`no_candidate`, plus `manual_decision` when the CLI review workflow applies a
+reviewed choice.
 
 Each result also carries `candidates`, a tuple of `MatchCandidate` records. Each holds
 the `registry_id`, `provider`, `name`, `country_code`, coordinates, and `unlocode` of
@@ -192,13 +195,13 @@ behind a `review_required` or `unresolved` outcome. It also carries `rules_appli
 ordered tuple of decision-rule tokens that fired, such as `single_exact_wpi` then
 `coordinate_conflict_detected`.
 
-`match_names` uses `decide_exact_match` under the hood. A single exact WPI match and a
-single exact UN/LOCODE match are not always the same physical port. Real places can
-share a name within one country, for example two United States places named "Hamilton"
-that are hundreds of nautical miles apart. `match_names` passes the candidate
-coordinates so `decide_exact_match` can catch this and return an `ExactMatchDecision`
-with a review status instead of resolving to the wrong record. Call `decide_exact_match`
-directly when you already have candidate ID lists.
+`match_names` delegates each decision to `decide_exact_match`. A single exact WPI
+match and a single exact UN/LOCODE match are not necessarily the same physical
+port. Places can share a name within one country, including locations separated
+by hundreds of nautical miles. Candidate coordinates allow
+`decide_exact_match` to return an `ExactMatchDecision` with review status instead
+of selecting a conflicting record. Call `decide_exact_match` directly when
+candidate ID lists are already available.
 
 ### Matching pandas frames and large files
 
@@ -268,8 +271,9 @@ The `quality_flag` is a `RouteQualityFlag` value. A returned route is either `ok
 remaining values, `below_great_circle_lower_bound`, `nonzero_route_for_coincident_endpoints`,
 `invalid_route_distance`, and `invalid_great_circle_distance`, describe a route that
 fails the plausibility check, which raises `RoutingError` rather than returning.
-Branch automation on `RouteQualityFlag`, not on the string text. `SeaRouter` memoizes
-results per instance, keyed on the ports and the config.
+Programmatic handling must use `RouteQualityFlag`; descriptive text is not a
+stable interface. `SeaRouter` memoizes results per instance, keyed on the ports
+and the config.
 
 The `engine` and `engine_version` fields are the routing backend name and version. The
 default backend is searoute. The `algorithm`, `backend`, and `restrictions` fields are
@@ -279,8 +283,8 @@ public extension point, and it may change without notice.
 
 The searoute backend does not expose the graph nodes it uses when it snaps an endpoint
 to its routing network. sea-mile therefore does not report or estimate snapped
-coordinates. A route keeps the origin and destination you passed in, and never presents
-a snapped point as the real one.
+coordinates. A route retains the submitted origin and destination and does not
+present an inferred snapped point as observed data.
 
 `route_ids` routes two registry IDs. `route_coordinates` routes two raw `lat, lon`
 points without a registry lookup. `route_many` routes a list of port pairs.
@@ -291,8 +295,8 @@ the `routing` extra. `SeaRouter` imports without it, but a route call raises
 ## Coordinates and text helpers
 
 `validate_coordinate` returns a `CoordinateCheck` and rejects missing, non-numeric,
-out-of-range, and (0, 0) coordinates. `great_circle_nmi` returns the Haversine distance
-in nautical miles.
+out-of-range, and (0, 0) coordinates. `great_circle_nmi` returns the Haversine
+distance in nautical miles using the 6,371.0087714 km mean Earth radius.
 
 `canonical_key` builds an accent-insensitive search key. `normalize_display_text`
 normalizes Unicode and whitespace but keeps accents. `parse_wpi_dms` and
@@ -310,7 +314,8 @@ Every recoverable public error is a subclass of `SeaMileError`:
 - `PortCoordinateError`, a selected port has no usable routing coordinate.
 - `RoutingError`, the routing backend failed, returned an unusable result, or produced
   a route that fails the plausibility check. Its `reason` attribute carries a stable
-  token, one of `backend_call_failed`, `malformed_backend_result`, or `implausible_route`,
-  so automation can tell the failure modes apart without reading the message.
+  token: `backend_call_failed`, `malformed_backend_result`, or
+  `implausible_route`. Programmatic error handling must use this token rather
+  than the message.
 
 The CLI prints each error to `stderr` and exits with status code 2.

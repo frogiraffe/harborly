@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import json
 
-from sea_mile.build.download import download_reference_data, sha256
+import httpx
+import pytest
+
+from sea_mile.build.download import _download, download_reference_data, sha256
+from sea_mile.exceptions import SourceDataError
 
 
 def test_existing_snapshots_produce_checksum_manifest_without_network(tmp_path) -> None:
@@ -92,7 +96,7 @@ def test_explicit_snapshot_label_downloads_into_that_label(
     _seed_snapshots(tmp_path, "2020-01-01", "2020-01-01")
     calls: list = []
 
-    def fake_download(client, url, destination) -> None:
+    def fake_download(client, url, destination, *, max_bytes) -> None:
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes(b"fresh")
         calls.append(destination)
@@ -110,7 +114,7 @@ def test_refresh_redownloads_into_new_folder(tmp_path, monkeypatch) -> None:
     _seed_snapshots(tmp_path, "2020-01-01", "2020-01-01")
     calls: list = []
 
-    def fake_download(client, url, destination) -> None:
+    def fake_download(client, url, destination, *, max_bytes) -> None:
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes(b"fresh")
         calls.append(destination)
@@ -129,3 +133,38 @@ def test_refresh_redownloads_into_new_folder(tmp_path, monkeypatch) -> None:
         sources["unlocode"]["path"]
         == "raw/unlocode/2025-1/unlocode-2025-1-artifacts.zip"
     )
+
+
+def test_download_rejects_oversized_content_length(tmp_path) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"Content-Length": "100"},
+            content=b"x",
+            request=request,
+        )
+
+    destination = tmp_path / "source.zip"
+    with (
+        httpx.Client(transport=httpx.MockTransport(handler)) as client,
+        pytest.raises(SourceDataError, match="download limit"),
+    ):
+        _download(client, "https://example.test/source", destination, max_bytes=10)
+
+    assert not destination.exists()
+    assert not (tmp_path / "source.zip.part").exists()
+
+
+def test_download_rejects_oversized_stream(tmp_path) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"x" * 11, request=request)
+
+    destination = tmp_path / "source.zip"
+    with (
+        httpx.Client(transport=httpx.MockTransport(handler)) as client,
+        pytest.raises(SourceDataError, match="download limit"),
+    ):
+        _download(client, "https://example.test/source", destination, max_bytes=10)
+
+    assert not destination.exists()
+    assert not (tmp_path / "source.zip.part").exists()

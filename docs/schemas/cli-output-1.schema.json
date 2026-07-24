@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/frogiraffe/sea-mile/schemas/envelope-1.schema.json",
-  "title": "sea-mile CLI JSON envelope, version 1",
+  "$id": "https://github.com/frogiraffe/sea-mile/schemas/cli-output-1.schema.json",
+  "title": "sea-mile CLI JSON output, schema version 1",
   "description": "The document every sea-mile command prints to stdout with --json.",
   "type": "object",
   "required": ["schema_version", "command"],

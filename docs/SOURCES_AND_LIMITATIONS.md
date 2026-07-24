@@ -2,9 +2,13 @@
 
 ## Attribution and redistribution
 
-sea-mile ships code only. It downloads each source to your machine and redistributes
-no source data. The repository and the wheel do not contain a raw or processed source
-file. See `.gitignore` for the excluded data paths.
+The wheel includes a normalized registry derived from WPI and GeoNames. It does
+not contain raw source archives. Snapshot URLs, labels, sizes, and SHA-256
+digests are stored in the bundled `registry_manifest.json`.
+
+UN/LOCODE records are generated only by a local build and are not redistributed
+in the wheel. OpenStreetMap records are included only when a user supplies a
+local export.
 
 ## Data sources
 
@@ -15,9 +19,10 @@ file. See `.gitignore` for the excluded data paths.
 - Use in sea-mile: port names, aliases, coordinates, and UN/LOCODE links.
 - Licensing: a work of the United States federal government.
 
-sea-mile downloads a full snapshot. It records the checksum and the retrieval date in
-`data/reference/manifest.json`. sea-mile keeps the WPI port number and the snapshot
-label with each record. It does not treat a WPI coordinate as a fixed value.
+The bundled registry includes the WPI-derived records. The WPI publication is a
+United States Government work for which no copyright is claimed under Title 17
+U.S.C. A local download records the checksum and retrieval date in
+`data/reference/manifest.json`.
 
 ### UNECE UN/LOCODE
 
@@ -27,10 +32,10 @@ label with each record. It does not treat a WPI coordinate as a fixed value.
 - Use in sea-mile: records with a port function code, the five-character location code,
   the name, the status, the function flags, and an optional coordinate.
 
-UN/LOCODE is a location-code list. It is not a berth database. Many port-coded records
-have no coordinate. A UN/LOCODE coordinate uses arc-minute precision, so it can be less
-precise than a WPI or GeoNames coordinate. sea-mile downloads the official release to
-your machine and redistributes nothing.
+UN/LOCODE is a location-code list rather than a berth database. Many port-coded
+records have no coordinate. Coordinates use arc-minute precision and may be less
+precise than WPI or GeoNames coordinates. sea-mile downloads the official release
+for local processing and does not include derived UN/LOCODE records in the wheel.
 
 ### GeoNames
 
@@ -42,10 +47,9 @@ your machine and redistributes nothing.
 - Required attribution: this product contains GeoNames data, available from
   https://www.geonames.org/.
 
-sea-mile imports only the `ANCH`, `DCK`, `DCKB`, `DCKY`, `FYT`, `HBR`, `LDNG`, `MAR`,
-and `PRT` feature codes. GeoNames improves the coverage of small harbors, landings, and
-marinas. sea-mile treats a GeoNames coordinate as a provider-specific candidate, not as
-an automatic correction to an official source.
+The bundled registry includes the `ANCH`, `DCK`, `DCKB`, `DCKY`, `FYT`, `HBR`,
+`LDNG`, `MAR`, and `PRT` feature codes. GeoNames coordinates remain
+provider-specific candidates and do not overwrite another provider's record.
 
 ### OpenStreetMap (optional)
 
@@ -59,10 +63,10 @@ GeoJSON export of harbor, port, and marina point features under
 the export as the `OPENSTREETMAP` provider only when the file is present. A GeoJSON
 export carries the ODbL attribution and share-alike terms with it.
 
-To generate an export, query the Overpass API for the area you want. Select the nodes
-tagged `harbour`, `leisure=marina`, or a `seamark:type` of harbour or marina inside
-your bounding box, and return their center points with `out center`. Convert the
-result with a tool such as `osmtogeojson`, and save it as
+Generate an export by querying the Overpass API for the target area. Select nodes
+tagged `harbour`, `leisure=marina`, or a `seamark:type` of harbour or marina
+inside the bounding box, and return center points with `out center`. Convert the
+result with a tool such as `osmtogeojson` and save it as
 `data/reference/raw/osm/<label>/ports.geojson`. sea-mile reads the `name`,
 `addr:country`, and harbor, port, or marina tags from each point feature.
 
@@ -80,8 +84,8 @@ navigational hazard.
 
 The searoute backend does not expose the graph nodes it uses when it snaps an endpoint
 to its routing network. sea-mile therefore does not report or estimate snapped
-coordinates. A route keeps the origin and destination you passed in. sea-mile never
-presents a snapped point as the real one, and it does not guess where the snap landed.
+coordinates. A route retains the submitted origin and destination. sea-mile does
+not expose an inferred snapped coordinate.
 
 sea-mile routes through a small internal backend interface, with searoute as the default
 backend. The route records the backend name and version in `engine` and `engine_version`.
@@ -99,7 +103,7 @@ The interface is internal. It is not a public plugin point.
 The registry holds source records, not unique physical ports. Each provider
 contributes records. One physical port can have a record in two or more sources. One
 large port can have more than one terminal, or a nearby named facility, as a separate
-record. Run `sea-mile info` to see the record counts for your build.
+record. `sea-mile info` reports record counts for the active build.
 
 Grouped search collapses records that describe the same physical port. Use it to read
 one row per port. Use `resolve` to select one record for routing. sea-mile does not
@@ -114,15 +118,15 @@ example two United States places named "Hamilton". `sea-mile match` and
 they disagree, instead of picking one record. See [Library API](LIBRARY_API.md) for the
 call shape.
 
-## Recommended check method for a questionable port name
+## Port identity review procedure
 
 1. Search the exact aliases first, with the expected country code.
 2. Check every provider record and its source version.
 3. Use a fuzzy search only to build a candidate list.
-4. Check the `nearest` results and their distances when you have a known coordinate.
+4. Check `nearest` results and distances when a known coordinate is available.
 5. Check the point on a map. Confirm that it is on, or near, the correct facility.
-6. Record the chosen provider ID, your confidence level, and a short note.
+6. Record the selected provider ID, confidence level, and rationale.
 7. Calculate the route. Check the great-circle distance and the detour ratio.
 
-Do not let a fuzzy match or a `nearest` candidate replace a source record on its own.
-Every replacement needs an explicit decision from a person.
+Fuzzy and nearest-port results are candidate-generation evidence. A source-record
+replacement requires an explicit recorded decision.

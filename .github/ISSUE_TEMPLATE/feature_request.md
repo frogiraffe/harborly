@@ -14,8 +14,7 @@ What are you trying to do, and where does sea-mile fall short today?
 What you would like it to do. If it changes the public API, the CLI, or the JSON output,
 say so.
 
-## Scope check
+## Compatibility impact
 
-sea-mile is deliberately narrow. It does port identity resolution and approximate
-analytical distances. It is not a navigation, AIS, weather, or live-closures tool, and it
-does not host an API or a web UI. Does the idea fit that scope?
+List changes to the public Python API, CLI, output schema, registry format, or
+data-source requirements.

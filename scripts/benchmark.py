@@ -1,10 +1,4 @@
-"""Benchmark registry construction, search, and nearest on synthetic data.
-
-Run `python scripts/benchmark.py [record_count]` to time the hot paths on a
-synthetic registry, so a regression in search or nearest shows up as a number.
-Pass `--no-kdtree` to force the scan path and measure nearest without scipy.
-The numbers this prints are the source for `docs/PERFORMANCE.md`.
-"""
+"""Benchmark registry construction, search, and nearest-port queries."""
 
 from __future__ import annotations
 
@@ -43,7 +37,7 @@ _PREFIXES = (
 
 
 def _synthetic(count: int) -> tuple[pd.DataFrame, pd.DataFrame]:
-    rng = random.Random(20260722)
+    rng = random.Random(20260722)  # nosec B311
     records: list[dict[str, object]] = []
     aliases: list[dict[str, str]] = []
     for index in range(count):

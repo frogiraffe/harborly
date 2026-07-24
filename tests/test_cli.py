@@ -265,7 +265,7 @@ def test_route_can_write_geojson(tmp_path, capsys) -> None:
     assert feature["properties"]["routing_units"] == "nautical_miles"
 
 
-def test_route_error_envelope_carries_a_stable_reason(
+def test_route_json_error_carries_a_stable_reason(
     tmp_path, capsys, monkeypatch
 ) -> None:
     from sea_mile.exceptions import RoutingError, RoutingErrorReason
@@ -283,10 +283,10 @@ def test_route_error_envelope_carries_a_stable_reason(
         ["--data-dir", str(data_directory), "route", "TRMER", "GRPIR", "--json"]
     )
 
-    envelope = json.loads(capsys.readouterr().out)
+    payload = json.loads(capsys.readouterr().out)
     assert status == 2
-    assert envelope["error"]["code"] == "routing_error"
-    assert envelope["error"]["details"] == {"reason": "malformed_backend_result"}
+    assert payload["error"]["code"] == "routing_error"
+    assert payload["error"]["details"] == {"reason": "malformed_backend_result"}
 
 
 def test_match_resolves_names_from_csv(tmp_path, capsys) -> None:
@@ -468,10 +468,10 @@ def test_json_commands_emit_one_valid_document(
     status = main(["--data-dir", str(data_directory), *command, "--json"])
 
     assert status == 0
-    envelope = json.loads(capsys.readouterr().out)
-    assert envelope["schema_version"] == "1"
-    assert envelope["warnings"] == []
-    assert isinstance(envelope["data"], list if returns_list else dict)
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["schema_version"] == "1"
+    assert payload["warnings"] == []
+    assert isinstance(payload["data"], list if returns_list else dict)
 
 
 def test_match_output_enriches_input_and_preserves_columns(tmp_path) -> None:
