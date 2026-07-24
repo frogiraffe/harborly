@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import json
+import time
 
 import httpx
 import pytest
 
-from sea_mile.build.download import _download, download_reference_data, sha256
+from sea_mile.build.download import (
+    _download,
+    _send_with_deadline,
+    download_reference_data,
+    sha256,
+)
 from sea_mile.exceptions import SourceDataError
 
 
@@ -168,3 +174,19 @@ def test_download_rejects_oversized_stream(tmp_path) -> None:
 
     assert not destination.exists()
     assert not (tmp_path / "source.zip.part").exists()
+
+
+def test_send_with_deadline_gives_up_on_a_stalled_connection(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "sea_mile.build.download._CONNECT_DEADLINE_SECONDS", 0.05
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        time.sleep(1)
+        return httpx.Response(200, content=b"x", request=request)
+
+    with (
+        httpx.Client(transport=httpx.MockTransport(handler)) as client,
+        pytest.raises(TimeoutError, match="took longer than"),
+    ):
+        _send_with_deadline(client, "https://example.test/source")

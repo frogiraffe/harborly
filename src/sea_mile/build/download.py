@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sys
+import threading
 from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -36,6 +37,17 @@ _MAX_DOWNLOAD_BYTES = {
 }
 
 _PROGRESS_STEP_BYTES = 8 * 1024 * 1024
+
+# httpx's own connect timeout only bounds the TCP handshake: the DNS lookup
+# socket.create_connection() does first has no timeout at all, so a stalled
+# resolver can hang past any client-side timeout. Racing the request on a
+# daemon thread and giving up on it after this many seconds is the only way
+# to bound that. It must be a raw daemon thread, not a ThreadPoolExecutor:
+# the executor's atexit hook joins every worker it ever started, so
+# "giving up" on a future left it running would still block interpreter exit
+# until the stalled call finally returned. A daemon thread carries no such
+# hook and is simply abandoned.
+_CONNECT_DEADLINE_SECONDS = 15.0
 
 
 def _user_agent() -> str:
@@ -71,6 +83,33 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _send_with_deadline(client: httpx.Client, url: str) -> httpx.Response:
+    request = client.build_request("GET", url)
+    outcome: dict[str, object] = {}
+    done = threading.Event()
+
+    def worker() -> None:
+        try:
+            outcome["response"] = client.send(request, stream=True)
+        except BaseException as error:  # noqa: BLE001 - re-raised on the caller's thread
+            outcome["error"] = error
+        finally:
+            done.set()
+
+    threading.Thread(target=worker, daemon=True).start()
+    if not done.wait(timeout=_CONNECT_DEADLINE_SECONDS):
+        raise TimeoutError(
+            f"connecting to {url} took longer than "
+            f"{_CONNECT_DEADLINE_SECONDS:.0f}s (DNS lookup or network "
+            "unreachable); the connection attempt keeps running in the "
+            "background and is abandoned, not cancelled"
+        )
+    error = outcome.get("error")
+    if error is not None:
+        raise error
+    return outcome["response"]  # type: ignore[return-value]
+
+
 @retry(
     retry=retry_if_exception_type((httpx.HTTPError, OSError)),
     stop=stop_after_attempt(5),
@@ -93,7 +132,8 @@ def _download(
         sys.stderr.write(f"{destination.name}: connecting...")
         sys.stderr.flush()
     try:
-        with client.stream("GET", url) as response:
+        response = _send_with_deadline(client, url)
+        try:
             response.raise_for_status()
             content_length = response.headers.get("Content-Length")
             try:
@@ -129,6 +169,8 @@ def _download(
                     destination.name, received, total, elapsed=monotonic() - start
                 )
                 sys.stderr.write("\n")
+        finally:
+            response.close()
     except Exception:
         partial.unlink(missing_ok=True)
         raise
