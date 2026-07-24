@@ -177,9 +177,7 @@ def test_download_rejects_oversized_stream(tmp_path) -> None:
 
 
 def test_send_with_deadline_gives_up_on_a_stalled_connection(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "sea_mile.build.download._CONNECT_DEADLINE_SECONDS", 0.05
-    )
+    monkeypatch.setattr("sea_mile.build.download._CONNECT_DEADLINE_SECONDS", 0.05)
 
     def handler(request: httpx.Request) -> httpx.Response:
         time.sleep(1)
