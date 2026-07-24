@@ -6,6 +6,7 @@ import json
 from collections.abc import Iterator, Sequence
 from dataclasses import asdict, dataclass
 from functools import cached_property, lru_cache
+from importlib.resources import files
 from math import isfinite
 from pathlib import Path
 from typing import Any
@@ -47,7 +48,6 @@ _REGISTRY_COLUMNS = {
     "coordinate_conflict",
 }
 _ALIAS_COLUMNS = {"registry_id", "provider", "alias", "alias_key", "alias_type"}
-# Processed-registry schema versions this build of sea-mile can read.
 SUPPORTED_REGISTRY_SCHEMA_VERSIONS = frozenset({1})
 _PROVIDER_PRIORITY = {
     "NGA_WPI": 0,
@@ -70,8 +70,13 @@ def source_short_label(provider: str) -> str:
 
 
 _QUERY_CACHE_SIZE = 4096
-# Below this length, fuzzy ranking over a global alias pool is not meaningful.
 _MIN_FUZZY_QUERY_LENGTH = 3
+
+
+def bundled_data_directory() -> Path:
+    """Return the directory containing the registry distributed with sea-mile."""
+
+    return Path(str(files("sea_mile").joinpath("data")))
 
 
 def _positions_by_value(values: pd.Series) -> dict[str, np.ndarray]:
@@ -416,6 +421,15 @@ class PortRegistry:
         return cls.from_parquet(
             directory / "port_registry.parquet",
             directory / "port_aliases.parquet",
+            coordinate_agreement_nmi=coordinate_agreement_nmi,
+        )
+
+    @classmethod
+    def bundled(cls, *, coordinate_agreement_nmi: float = 25.0) -> PortRegistry:
+        """Load the registry distributed with sea-mile."""
+
+        return cls.from_directory(
+            bundled_data_directory(),
             coordinate_agreement_nmi=coordinate_agreement_nmi,
         )
 

@@ -24,6 +24,7 @@ from sea_mile.ports import (
     PortGroup,
     PortRegistry,
     _result_enrichment,
+    bundled_data_directory,
     source_short_label,
 )
 
@@ -74,7 +75,7 @@ def _default_data_directory() -> Path:
     project_data = Path.cwd() / "data" / "reference" / "processed"
     if project_data.exists():
         return project_data
-    return Path.home() / ".local" / "share" / "sea-mile" / "reference" / "processed"
+    return bundled_data_directory()
 
 
 def _default_reference_root() -> Path:
@@ -100,7 +101,7 @@ def _command_label(args: argparse.Namespace) -> str:
 def _emit_json(
     args: argparse.Namespace, data: object, *, warnings: list[str] | None = None
 ) -> None:
-    """Print one command result inside the versioned output envelope."""
+    """Serialize one command result using the current output schema."""
 
     _print_json(
         {
@@ -770,8 +771,6 @@ def _cmd_data(args: argparse.Namespace) -> int:
         if not args.json:
             _print_build_manifest(build_manifest)
     if args.json:
-        # prepare emits both manifests as one document. download and build each
-        # emit their single manifest at the top level, keeping their prior shape.
         _emit_json(
             args,
             payload if args.data_command == "prepare" else payload[args.data_command],
@@ -803,7 +802,7 @@ def _parser() -> argparse.ArgumentParser:
     common.add_argument(
         "--json",
         action="store_true",
-        help="print machine-readable JSON instead of readable text",
+        help="print JSON instead of text output",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
