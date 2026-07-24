@@ -38,6 +38,27 @@ _MAX_DOWNLOAD_BYTES = {
 
 _PROGRESS_STEP_BYTES = 8 * 1024 * 1024
 
+# Below this size, splitting into ranges just adds connection overhead for no
+# measurable gain; above it (GeoNames' ~400 MB archive is the only source that
+# ever qualifies) a server-side per-connection bandwidth cap can make a single
+# stream many times slower than the client's own connection, and several
+# concurrent ranges each get their own share of the cap. GeoNames throttles
+# each connection to ~1 MB/s under load, so eight of them turn a ~7-minute
+# single-stream download into well under a minute; the aggregate keeps scaling
+# with the connection count until the client's own link, not the per-connection
+# cap, becomes the bound.
+_PARALLEL_THRESHOLD_BYTES = 20 * _MIB
+_PARALLEL_CONNECTIONS = 8
+
+# Ranges are cut to this fixed size rather than into one range per connection,
+# so there are many more chunks than workers. Workers pull the next chunk as
+# soon as they finish one, so a fast connection keeps claiming work instead of
+# sitting idle while one slow connection drains its oversized share. 16 MiB is
+# large enough that per-request overhead stays negligible against GeoNames'
+# ~1 MB/s throttled streams, yet small enough (~26 chunks for a 400 MB archive)
+# to spread evenly across eight workers.
+_PARALLEL_CHUNK_BYTES = 16 * _MIB
+
 # httpx's own connect timeout only bounds the TCP handshake: the DNS lookup
 # socket.create_connection() does first has no timeout at all, so a stalled
 # resolver can hang past any client-side timeout. Racing the request on a
@@ -112,6 +133,137 @@ def _send_with_deadline(client: httpx.Client, url: str) -> httpx.Response:
     return response
 
 
+def _chunk_ranges(total: int, chunk_bytes: int) -> list[tuple[int, int]]:
+    """Tile [0, total) into inclusive byte ranges of at most chunk_bytes each.
+
+    The chunk count is driven by size alone, independent of how many connections
+    will fetch them. That decoupling is what lets a fast connection claim more
+    than its even share so no single slow connection gates the whole download.
+    """
+    ranges = []
+    start = 0
+    while start < total:
+        end = min(start + chunk_bytes, total) - 1
+        ranges.append((start, end))
+        start = end + 1
+    return ranges
+
+
+def _download_sequential(
+    response: httpx.Response,
+    partial: Path,
+    *,
+    destination_name: str,
+    total: int | None,
+    max_bytes: int,
+    show_progress: bool,
+    start_time: float,
+) -> int:
+    received = 0
+    next_report = 0
+    with partial.open("wb") as handle:
+        for chunk in response.iter_bytes():
+            received += len(chunk)
+            if received > max_bytes:
+                raise SourceDataError(
+                    f"{destination_name} exceeds the {max_bytes}-byte download limit"
+                )
+            handle.write(chunk)
+            if show_progress and received >= next_report:
+                _report_progress(
+                    destination_name,
+                    received,
+                    total,
+                    elapsed=monotonic() - start_time,
+                )
+                next_report = received + _PROGRESS_STEP_BYTES
+    if show_progress:
+        _report_progress(
+            destination_name, received, total, elapsed=monotonic() - start_time
+        )
+        sys.stderr.write("\n")
+    return received
+
+
+def _download_parallel(
+    client: httpx.Client,
+    url: str,
+    partial: Path,
+    *,
+    total: int,
+    destination_name: str,
+    show_progress: bool,
+    start_time: float,
+) -> None:
+    with partial.open("wb") as handle:
+        handle.truncate(total)
+
+    ranges = _chunk_ranges(total, _PARALLEL_CHUNK_BYTES)
+    next_chunk = 0
+    received = 0
+    next_report = 0
+    lock = threading.Lock()
+    errors: list[BaseException] = []
+
+    def claim_next() -> tuple[int, int] | None:
+        # Hand out chunks one at a time so a fast connection keeps pulling more
+        # while a slow one is still on its first; stop early once any worker has
+        # failed, so we do not keep fetching for a download that will be raised.
+        nonlocal next_chunk
+        with lock:
+            if errors or next_chunk >= len(ranges):
+                return None
+            chunk_range = ranges[next_chunk]
+            next_chunk += 1
+            return chunk_range
+
+    def worker() -> None:
+        nonlocal received, next_report
+        try:
+            while (chunk_range := claim_next()) is not None:
+                byte_start, byte_end = chunk_range
+                request = client.build_request(
+                    "GET", url, headers={"Range": f"bytes={byte_start}-{byte_end}"}
+                )
+                response = client.send(request, stream=True)
+                try:
+                    response.raise_for_status()
+                    with partial.open("r+b") as handle:
+                        handle.seek(byte_start)
+                        for chunk in response.iter_bytes():
+                            handle.write(chunk)
+                            with lock:
+                                received += len(chunk)
+                                if show_progress and received >= next_report:
+                                    _report_progress(
+                                        destination_name,
+                                        received,
+                                        total,
+                                        elapsed=monotonic() - start_time,
+                                    )
+                                    next_report = received + _PROGRESS_STEP_BYTES
+                finally:
+                    response.close()
+        except BaseException as exc:  # noqa: BLE001 - collected and re-raised below
+            with lock:
+                errors.append(exc)
+
+    threads = [
+        threading.Thread(target=worker) for _ in range(_PARALLEL_CONNECTIONS)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    if errors:
+        raise errors[0]
+    if show_progress:
+        _report_progress(
+            destination_name, total, total, elapsed=monotonic() - start_time
+        )
+        sys.stderr.write("\n")
+
+
 @retry(
     retry=retry_if_exception_type((httpx.HTTPError, OSError)),
     stop=stop_after_attempt(5),
@@ -133,6 +285,7 @@ def _download(
     if show_progress:
         sys.stderr.write(f"{destination.name}: connecting...")
         sys.stderr.flush()
+    parallel_eligible = False
     try:
         response = _send_with_deadline(client, url)
         try:
@@ -147,32 +300,36 @@ def _download(
                     f"{destination.name} exceeds the {max_bytes}-byte download limit"
                 )
 
-            received = 0
-            next_report = 0
-            with partial.open("wb") as handle:
-                for chunk in response.iter_bytes():
-                    received += len(chunk)
-                    if received > max_bytes:
-                        raise SourceDataError(
-                            f"{destination.name} exceeds the "
-                            f"{max_bytes}-byte download limit"
-                        )
-                    handle.write(chunk)
-                    if show_progress and received >= next_report:
-                        _report_progress(
-                            destination.name,
-                            received,
-                            total,
-                            elapsed=monotonic() - start,
-                        )
-                        next_report = received + _PROGRESS_STEP_BYTES
-            if show_progress:
-                _report_progress(
-                    destination.name, received, total, elapsed=monotonic() - start
+            parallel_eligible = (
+                total is not None
+                and total >= _PARALLEL_THRESHOLD_BYTES
+                and response.headers.get("Accept-Ranges", "").lower() == "bytes"
+            )
+            if parallel_eligible:
+                assert total is not None
+                response.close()
+                _download_parallel(
+                    client,
+                    url,
+                    partial,
+                    total=total,
+                    destination_name=destination.name,
+                    show_progress=show_progress,
+                    start_time=start,
                 )
-                sys.stderr.write("\n")
+            else:
+                _download_sequential(
+                    response,
+                    partial,
+                    destination_name=destination.name,
+                    total=total,
+                    max_bytes=max_bytes,
+                    show_progress=show_progress,
+                    start_time=start,
+                )
         finally:
-            response.close()
+            if not parallel_eligible:
+                response.close()
     except Exception:
         partial.unlink(missing_ok=True)
         raise

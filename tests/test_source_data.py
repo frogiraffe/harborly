@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 
 import httpx
 import pytest
 
 from sea_mile.build.download import (
+    _chunk_ranges,
     _download,
     _send_with_deadline,
     download_reference_data,
@@ -188,3 +190,89 @@ def test_send_with_deadline_gives_up_on_a_stalled_connection(monkeypatch) -> Non
         pytest.raises(TimeoutError, match="took longer than"),
     ):
         _send_with_deadline(client, "https://example.test/source")
+
+
+def test_chunk_ranges_tiles_the_file_into_fixed_size_pieces() -> None:
+    assert _chunk_ranges(250, 100) == [(0, 99), (100, 199), (200, 249)]
+
+
+def test_chunk_ranges_count_depends_on_size_not_on_connection_count() -> None:
+    ranges = _chunk_ranges(1050, 100)
+    assert len(ranges) == 11
+    assert ranges[0] == (0, 99)
+    assert ranges[-1] == (1000, 1049)
+    assert all(end - start + 1 <= 100 for start, end in ranges)
+    assert all(a[1] + 1 == b[0] for a, b in zip(ranges, ranges[1:], strict=False))
+
+
+def test_download_splits_large_range_capable_sources_into_fixed_size_chunks(
+    tmp_path, monkeypatch
+) -> None:
+    # Far fewer workers than chunks, so the whole download can only complete if
+    # workers keep claiming chunks past their "fair share" of one each.
+    monkeypatch.setattr("sea_mile.build.download._PARALLEL_THRESHOLD_BYTES", 100)
+    monkeypatch.setattr("sea_mile.build.download._PARALLEL_CONNECTIONS", 3)
+    monkeypatch.setattr("sea_mile.build.download._PARALLEL_CHUNK_BYTES", 100)
+
+    content = bytes(range(256)) * 4  # 1024 bytes -> 11 chunks of <= 100 bytes
+    total = len(content)
+    range_requests: list[tuple[int, int]] = []
+    lock = threading.Lock()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        range_header = request.headers.get("Range")
+        if range_header is None:
+            return httpx.Response(
+                200,
+                headers={"Content-Length": str(total), "Accept-Ranges": "bytes"},
+                content=content,
+                request=request,
+            )
+        start_str, end_str = range_header.removeprefix("bytes=").split("-")
+        start, end = int(start_str), int(end_str)
+        with lock:
+            range_requests.append((start, end))
+        chunk = content[start : end + 1]
+        return httpx.Response(
+            206,
+            headers={
+                "Content-Range": f"bytes {start}-{end}/{total}",
+                "Content-Length": str(len(chunk)),
+            },
+            content=chunk,
+            request=request,
+        )
+
+    destination = tmp_path / "source.bin"
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        _download(client, "https://example.test/source", destination, max_bytes=10_000)
+
+    assert destination.read_bytes() == content
+    # Chunk count is driven by chunk size, not by the number of connections.
+    assert len(range_requests) == 11
+    covered = sorted(range_requests)
+    assert all(end - start + 1 <= 100 for start, end in covered)
+    assert covered[0][0] == 0
+    assert covered[-1][1] == total - 1
+    assert all(a[1] + 1 == b[0] for a, b in zip(covered, covered[1:], strict=False))
+
+
+def test_download_stays_sequential_without_range_support(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("sea_mile.build.download._PARALLEL_THRESHOLD_BYTES", 100)
+
+    content = b"x" * 500
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert "Range" not in request.headers
+        return httpx.Response(
+            200,
+            headers={"Content-Length": str(len(content))},
+            content=content,
+            request=request,
+        )
+
+    destination = tmp_path / "source.bin"
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        _download(client, "https://example.test/source", destination, max_bytes=10_000)
+
+    assert destination.read_bytes() == content
