@@ -5,9 +5,11 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from sea_mile._routing_backend import (
+    BackendRoute,
     RoutingConfig,
     SeaRouteBackend,
     _RoutingBackend,
@@ -20,6 +22,7 @@ from sea_mile.exceptions import (
 )
 from sea_mile.geo import great_circle_nmi, validate_coordinate
 from sea_mile.ports import Port, PortRegistry
+from sea_mile.route_cache import RouteCache
 from sea_mile.routing import RouteQualityFlag, assess_route_length
 
 
@@ -92,6 +95,7 @@ class SeaRouter:
         algorithm: str = "astar",
         backend: str = "networkx",
         restrictions: tuple[str, ...] = ("northwest",),
+        cache_path: str | Path | None = None,
         _routing_backend: _RoutingBackend | None = None,
     ) -> None:
         self.algorithm = algorithm
@@ -100,6 +104,7 @@ class SeaRouter:
         self._backend: _RoutingBackend = (
             _routing_backend if _routing_backend is not None else SeaRouteBackend()
         )
+        self._persistent_cache = RouteCache(cache_path) if cache_path else None
         # Memoized per instance, keyed on the ports and the config, so a
         # repeated pair in a batch skips recomputation.
         self._route_cached = lru_cache(maxsize=4096)(self._route_uncached)
@@ -126,10 +131,8 @@ class SeaRouter:
             restrictions=restrictions,
         )
         try:
-            result = self._backend.route(
-                origin_coordinates,
-                destination_coordinates,
-                config,
+            result = self._backend_result(
+                origin_coordinates, destination_coordinates, config
             )
         except (SeaMileError, ImportError):
             raise
@@ -163,6 +166,29 @@ class SeaRouter:
             backend=backend,
             restrictions=restrictions,
         )
+
+    def _backend_result(
+        self,
+        origin: tuple[float, float],
+        destination: tuple[float, float],
+        config: RoutingConfig,
+    ) -> BackendRoute:
+        cache = self._persistent_cache
+        if cache is None:
+            return self._backend.route(origin, destination, config)
+        cache_key = cache.key(
+            origin=origin,
+            destination=destination,
+            config=config,
+            engine=self._backend.name,
+            engine_version=self._backend.version,
+        )
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+        result = self._backend.route(origin, destination, config)
+        cache.put(cache_key, result)
+        return result
 
     def route_ids(
         self,

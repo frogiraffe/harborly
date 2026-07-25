@@ -105,6 +105,40 @@ def test_same_fake_result_gives_deterministic_route_output():
     assert json.loads(json.dumps(first.summary())) == first.summary()
 
 
+def test_persistent_cache_reuses_result_across_router_instances(tmp_path):
+    cache_path = tmp_path / "routes.sqlite3"
+    first_backend = FakeBackend()
+    second_backend = FakeBackend()
+
+    first = SeaRouter(
+        cache_path=cache_path, _routing_backend=first_backend
+    ).route_coordinates(*ORIGIN, *DESTINATION)
+    second = SeaRouter(
+        cache_path=cache_path, _routing_backend=second_backend
+    ).route_coordinates(*ORIGIN, *DESTINATION)
+
+    assert first.summary() == second.summary()
+    assert len(first_backend.calls) == 1
+    assert second_backend.calls == []
+
+
+def test_persistent_cache_key_includes_direction_config_and_engine_version(tmp_path):
+    cache_path = tmp_path / "routes.sqlite3"
+    backend = FakeBackend()
+    router = SeaRouter(cache_path=cache_path, _routing_backend=backend)
+
+    router.route_coordinates(*ORIGIN, *DESTINATION)
+    router.route_coordinates(*DESTINATION, *ORIGIN)
+    router.restrictions = ()
+    router.route_coordinates(*ORIGIN, *DESTINATION)
+    SeaRouter(
+        cache_path=cache_path,
+        _routing_backend=FakeBackend(version="10.0"),
+    ).route_coordinates(*ORIGIN, *DESTINATION)
+
+    assert len(backend.calls) == 3
+
+
 def test_backend_failure_becomes_a_routing_error():
     router = SeaRouter(_routing_backend=FakeBackend(error=RuntimeError("boom")))
 

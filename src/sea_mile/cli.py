@@ -344,7 +344,7 @@ def _cmd_route(args: argparse.Namespace) -> int:
     origin = _endpoint_port(registry, args.origin, args.origin_country)
     destination = _endpoint_port(registry, args.destination, args.destination_country)
     try:
-        result = SeaRouter().route(origin, destination)
+        result = SeaRouter(cache_path=args.cache).route(origin, destination)
     except ImportError as error:
         print(f"sea-mile: error: {error}", file=sys.stderr)
         return 2
@@ -384,7 +384,7 @@ def _cmd_matrix(args: argparse.Namespace) -> int:
     registry = _load_registry(args)
     ports = [registry.resolve(identifier) for identifier in args.ports]
     try:
-        matrix = SeaRouter().distance_matrix(ports)
+        matrix = SeaRouter(cache_path=args.cache).distance_matrix(ports)
     except ImportError as error:
         print(f"sea-mile: error: {error}", file=sys.stderr)
         return 2
@@ -915,6 +915,11 @@ def _parser() -> argparse.ArgumentParser:
     route.add_argument(
         "--geojson", type=Path, help="write the route as a GeoJSON Feature"
     )
+    route.add_argument(
+        "--cache",
+        type=Path,
+        help="persist routing results in this SQLite cache",
+    )
     route.set_defaults(func=_cmd_route)
 
     matrix = subparsers.add_parser(
@@ -923,6 +928,11 @@ def _parser() -> argparse.ArgumentParser:
         help="pairwise sea distances between two or more ports",
     )
     matrix.add_argument("ports", nargs="+", help="two or more port IDs or UN/LOCODEs")
+    matrix.add_argument(
+        "--cache",
+        type=Path,
+        help="persist routing results in this SQLite cache",
+    )
     matrix.set_defaults(func=_cmd_matrix)
 
     export = subparsers.add_parser("export", help="export matching port records")
