@@ -6,7 +6,7 @@ from types import ModuleType
 
 import pytest
 
-import sea_mile.ports
+import sea_mile.spatial
 
 BENCHMARK = Path(__file__).resolve().parents[1] / "scripts" / "benchmark.py"
 
@@ -38,11 +38,11 @@ def test_benchmark_reports_every_stage(capsys: pytest.CaptureFixture[str]) -> No
 def test_benchmark_scan_path_runs_without_the_kdtree(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    original = sea_mile.ports.cKDTree
+    original = sea_mile.spatial.cKDTree
     try:
         _load().main(["400", "--no-kdtree"])
     finally:
-        sea_mile.ports.cKDTree = original
+        sea_mile.spatial.cKDTree = original
     printed = capsys.readouterr().out
     assert "scan only" in printed
     assert "nearest" in printed

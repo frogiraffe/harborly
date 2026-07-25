@@ -22,15 +22,10 @@ from sea_mile.exceptions import (
     PortNotFoundError,
     RegistryDataError,
 )
-from sea_mile.geo import _EARTH_RADIUS_NMI, great_circle_nmi, validate_coordinate
+from sea_mile.geo import great_circle_nmi, validate_coordinate
 from sea_mile.matching import BatchMatchResult, MatchCandidate, decide_exact_match
+from sea_mile.spatial import PortSpatialIndex
 from sea_mile.text import canonical_key
-
-try:
-    from scipy.spatial import cKDTree
-except ImportError:  # pragma: no cover - exercised only without the optional extra
-    cKDTree = None  # type: ignore[assignment, misc]
-
 
 _REGISTRY_COLUMNS = {
     "registry_id",
@@ -256,18 +251,6 @@ class NearbyPortGroup:
         return {**self.group.to_dict(), "distance_nmi": self.distance_nmi}
 
 
-@dataclass(frozen=True, slots=True)
-class _CoordinateIndex:
-    """Precomputed arrays for vectorized nearest-port distance queries."""
-
-    registry_id: np.ndarray
-    country_code: np.ndarray
-    provider_priority: np.ndarray
-    lat_rad: np.ndarray
-    lon_rad: np.ndarray
-    cartesian: np.ndarray
-
-
 _ENRICHMENT_FIELDS: tuple[str, ...] = (
     "sea_mile_status",
     "sea_mile_reason_code",
@@ -376,17 +359,10 @@ class PortRegistry:
         )
 
     @cached_property
-    def _coordinate_index(self) -> _CoordinateIndex:
+    def _spatial_index(self) -> PortSpatialIndex:
         # Built on first nearest() use, not at construction, so search-only and
         # route-only workflows do not pay for it.
-        return self._build_coordinate_index()
-
-    @cached_property
-    def _kdtree(self) -> Any:
-        index = self._coordinate_index
-        if cKDTree is None or index.registry_id.shape[0] == 0:
-            return None
-        return cKDTree(index.cartesian)
+        return PortSpatialIndex(self._registry, provider_priority=_PROVIDER_PRIORITY)
 
     @classmethod
     def from_parquet(
@@ -967,122 +943,19 @@ class PortRegistry:
         if not query_check.is_valid:
             raise PortCoordinateError(f"invalid query coordinate: {query_check.reason}")
 
-        index = self._coordinate_index
-        positions = self._nearest_candidate_positions(
-            latitude, longitude, country_code, limit
-        )
-        if positions.size == 0:
-            return []
-
-        lat1 = np.radians(latitude)
-        lon1 = np.radians(longitude)
-        lat2 = index.lat_rad[positions]
-        lon2 = index.lon_rad[positions]
-        haversine = (
-            np.sin((lat2 - lat1) / 2) ** 2
-            + np.cos(lat1) * np.cos(lat2) * np.sin((lon2 - lon1) / 2) ** 2
-        )
-        distance_nmi = (
-            _EARTH_RADIUS_NMI * 2 * np.arcsin(np.sqrt(np.clip(haversine, 0.0, 1.0)))
-        )
-        registry_ids = index.registry_id[positions]
-        provider_priority = index.provider_priority[positions]
-
-        if max_distance_nmi is not None:
-            within = distance_nmi <= max_distance_nmi
-            distance_nmi = distance_nmi[within]
-            registry_ids = registry_ids[within]
-            provider_priority = provider_priority[within]
-        if distance_nmi.size == 0:
-            return []
-
-        # lexsort reads keys last-first: distance, then provider, then id.
-        order = np.lexsort((registry_ids, provider_priority, distance_nmi))[:limit]
         return [
             NearbyPortResult(
-                port=self._port_from_row(self._by_id.loc[registry_ids[i]]),
-                distance_nmi=float(distance_nmi[i]),
+                port=self._port_from_row(self._by_id.loc[match.registry_id]),
+                distance_nmi=match.distance_nmi,
             )
-            for i in order
+            for match in self._spatial_index.nearest(
+                latitude,
+                longitude,
+                country_code=country_code,
+                limit=limit,
+                max_distance_nmi=max_distance_nmi,
+            )
         ]
-
-    def _nearest_candidate_positions(
-        self,
-        latitude: float,
-        longitude: float,
-        country_code: str | None,
-        limit: int,
-    ) -> np.ndarray:
-        """Positions into _coordinate_index worth scoring exactly.
-
-        The k-d tree narrows the unfiltered case to a small candidate set.
-        An overfetch margin, widened by a radius query, keeps every
-        exact-distance tie so the tie-break below sees them. A country filter
-        uses the full vectorized scan.
-        """
-
-        index = self._coordinate_index
-        n = index.registry_id.shape[0]
-        if self._kdtree is not None and country_code is None:
-            point = _EARTH_RADIUS_NMI * np.array(
-                [
-                    np.cos(np.radians(latitude)) * np.cos(np.radians(longitude)),
-                    np.cos(np.radians(latitude)) * np.sin(np.radians(longitude)),
-                    np.sin(np.radians(latitude)),
-                ]
-            )
-            k = min(limit + 8, n)
-            if k == 0:
-                return np.array([], dtype=np.intp)
-            distances, found = self._kdtree.query(point, k=k)
-            distances = np.atleast_1d(distances)
-            found = np.atleast_1d(found)
-            if k < n:
-                wider = self._kdtree.query_ball_point(point, r=distances[-1] + 1e-6)
-                if len(wider) > found.size:
-                    found = np.asarray(wider, dtype=np.intp)
-            return found
-
-        mask = np.ones(n, dtype=bool)
-        if country_code:
-            mask &= index.country_code == country_code.upper()
-        return np.nonzero(mask)[0]
-
-    def _build_coordinate_index(self) -> _CoordinateIndex:
-        frame = self._registry.dropna(subset=["latitude", "longitude"])
-        latitude = frame["latitude"].to_numpy(dtype=float)
-        longitude = frame["longitude"].to_numpy(dtype=float)
-        # Vectorized equivalent of validate_coordinate() over float pairs.
-        valid = (
-            np.isfinite(latitude)
-            & np.isfinite(longitude)
-            & (np.abs(latitude) <= 90)
-            & (np.abs(longitude) <= 180)
-            & ~((latitude == 0.0) & (longitude == 0.0))
-        )
-        frame = frame[valid]
-        provider_priority = (
-            frame["provider"].map(_PROVIDER_PRIORITY).fillna(99).to_numpy(dtype=float)
-        )
-        lat_rad = np.radians(frame["latitude"].to_numpy(dtype=float))
-        lon_rad = np.radians(frame["longitude"].to_numpy(dtype=float))
-        # Chord order on the sphere matches great-circle order, so a Euclidean
-        # k-d tree over these points answers nearest-port queries correctly.
-        cartesian = _EARTH_RADIUS_NMI * np.column_stack(
-            (
-                np.cos(lat_rad) * np.cos(lon_rad),
-                np.cos(lat_rad) * np.sin(lon_rad),
-                np.sin(lat_rad),
-            )
-        )
-        return _CoordinateIndex(
-            registry_id=frame["registry_id"].to_numpy(),
-            country_code=frame["country_code"].to_numpy(),
-            provider_priority=provider_priority,
-            lat_rad=lat_rad,
-            lon_rad=lon_rad,
-            cartesian=cartesian,
-        )
 
     def _search_results(
         self, candidate_aliases: pd.DataFrame, limit: int

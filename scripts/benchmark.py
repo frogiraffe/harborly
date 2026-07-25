@@ -11,7 +11,7 @@ from collections.abc import Callable, Sequence
 
 import pandas as pd
 
-import sea_mile.ports
+import sea_mile.spatial
 from sea_mile import PortRegistry
 from sea_mile.text import canonical_key
 
@@ -114,10 +114,10 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
 def main(argv: Sequence[str] | None = None) -> None:
     args = _parse_args(argv)
     if args.no_kdtree:
-        sea_mile.ports.cKDTree = None
+        sea_mile.spatial.cKDTree = None
 
     frame, aliases = _synthetic(args.count)
-    tree = "scipy" if sea_mile.ports.cKDTree is not None else "scan only"
+    tree = "scipy" if sea_mile.spatial.cKDTree is not None else "scan only"
     machine = f"{platform.system()} {platform.machine()}"
 
     print("sea-mile benchmark")
