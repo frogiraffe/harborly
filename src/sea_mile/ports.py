@@ -13,7 +13,6 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from rapidfuzz import fuzz, process
 
 from sea_mile.canonical import assign_canonical_ids
 from sea_mile.exceptions import (
@@ -24,6 +23,7 @@ from sea_mile.exceptions import (
 )
 from sea_mile.geo import great_circle_nmi, validate_coordinate
 from sea_mile.matching import BatchMatchResult, MatchCandidate, decide_exact_match
+from sea_mile.search import AliasSearchIndex
 from sea_mile.spatial import PortSpatialIndex
 from sea_mile.text import canonical_key
 
@@ -65,7 +65,6 @@ def source_short_label(provider: str) -> str:
 
 
 _QUERY_CACHE_SIZE = 4096
-_MIN_FUZZY_QUERY_LENGTH = 3
 
 
 def bundled_data_directory() -> Path:
@@ -334,18 +333,12 @@ class PortRegistry:
         self._alias_country = (
             self._by_id["country_code"].reindex(self._aliases["registry_id"]).to_numpy()
         )
-        self._alias_positions_by_key = _positions_by_value(self._aliases["alias_key"])
-        self._distinct_alias_keys_global = list(self._alias_positions_by_key)
-        key_countries = pd.DataFrame(
-            {
-                "country_code": self._alias_country,
-                "alias_key": self._aliases["alias_key"].to_numpy(),
-            }
-        ).dropna(subset=["alias_key"])
-        self._distinct_alias_keys_by_country: dict[str, list[str]] = {
-            str(country): group["alias_key"].drop_duplicates().tolist()
-            for country, group in key_countries.groupby("country_code")
-        }
+        alias_positions = _positions_by_value(self._aliases["alias_key"])
+        self._alias_search = AliasSearchIndex(
+            self._aliases,
+            alias_country=self._alias_country,
+            positions_by_key=alias_positions,
+        )
         self._registry_positions_by_unlocode = _positions_by_value(
             self._registry["unlocode"]
         )
@@ -796,64 +789,20 @@ class PortRegistry:
             # An exact code match is unambiguous, so skip name matching.
             return code_results[:limit]
 
-        query_key = canonical_key(query)
-        if not query_key:
-            return []
-
-        country = country_code.upper() if country_code else None
-        if country:
-            distinct_keys = self._distinct_alias_keys_by_country.get(country, [])
-        else:
-            distinct_keys = self._distinct_alias_keys_global
-
-        exact = self._aliases_for_keys([query_key], country)
-        if not exact.empty:
-            exact["match_method"] = "exact_alias"
-            exact["name_score"] = 100.0
-            return self._search_results(exact, limit)
-        if not fuzzy or not distinct_keys:
-            return []
-
-        # Prefix matching stays available at any length, with alphabetical ties.
-        prefix_keys = [key for key in distinct_keys if key.startswith(query_key)]
-        prefix_results: list[PortSearchResult] = []
-        if prefix_keys:
-            prefix_aliases = self._aliases_for_keys(prefix_keys, country)
-            prefix_aliases["match_method"] = "prefix_alias"
-            prefix_aliases["name_score"] = 95.0
-            prefix_results = self._search_results(prefix_aliases, limit)
+        candidates = self._alias_search.candidates(
+            query,
+            country_code=country_code,
+            limit=limit,
+            fuzzy_enabled=fuzzy,
+            minimum_score=minimum_score,
+        )
+        if not candidates.exact.empty:
+            return self._search_results(candidates.exact, limit)
+        prefix_results = self._search_results(candidates.prefix, limit)
         if len(prefix_results) >= limit:
             return prefix_results[:limit]
 
-        fuzzy_results: list[PortSearchResult] = []
-        if len(query_key) >= _MIN_FUZZY_QUERY_LENGTH:
-            # Drop aliases far shorter than the query. WRatio inflates their
-            # partial-ratio score and crowds out real near-matches.
-            min_alias_length = -(-len(query_key) // 2)  # ceil(len(query_key) / 2)
-            prefix_key_set = set(prefix_keys)
-            candidate_keys = [
-                key
-                for key in distinct_keys
-                if len(key) >= min_alias_length and key not in prefix_key_set
-            ]
-            if candidate_keys:
-                key_matches = process.extract(
-                    query_key,
-                    candidate_keys,
-                    scorer=fuzz.WRatio,
-                    score_cutoff=minimum_score,
-                    limit=max(limit * 3, limit),
-                )
-                candidate_parts = []
-                for alias_key, score, _ in key_matches:
-                    part = self._aliases_for_keys([alias_key], country)
-                    part["match_method"] = "fuzzy_alias"
-                    part["name_score"] = float(score)
-                    candidate_parts.append(part)
-                if candidate_parts:
-                    fuzzy_results = self._search_results(
-                        pd.concat(candidate_parts), limit
-                    )
+        fuzzy_results = self._search_results(candidates.fuzzy, limit)
 
         seen: set[str] = set()
         merged: list[PortSearchResult] = []
@@ -865,21 +814,6 @@ class PortRegistry:
             if len(merged) >= limit:
                 break
         return merged
-
-    def _aliases_for_keys(self, keys: list[str], country: str | None) -> pd.DataFrame:
-        """Alias rows for canonical keys, optionally restricted to one country."""
-
-        arrays = [
-            positions
-            for key in keys
-            if (positions := self._alias_positions_by_key.get(key)) is not None
-        ]
-        if not arrays:
-            return self._aliases.iloc[:0].copy()
-        positions = arrays[0] if len(arrays) == 1 else np.sort(np.concatenate(arrays))
-        if country is not None:
-            positions = positions[self._alias_country[positions] == country]
-        return self._aliases.iloc[positions].copy()
 
     def _code_search_results(
         self, query: str, country_code: str | None
@@ -960,6 +894,8 @@ class PortRegistry:
     def _search_results(
         self, candidate_aliases: pd.DataFrame, limit: int
     ) -> list[PortSearchResult]:
+        if candidate_aliases.empty:
+            return []
         candidates = candidate_aliases.merge(
             self._registry,
             on=["registry_id", "provider"],
