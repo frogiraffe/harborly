@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from sea_mile.coordinates import LatLon
 from sea_mile.exceptions import RoutingError, RoutingErrorReason
 
 
@@ -43,8 +44,8 @@ class _RoutingBackend(Protocol):
 
     def route(
         self,
-        origin: tuple[float, float],
-        destination: tuple[float, float],
+        origin: LatLon,
+        destination: LatLon,
         config: RoutingConfig,
     ) -> BackendRoute: ...
 
@@ -62,15 +63,17 @@ class SeaRouteBackend:
 
     def route(
         self,
-        origin: tuple[float, float],
-        destination: tuple[float, float],
+        origin: LatLon,
+        destination: LatLon,
         config: RoutingConfig,
     ) -> BackendRoute:
         searoute = self._module()
+        origin_xy = origin.to_lon_lat()
+        destination_xy = destination.to_lon_lat()
         try:
             feature = searoute.searoute(
-                [origin[1], origin[0]],
-                [destination[1], destination[0]],
+                origin_xy.as_list(),
+                destination_xy.as_list(),
                 units="naut",
                 append_orig_dest=True,
                 restrictions=list(config.restrictions),

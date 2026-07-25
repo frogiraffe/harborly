@@ -389,6 +389,9 @@ def _cmd_matrix(args: argparse.Namespace) -> int:
         print(f"sea-mile: error: {error}", file=sys.stderr)
         return 2
     labels = [port.registry_id for port in ports]
+    from sea_mile.data_contracts import validate_distance_matrix
+
+    validate_distance_matrix(labels, matrix)
     if args.json:
         _emit_json(args, {"ports": labels, "distances_nmi": matrix})
         return 0
@@ -477,20 +480,28 @@ def _chunked(
 
 
 def _read_decisions(path: Path) -> dict[str, str]:
-    with path.open(newline="", encoding="utf-8-sig") as handle:
-        reader = csv.DictReader(handle)
-        fields = reader.fieldnames or []
-        if "row_id" not in fields or "chosen_registry_id" not in fields:
-            raise ValueError(
-                "decisions file needs a 'row_id' and a 'chosen_registry_id' column"
-            )
-        decisions: dict[str, str] = {}
-        for row in reader:
-            row_id = str(row.get("row_id") or "").strip()
-            chosen = str(row.get("chosen_registry_id") or "").strip()
-            if row_id and chosen:
-                decisions[row_id] = chosen
-    return decisions
+    import pandas as pd
+    import pandera.errors
+
+    from sea_mile.data_contracts import validate_review_decisions
+
+    frame = pd.read_csv(
+        path,
+        dtype=str,
+        keep_default_na=False,
+        encoding="utf-8-sig",
+    )
+    try:
+        validated = validate_review_decisions(frame)
+    except (pandera.errors.SchemaError, pandera.errors.SchemaErrors) as error:
+        raise ValueError(f"invalid review decisions CSV: {error}") from error
+    return dict(
+        zip(
+            validated["row_id"].str.strip(),
+            validated["chosen_registry_id"].str.strip(),
+            strict=True,
+        )
+    )
 
 
 def _apply_decision(
@@ -544,6 +555,7 @@ class _ReviewWriter:
     def write(
         self, row_ids: Sequence[str], results: Sequence[BatchMatchResult]
     ) -> None:
+        pending: list[dict[str, Any]] = []
         for row_id, result in zip(row_ids, results, strict=True):
             if result.status not in _REVIEW_STATUSES:
                 continue
@@ -555,10 +567,10 @@ class _ReviewWriter:
                 "reason_code": str(result.reason_code),
             }
             if not result.candidates:
-                self._writer.writerow(base)
+                pending.append(base)
                 continue
             for candidate in result.candidates:
-                self._writer.writerow(
+                pending.append(
                     {
                         **base,
                         "candidate_registry_id": candidate.registry_id,
@@ -576,6 +588,18 @@ class _ReviewWriter:
                         "candidate_unlocode": candidate.unlocode or "",
                     }
                 )
+        if not pending:
+            return
+        import pandas as pd
+
+        from sea_mile.data_contracts import validate_review_frame
+
+        frame = pd.DataFrame(pending, columns=_REVIEW_FIELDS)
+        for column in ("candidate_latitude", "candidate_longitude"):
+            frame[column] = pd.to_numeric(frame[column], errors="coerce")
+        validated = validate_review_frame(frame)
+        for row in validated.fillna("").to_dict("records"):
+            self._writer.writerow(row)
 
     def close(self) -> None:
         self._handle.close()

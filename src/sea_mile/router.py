@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import multiprocessing
+import os
+import time
+from collections.abc import Iterable, Sequence
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
+
+import httpx
 
 from sea_mile._routing_backend import (
     BackendRoute,
@@ -14,6 +20,7 @@ from sea_mile._routing_backend import (
     SeaRouteBackend,
     _RoutingBackend,
 )
+from sea_mile.coordinates import LatLon
 from sea_mile.exceptions import (
     PortCoordinateError,
     RoutingError,
@@ -24,6 +31,9 @@ from sea_mile.geo import great_circle_nmi, validate_coordinate
 from sea_mile.ports import Port, PortRegistry
 from sea_mile.route_cache import RouteCache
 from sea_mile.routing import RouteQualityFlag, assess_route_length
+
+_DEFAULT_RETRY_ATTEMPTS = 4
+_DEFAULT_BACKOFF_SECONDS = 0.25
 
 
 def _coordinate_port(label: str, latitude: float, longitude: float) -> Port:
@@ -86,6 +96,73 @@ class SeaRoute:
         }
 
 
+def _matrix_route(
+    task: tuple[
+        int,
+        int,
+        Port,
+        Port,
+        str,
+        str,
+        tuple[str, ...],
+        str | None,
+        _RoutingBackend,
+        int,
+        float,
+    ],
+) -> tuple[int, int, float]:
+    """Calculate one matrix edge in an isolated worker process."""
+
+    (
+        row,
+        column,
+        origin,
+        destination,
+        algorithm,
+        backend,
+        restrictions,
+        cache_path,
+        routing_backend,
+        retry_attempts,
+        backoff_seconds,
+    ) = task
+    router = SeaRouter(
+        algorithm=algorithm,
+        backend=backend,
+        restrictions=restrictions,
+        cache_path=cache_path,
+        retry_attempts=retry_attempts,
+        backoff_seconds=backoff_seconds,
+        _routing_backend=routing_backend,
+    )
+    return row, column, router.route(origin, destination).distance_nmi
+
+
+def _is_transient_backend_error(error: BaseException) -> bool:
+    """Recognize timeout, transport, and rate-limit failures through wrappers."""
+
+    current: BaseException | None = error
+    while current is not None:
+        if isinstance(
+            current,
+            (
+                TimeoutError,
+                ConnectionError,
+                httpx.TimeoutException,
+                httpx.TransportError,
+            ),
+        ):
+            return True
+        response = getattr(current, "response", None)
+        status_code = getattr(response, "status_code", None)
+        if status_code == 429 or (
+            isinstance(status_code, int) and 500 <= status_code < 600
+        ):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
 class SeaRouter:
     """Calculate explicit nautical-mile routes between registry ports."""
 
@@ -96,11 +173,19 @@ class SeaRouter:
         backend: str = "networkx",
         restrictions: tuple[str, ...] = ("northwest",),
         cache_path: str | Path | None = None,
+        retry_attempts: int = _DEFAULT_RETRY_ATTEMPTS,
+        backoff_seconds: float = _DEFAULT_BACKOFF_SECONDS,
         _routing_backend: _RoutingBackend | None = None,
     ) -> None:
+        if retry_attempts < 1:
+            raise ValueError("retry_attempts must be at least 1")
+        if backoff_seconds < 0:
+            raise ValueError("backoff_seconds cannot be negative")
         self.algorithm = algorithm
         self.backend = backend
         self.restrictions = restrictions
+        self.retry_attempts = retry_attempts
+        self.backoff_seconds = backoff_seconds
         self._backend: _RoutingBackend = (
             _routing_backend if _routing_backend is not None else SeaRouteBackend()
         )
@@ -124,7 +209,9 @@ class SeaRouter:
     ) -> SeaRoute:
         origin_coordinates = self._coordinates(origin)
         destination_coordinates = self._coordinates(destination)
-        great_circle = great_circle_nmi(*origin_coordinates, *destination_coordinates)
+        great_circle = great_circle_nmi(
+            *origin_coordinates.as_tuple(), *destination_coordinates.as_tuple()
+        )
         config = RoutingConfig(
             algorithm=algorithm,
             graph_backend=backend,
@@ -169,13 +256,13 @@ class SeaRouter:
 
     def _backend_result(
         self,
-        origin: tuple[float, float],
-        destination: tuple[float, float],
+        origin: LatLon,
+        destination: LatLon,
         config: RoutingConfig,
     ) -> BackendRoute:
         cache = self._persistent_cache
         if cache is None:
-            return self._backend.route(origin, destination, config)
+            return self._call_backend_with_retry(origin, destination, config)
         cache_key = cache.key(
             origin=origin,
             destination=destination,
@@ -186,9 +273,25 @@ class SeaRouter:
         cached = cache.get(cache_key)
         if cached is not None:
             return cached
-        result = self._backend.route(origin, destination, config)
+        result = self._call_backend_with_retry(origin, destination, config)
         cache.put(cache_key, result)
         return result
+
+    def _call_backend_with_retry(
+        self,
+        origin: LatLon,
+        destination: LatLon,
+        config: RoutingConfig,
+    ) -> BackendRoute:
+        for attempt in range(self.retry_attempts):
+            try:
+                return self._backend.route(origin, destination, config)
+            except Exception as error:
+                final_attempt = attempt + 1 == self.retry_attempts
+                if final_attempt or not _is_transient_backend_error(error):
+                    raise
+                time.sleep(self.backoff_seconds * (2**attempt))
+        raise AssertionError("retry loop exhausted without returning or raising")
 
     def route_ids(
         self,
@@ -219,20 +322,71 @@ class SeaRouter:
 
         return [self.route(origin, destination) for origin, destination in pairs]
 
-    def distance_matrix(self, ports: Sequence[Port]) -> list[list[float]]:
-        """Return the pairwise sea distance, in nautical miles, for the ports."""
+    def distance_matrix(
+        self,
+        ports: Sequence[Port],
+        *,
+        max_workers: int | None = None,
+    ) -> list[list[float]]:
+        """Return a process-parallel pairwise sea-distance matrix.
+
+        ``max_workers=1`` is available for debuggers and constrained runtimes.
+        Every worker opens its own WAL-enabled SQLite connection when a
+        persistent cache is configured.
+        """
 
         size = len(ports)
         matrix = [[0.0] * size for _ in range(size)]
-        for row in range(size):
-            for column in range(row + 1, size):
-                distance = self.route(ports[row], ports[column]).distance_nmi
-                matrix[row][column] = distance
-                matrix[column][row] = distance
+        pairs = [
+            (row, column) for row in range(size) for column in range(row + 1, size)
+        ]
+        if not pairs:
+            return matrix
+        workers = max_workers
+        if workers is None:
+            workers = min(len(pairs), os.cpu_count() or 1)
+        if workers < 1:
+            raise ValueError("max_workers must be at least 1")
+        results: Iterable[tuple[int, int, float]]
+        if workers == 1:
+            results = (
+                (row, column, self.route(ports[row], ports[column]).distance_nmi)
+                for row, column in pairs
+            )
+        else:
+            cache_path = (
+                str(self._persistent_cache.path)
+                if self._persistent_cache is not None
+                else None
+            )
+            tasks = (
+                (
+                    row,
+                    column,
+                    ports[row],
+                    ports[column],
+                    self.algorithm,
+                    self.backend,
+                    self.restrictions,
+                    cache_path,
+                    self._backend,
+                    self.retry_attempts,
+                    self.backoff_seconds,
+                )
+                for row, column in pairs
+            )
+            with ProcessPoolExecutor(
+                max_workers=workers,
+                mp_context=multiprocessing.get_context("spawn"),
+            ) as executor:
+                results = list(executor.map(_matrix_route, tasks))
+        for row, column, distance in results:
+            matrix[row][column] = distance
+            matrix[column][row] = distance
         return matrix
 
     @staticmethod
-    def _coordinates(port: Port) -> tuple[float, float]:
+    def _coordinates(port: Port) -> LatLon:
         latitude = port.latitude
         longitude = port.longitude
         if latitude is None or longitude is None:
@@ -244,4 +398,4 @@ class SeaRouter:
             raise PortCoordinateError(
                 f"port {port.registry_id} has an invalid coordinate: {check.reason}"
             )
-        return float(latitude), float(longitude)
+        return LatLon(latitude=float(latitude), longitude=float(longitude))

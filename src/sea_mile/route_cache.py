@@ -8,6 +8,7 @@ import sqlite3
 from pathlib import Path
 
 from sea_mile._routing_backend import BackendRoute, RoutingConfig
+from sea_mile.coordinates import LatLon
 
 _SCHEMA_VERSION = 1
 
@@ -33,8 +34,8 @@ class RouteCache:
     def key(
         self,
         *,
-        origin: tuple[float, float],
-        destination: tuple[float, float],
+        origin: LatLon,
+        destination: LatLon,
         config: RoutingConfig,
         engine: str,
         engine_version: str,
@@ -43,8 +44,8 @@ class RouteCache:
 
         payload = {
             "schema": _SCHEMA_VERSION,
-            "origin": origin,
-            "destination": destination,
+            "origin": origin.as_tuple(),
+            "destination": destination.as_tuple(),
             "config": config.to_dict(),
             "engine": engine,
             "engine_version": engine_version,
@@ -72,20 +73,32 @@ class RouteCache:
             result.geometry, sort_keys=True, separators=(",", ":"), ensure_ascii=True
         )
         with self._connect() as connection:
-            connection.execute(
-                """
-                INSERT INTO routes (cache_key, distance_nmi, geometry_json)
-                VALUES (?, ?, ?)
-                ON CONFLICT(cache_key) DO UPDATE SET
-                    distance_nmi = excluded.distance_nmi,
-                    geometry_json = excluded.geometry_json,
-                    created_at = CURRENT_TIMESTAMP
-                """,
-                (cache_key, result.distance_nmi, geometry_json),
-            )
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute(
+                    """
+                    INSERT INTO routes (cache_key, distance_nmi, geometry_json)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(cache_key) DO UPDATE SET
+                        distance_nmi = excluded.distance_nmi,
+                        geometry_json = excluded.geometry_json,
+                        created_at = CURRENT_TIMESTAMP
+                    """,
+                    (cache_key, result.distance_nmi, geometry_json),
+                )
+            except BaseException:
+                connection.rollback()
+                raise
+            else:
+                connection.commit()
 
     def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.path, timeout=30)
+        connection = sqlite3.connect(
+            self.path,
+            timeout=30.0,
+            isolation_level=None,
+        )
         connection.execute("PRAGMA journal_mode=WAL")
         connection.execute("PRAGMA busy_timeout=30000")
+        connection.execute("PRAGMA synchronous=NORMAL")
         return connection
