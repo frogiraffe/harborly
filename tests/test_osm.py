@@ -75,6 +75,24 @@ def test_skips_features_without_a_country(tmp_path) -> None:
     assert registry.empty
 
 
+def test_skips_features_with_out_of_bounds_coordinates(tmp_path) -> None:
+    features = [
+        _feature(
+            "node/1",
+            "Invalid Harbour",
+            {"harbour": "yes", "addr:country": "TR"},
+            999,
+            999,
+        ),
+    ]
+
+    registry, _ = load_osm_port_archive(
+        _write(tmp_path, features), source_version="osm-test"
+    )
+
+    assert registry.empty
+
+
 def test_missing_feature_list_raises(tmp_path) -> None:
     path = tmp_path / "bad.geojson"
     path.write_text(json.dumps({"type": "FeatureCollection"}), encoding="utf-8")

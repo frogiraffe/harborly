@@ -14,7 +14,7 @@ from time import monotonic
 import httpx
 from tenacity import (
     retry,
-    retry_if_exception_type,
+    retry_if_exception,
     stop_after_attempt,
     wait_exponential,
 )
@@ -69,6 +69,17 @@ _PARALLEL_CHUNK_BYTES = 16 * _MIB
 # until the stalled call finally returned. A daemon thread carries no such
 # hook and is simply abandoned.
 _CONNECT_DEADLINE_SECONDS = 15.0
+
+
+def _is_retryable_download_error(error: BaseException) -> bool:
+    """Retry temporary network and HTTP failures, not permanent client errors."""
+
+    if isinstance(error, (TimeoutError, httpx.TimeoutException, httpx.TransportError)):
+        return True
+    if isinstance(error, httpx.HTTPStatusError):
+        status = error.response.status_code
+        return status in {408, 425, 429} or 500 <= status < 600
+    return False
 
 
 def _user_agent() -> str:
@@ -263,7 +274,7 @@ def _download_parallel(
 
 
 @retry(
-    retry=retry_if_exception_type((httpx.HTTPError, OSError)),
+    retry=retry_if_exception(_is_retryable_download_error),
     stop=stop_after_attempt(5),
     wait=wait_exponential(multiplier=1, min=2, max=16),
     reraise=True,

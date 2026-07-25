@@ -178,6 +178,24 @@ def test_download_rejects_oversized_stream(tmp_path) -> None:
     assert not (tmp_path / "source.zip.part").exists()
 
 
+def test_download_does_not_retry_permanent_http_errors(tmp_path) -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(404, request=request)
+
+    destination = tmp_path / "source.zip"
+    with (
+        httpx.Client(transport=httpx.MockTransport(handler)) as client,
+        pytest.raises(httpx.HTTPStatusError),
+    ):
+        _download(client, "https://example.test/missing", destination, max_bytes=10)
+
+    assert calls == 1
+
+
 def test_send_with_deadline_gives_up_on_a_stalled_connection(monkeypatch) -> None:
     monkeypatch.setattr("sea_mile.build.download._CONNECT_DEADLINE_SECONDS", 0.05)
 

@@ -288,9 +288,11 @@ present an inferred snapped point as observed data.
 
 `route_ids` routes two registry IDs. `route_coordinates` routes two raw `lat, lon`
 points without a registry lookup. `route_many` routes a list of port pairs.
-`distance_matrix` returns the pairwise sea distance for a list of ports. Routing needs
-the `routing` extra. `SeaRouter` imports without it, but a route call raises
-`ImportError` when it is missing.
+`distance_matrix` returns the pairwise sea distance for a list of ports. The bundled
+searoute backend declares symmetric distances, so sea-mile calculates one route for
+each unordered pair. An internal backend that does not declare symmetry is calculated
+in both directions. Routing needs the `routing` extra. `SeaRouter` imports without it,
+but a route call raises `ImportError` when it is missing.
 
 ## Coordinates and text helpers
 
@@ -300,8 +302,10 @@ distance in nautical miles using the 6,371.0087714 km mean Earth radius.
 
 `canonical_key` builds an accent-insensitive search key. `normalize_display_text`
 normalizes Unicode and whitespace but keeps accents. `parse_wpi_dms` and
-`parse_unlocode_coordinates` parse the two source coordinate formats and return `None`
-for an out-of-range value.
+`parse_unlocode_coordinates` parse the two source coordinate formats. They return
+`None` for an out-of-range value or for an invalid minute or second component.
+WPI values with 60 seconds are accepted because the source uses that value for
+rounded coordinates.
 
 ## Error types
 
@@ -312,10 +316,10 @@ Every recoverable public error is a subclass of `SeaMileError`:
 - `PortNotFoundError`, no port matches the identifier or exact name.
 - `AmbiguousPortError`, more than one independent port identity matches.
 - `PortCoordinateError`, a selected port has no usable routing coordinate.
-- `RoutingError`, the routing backend failed, returned an unusable result, or produced
-  a route that fails the plausibility check. Its `reason` attribute carries a stable
-  token: `backend_call_failed`, `malformed_backend_result`, or
-  `implausible_route`. Programmatic error handling must use this token rather
-  than the message.
+- `RoutingError`, the routing backend or persistent cache failed, the backend
+  returned an unusable result, or the route failed the plausibility check. Its
+  `reason` attribute carries a stable token: `backend_call_failed`,
+  `cache_access_failed`, `malformed_backend_result`, or `implausible_route`.
+  Programmatic error handling must use this token rather than the message.
 
 The CLI prints each error to `stderr` and exits with status code 2.

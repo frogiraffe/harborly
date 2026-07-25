@@ -5,12 +5,15 @@ import re
 import shlex
 from pathlib import Path
 
+from markdown_it import MarkdownIt
+
 import sea_mile
 from sea_mile.cli import _parser
 
 ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
 LIBRARY_API = ROOT / "docs" / "LIBRARY_API.md"
+MARKDOWN_FILES = [README, *sorted((ROOT / "docs").glob("*.md"))]
 
 
 def _command_names(parser: argparse.ArgumentParser) -> list[str]:
@@ -94,3 +97,39 @@ def test_readme_scopes_json_and_documents_exit_codes() -> None:
     assert "after any command" not in readme
 
     assert "exit code" in readme
+
+
+def test_markdown_files_render_and_have_balanced_fences() -> None:
+    parser = MarkdownIt("commonmark")
+    for path in MARKDOWN_FILES:
+        text = path.read_text(encoding="utf-8")
+        assert sum(line.startswith("```") for line in text.splitlines()) % 2 == 0, path
+        rendered = parser.render(text)
+        assert rendered.strip(), path
+
+
+def test_local_markdown_links_resolve() -> None:
+    link_pattern = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
+    for path in MARKDOWN_FILES:
+        for target in link_pattern.findall(path.read_text(encoding="utf-8")):
+            if "://" in target or target.startswith(("#", "mailto:")):
+                continue
+            relative_target = target.split("#", 1)[0]
+            assert (path.parent / relative_target).exists(), (path, target)
+
+
+def test_documentation_uses_neutral_technical_language() -> None:
+    prohibited = (
+        "production-grade",
+        "migration tax",
+        "classic silent",
+        "evidence, not leaderboard theatre",
+        "realistic-looking",
+        "pessimistic bound",
+        "earns its place",
+    )
+    documentation = "\n".join(
+        path.read_text(encoding="utf-8").lower() for path in MARKDOWN_FILES
+    )
+    for phrase in prohibited:
+        assert phrase not in documentation

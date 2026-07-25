@@ -545,6 +545,72 @@ def test_match_review_writes_one_row_per_candidate(tmp_path) -> None:
     assert all(row["reason_code"] == "coordinate_conflict" for row in rows)
 
 
+@pytest.mark.parametrize(
+    "rows",
+    [
+        "row_id,port_name\n,Mersin\n",
+        "row_id,port_name\n01024,Mersin\n01024,Mersin\n",
+    ],
+)
+def test_match_rejects_missing_or_duplicate_explicit_ids(
+    tmp_path, capsys, rows
+) -> None:
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+    input_csv = tmp_path / "in.csv"
+    input_csv.write_text(rows, encoding="utf-8")
+    output_csv = tmp_path / "out.csv"
+
+    status = main(
+        [
+            "--data-dir",
+            str(data_directory),
+            "match",
+            str(input_csv),
+            "--id-column",
+            "row_id",
+            "--output",
+            str(output_csv),
+        ]
+    )
+
+    assert status == 2
+    assert not output_csv.exists()
+    assert "row_id" in capsys.readouterr().err
+
+
+def test_match_preserves_leading_zero_explicit_ids(tmp_path) -> None:
+    data_directory = tmp_path / "registry"
+    write_ambiguous_registry(data_directory)
+    input_csv = tmp_path / "in.csv"
+    input_csv.write_text(
+        "row_id,port_name,country\n01024,Hamilton,US\n", encoding="utf-8"
+    )
+    review_csv = tmp_path / "review.csv"
+
+    status = main(
+        [
+            "--data-dir",
+            str(data_directory),
+            "match",
+            str(input_csv),
+            "--name-column",
+            "port_name",
+            "--country-column",
+            "country",
+            "--id-column",
+            "row_id",
+            "--review",
+            str(review_csv),
+        ]
+    )
+
+    assert status == 0
+    assert {
+        row["row_id"] for row in csv.DictReader(review_csv.open(encoding="utf-8"))
+    } == {"01024"}
+
+
 def test_match_applies_a_reviewed_decision(tmp_path, capsys) -> None:
     data_directory = tmp_path / "registry"
     write_ambiguous_registry(data_directory)

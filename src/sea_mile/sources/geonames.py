@@ -10,6 +10,7 @@ from zipfile import ZipFile
 import pandas as pd
 
 from sea_mile.exceptions import RegistryDataError
+from sea_mile.geo import validate_coordinate
 from sea_mile.text import canonical_key, normalize_display_text
 
 
@@ -93,6 +94,8 @@ def load_geonames_port_archive(
                     latitude = _parse_float(row["latitude"])
                     longitude = _parse_float(row["longitude"])
                     if latitude is None or longitude is None:
+                        continue
+                    if not validate_coordinate(latitude, longitude).is_valid:
                         continue
                     provider_id = row["geoname_id"]
                     registry_id = f"GEONAMES:{provider_id}"

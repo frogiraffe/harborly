@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import sys
 
 import pytest
 
 from sea_mile._routing_backend import BackendRoute, RoutingConfig, SeaRouteBackend
+from sea_mile.coordinates import LatLon
 from sea_mile.exceptions import RoutingError, RoutingErrorReason
 from sea_mile.geo import great_circle_nmi
+from sea_mile.route_cache import RouteCache
 from sea_mile.router import SeaRouter
 from sea_mile.routing import RouteQualityFlag
 
@@ -157,6 +160,83 @@ def test_malformed_backend_geometry_is_rejected():
     assert caught.value.reason == RoutingErrorReason.MALFORMED_BACKEND_RESULT
 
 
+@pytest.mark.parametrize(
+    "geometry",
+    [
+        {},
+        {"type": "Point", "coordinates": [34.65, 36.8]},
+        {"type": "LineString", "coordinates": []},
+        {"type": "LineString", "coordinates": [[34.65, 36.8], [999, 37.94]]},
+    ],
+)
+def test_structurally_malformed_backend_geometry_is_rejected(geometry):
+    router = SeaRouter(
+        _routing_backend=FakeBackend(distance_nmi=600.0, geometry=geometry)
+    )
+
+    with pytest.raises(RoutingError) as caught:
+        router.route_coordinates(*ORIGIN, *DESTINATION)
+
+    assert caught.value.reason == RoutingErrorReason.MALFORMED_BACKEND_RESULT
+
+
+def test_invalid_backend_result_is_not_written_to_persistent_cache(tmp_path):
+    cache_path = tmp_path / "routes.sqlite3"
+    bad = FakeBackend(distance_nmi=600.0, geometry={})
+
+    with pytest.raises(RoutingError):
+        SeaRouter(cache_path=cache_path, _routing_backend=bad).route_coordinates(
+            *ORIGIN, *DESTINATION
+        )
+
+    good = FakeBackend(distance_nmi=600.0)
+    SeaRouter(cache_path=cache_path, _routing_backend=good).route_coordinates(
+        *ORIGIN, *DESTINATION
+    )
+    assert len(good.calls) == 1
+
+
+def test_invalid_existing_cache_entry_is_evicted(tmp_path):
+    cache_path = tmp_path / "routes.sqlite3"
+    backend = FakeBackend(distance_nmi=600.0)
+    config = RoutingConfig("astar", "networkx", ("northwest",))
+    cache = RouteCache(cache_path)
+    key = cache.key(
+        origin=LatLon(*ORIGIN),
+        destination=LatLon(*DESTINATION),
+        config=config,
+        engine=backend.name,
+        engine_version=backend.version,
+    )
+    cache.put(key, BackendRoute(distance_nmi=600.0, geometry={}))
+    router = SeaRouter(cache_path=cache_path, _routing_backend=backend)
+
+    with pytest.raises(RoutingError):
+        router.route_coordinates(*ORIGIN, *DESTINATION)
+    route = router.route_coordinates(*ORIGIN, *DESTINATION)
+
+    assert route.distance_nmi == 600.0
+    assert len(backend.calls) == 1
+
+
+def test_persistent_cache_failures_do_not_leak_sqlite_exceptions(tmp_path, monkeypatch):
+    router = SeaRouter(
+        cache_path=tmp_path / "routes.sqlite3",
+        _routing_backend=FakeBackend(distance_nmi=600.0),
+    )
+    assert router._persistent_cache is not None
+
+    def fail_put(cache_key, result):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(router._persistent_cache, "put", fail_put)
+
+    with pytest.raises(RoutingError) as caught:
+        router.route_coordinates(*ORIGIN, *DESTINATION)
+
+    assert caught.value.reason == RoutingErrorReason.CACHE_ACCESS_FAILED
+
+
 def test_implausible_backend_distance_is_rejected():
     router = SeaRouter(_routing_backend=FakeBackend(distance_nmi=1.0))
 
@@ -169,16 +249,18 @@ def test_implausible_backend_distance_is_rejected():
 def test_routing_error_reasons_are_distinct_stable_strings():
     reasons = [
         RoutingErrorReason.BACKEND_CALL_FAILED,
+        RoutingErrorReason.CACHE_ACCESS_FAILED,
         RoutingErrorReason.MALFORMED_BACKEND_RESULT,
         RoutingErrorReason.IMPLAUSIBLE_ROUTE,
     ]
 
     assert [str(reason) for reason in reasons] == [
         "backend_call_failed",
+        "cache_access_failed",
         "malformed_backend_result",
         "implausible_route",
     ]
-    assert len(set(reasons)) == 3
+    assert len(set(reasons)) == 4
 
 
 def test_quality_assessment_stays_in_sea_mile_not_the_backend():

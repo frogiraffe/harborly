@@ -63,6 +63,28 @@ def test_load_wpi_parses_the_real_column_layout(tmp_path) -> None:
     }
 
 
+def test_load_wpi_preserves_leading_zero_provider_ids(tmp_path) -> None:
+    path = tmp_path / "UpdatedPub150.csv"
+    pd.DataFrame(
+        [
+            {
+                "portNumber": "01024",
+                "portName": "Zero Port",
+                "countryCode": "TX",
+                "latitude": "12°30'00\"N",
+                "longitude": "034°15'00\"E",
+                "unloCode": "TXZER",
+                "alternateName": "",
+            }
+        ]
+    ).to_csv(path, index=False, encoding="utf-8-sig")
+
+    records, _ = _load_wpi(path)
+
+    assert records.iloc[0]["provider_id"] == "01024"
+    assert records.iloc[0]["registry_id"] == "WPI:01024"
+
+
 def test_load_unlocode_filters_non_ports_and_parses_coordinates(tmp_path) -> None:
     rows = [
         # change, country, location, name, name_no_diacritics, subdivision,

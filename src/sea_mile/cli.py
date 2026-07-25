@@ -459,11 +459,31 @@ def _match_row_ids(
     rows: Sequence[dict[str, Any]], id_column: str | None, offset: int = 0
 ) -> list[str]:
     if id_column:
-        return [
-            str(row.get(id_column) or "").strip() or str(offset + index + 1)
-            for index, row in enumerate(rows)
-        ]
+        return [str(row.get(id_column) or "").strip() for row in rows]
     return [str(offset + index + 1) for index in range(len(rows))]
+
+
+def _validate_input_ids(path: Path, id_column: str) -> None:
+    """Reject missing or duplicate explicit row IDs before output files open."""
+
+    seen: set[str] = set()
+    with path.open(newline="", encoding="utf-8-sig") as handle:
+        reader = csv.DictReader(handle)
+        fields = reader.fieldnames or []
+        if id_column not in fields:
+            raise ValueError(
+                f"input has no column {id_column!r}; "
+                f"columns are {', '.join(fields) or 'none'}"
+            )
+        for line_number, row in enumerate(reader, start=2):
+            row_id = str(row.get(id_column) or "").strip()
+            if not row_id:
+                raise ValueError(f"input row {line_number} has an empty {id_column!r}")
+            if row_id in seen:
+                raise ValueError(
+                    f"input row {line_number} repeats {id_column!r} value {row_id!r}"
+                )
+            seen.add(row_id)
 
 
 def _chunked(
@@ -487,10 +507,12 @@ def _read_decisions(path: Path) -> dict[str, str]:
 
     frame = pd.read_csv(
         path,
-        dtype=str,
+        dtype="string",
         keep_default_na=False,
         encoding="utf-8-sig",
     )
+    for column in frame.columns:
+        frame[column] = frame[column].str.strip()
     try:
         validated = validate_review_decisions(frame)
     except (pandera.errors.SchemaError, pandera.errors.SchemaErrors) as error:
@@ -619,6 +641,8 @@ def _print_stream_summary(
 
 def _cmd_match(args: argparse.Namespace) -> int:
     registry = _load_registry(args)
+    if args.id_column:
+        _validate_input_ids(args.input, args.id_column)
     decisions = _read_decisions(args.decisions) if args.decisions else None
     if decisions is not None:
         for row_id, chosen in decisions.items():

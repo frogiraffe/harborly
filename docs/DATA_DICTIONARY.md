@@ -7,7 +7,9 @@ the enum value lists (status, confidence tier, reason code, quality flag) and th
 JSON document structure, see [Output schemas](OUTPUT_SCHEMAS.md).
 
 Coordinates are WGS84 decimal degrees. Distances are nautical miles. A null latitude
-or longitude means the source gave no conflict-free coordinate, never zero.
+or longitude means that the source gave no conflict-free coordinate. Zero is a valid
+value for one coordinate component. The pair `(0, 0)` is treated as a missing-value
+sentinel.
 
 ## Port
 

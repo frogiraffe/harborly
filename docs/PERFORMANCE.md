@@ -49,11 +49,11 @@ Each figure is milliseconds per query, averaged over a spread of queries.
 | 40,000  | 20 ms | 22 ms | 59 ms  | 21 ms |
 | 100,000 | 39 ms | 45 ms | 100 ms | 40 ms |
 
-Fuzzy search sets the ceiling because it scores the query against every candidate
-alias. The synthetic data packs many repeated names into a small set of prefixes, so
-it collides far more than a real port registry. Read these as a pessimistic bound.
-Real data with more distinct names tends to run faster. The k-d tree does not touch
-search, so `--no-kdtree` leaves these rows unchanged.
+Fuzzy search has the highest latency because it scores the query against every
+candidate alias. The synthetic data contains many repeated names in a small set of
+prefixes. Its collision rate is higher than the collision rate in the bundled
+registry. The k-d tree does not affect name search, so `--no-kdtree` leaves these
+rows unchanged.
 
 ## Nearest latency and when scipy helps
 
@@ -68,9 +68,9 @@ grows in step with the record count. At 100,000 records the k-d tree is more tha
 times faster for an open `nearest` query. The `fast` extra is recommended for
 large-registry coordinate workloads.
 
-A country filter closes most of the gap on its own. It narrows the candidates before
-the distance work, so `nearest` with a `country_code` reads about the same with or
-without the k-d tree. The k-d tree earns its place mainly on wide, unfiltered lookups.
+A country filter reduces the candidate set before the distance calculation.
+Therefore, `nearest` with a `country_code` has similar latency with and without the
+k-d tree. The measured benefit of the k-d tree is largest for unfiltered lookups.
 
 ## Measurement limits
 

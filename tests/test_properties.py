@@ -85,3 +85,19 @@ def test_parse_unlocode_never_raises(text: str) -> None:
         latitude, longitude = result
         assert -90 <= latitude <= 90
         assert -180 <= longitude <= 180
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "12°60'00\"N",
+        "12°00'61\"N",
+    ],
+)
+def test_parse_wpi_dms_rejects_invalid_minute_or_second(value: str) -> None:
+    assert parse_wpi_dms(value) is None
+
+
+@pytest.mark.parametrize("value", ["1260N 03400E", "1200N 03460E"])
+def test_parse_unlocode_rejects_invalid_minutes(value: str) -> None:
+    assert parse_unlocode_coordinates(value) is None

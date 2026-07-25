@@ -43,12 +43,13 @@ class RoutingErrorReason(StrEnum):
     """Stable reason tokens that tell the routing failure modes apart."""
 
     BACKEND_CALL_FAILED = "backend_call_failed"
+    CACHE_ACCESS_FAILED = "cache_access_failed"
     MALFORMED_BACKEND_RESULT = "malformed_backend_result"
     IMPLAUSIBLE_ROUTE = "implausible_route"
 
 
 class RoutingError(SeaMileError):
-    """The routing backend failed, or returned an unusable or implausible route."""
+    """Routing or its persistent cache failed to produce a usable route."""
 
     code = "routing_error"
 

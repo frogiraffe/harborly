@@ -9,6 +9,7 @@ from collections.abc import Iterable, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from functools import lru_cache
+from math import isfinite
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +35,8 @@ from sea_mile.routing import RouteQualityFlag, assess_route_length
 
 _DEFAULT_RETRY_ATTEMPTS = 4
 _DEFAULT_BACKOFF_SECONDS = 0.25
+_MAX_RETRY_ATTEMPTS = 8
+_MAX_BACKOFF_SECONDS = 8.0
 
 
 def _coordinate_port(label: str, latitude: float, longitude: float) -> Port:
@@ -179,8 +182,15 @@ class SeaRouter:
     ) -> None:
         if retry_attempts < 1:
             raise ValueError("retry_attempts must be at least 1")
-        if backoff_seconds < 0:
-            raise ValueError("backoff_seconds cannot be negative")
+        if retry_attempts > _MAX_RETRY_ATTEMPTS:
+            raise ValueError(f"retry_attempts cannot exceed {_MAX_RETRY_ATTEMPTS}")
+        if not isfinite(backoff_seconds) or not 0 <= backoff_seconds <= (
+            _MAX_BACKOFF_SECONDS
+        ):
+            raise ValueError(
+                "backoff_seconds must be finite and between 0 and "
+                f"{_MAX_BACKOFF_SECONDS:g}"
+            )
         self.algorithm = algorithm
         self.backend = backend
         self.restrictions = restrictions
@@ -218,7 +228,7 @@ class SeaRouter:
             restrictions=restrictions,
         )
         try:
-            result = self._backend_result(
+            result, cache_key, from_cache = self._backend_result(
                 origin_coordinates, destination_coordinates, config
             )
         except (SeaMileError, ImportError):
@@ -228,17 +238,28 @@ class SeaRouter:
                 f"routing backend {self._backend.name!r} failed: {error}",
                 reason=RoutingErrorReason.BACKEND_CALL_FAILED,
             ) from error
-        if not isinstance(result.geometry, dict):
-            raise RoutingError(
-                f"routing backend {self._backend.name!r} returned an unusable geometry",
-                reason=RoutingErrorReason.MALFORMED_BACKEND_RESULT,
-            )
-        assessment = assess_route_length(result.distance_nmi, great_circle)
-        if not assessment.is_valid:
-            raise RoutingError(
-                f"route failed the plausibility check: {assessment.flag}",
-                reason=RoutingErrorReason.IMPLAUSIBLE_ROUTE,
-            )
+        try:
+            self._validate_geometry(result.geometry)
+            assessment = assess_route_length(result.distance_nmi, great_circle)
+            if not assessment.is_valid:
+                raise RoutingError(
+                    f"route failed the plausibility check: {assessment.flag}",
+                    reason=RoutingErrorReason.IMPLAUSIBLE_ROUTE,
+                )
+        except Exception:
+            if from_cache and cache_key is not None:
+                assert self._persistent_cache is not None
+                try:
+                    self._persistent_cache.delete(cache_key)
+                except Exception as error:
+                    raise self._cache_access_error("delete", error) from error
+            raise
+        if cache_key is not None and not from_cache:
+            assert self._persistent_cache is not None
+            try:
+                self._persistent_cache.put(cache_key, result)
+            except Exception as error:
+                raise self._cache_access_error("write", error) from error
         return SeaRoute(
             origin=origin,
             destination=destination,
@@ -259,10 +280,14 @@ class SeaRouter:
         origin: LatLon,
         destination: LatLon,
         config: RoutingConfig,
-    ) -> BackendRoute:
+    ) -> tuple[BackendRoute, str | None, bool]:
         cache = self._persistent_cache
         if cache is None:
-            return self._call_backend_with_retry(origin, destination, config)
+            return (
+                self._call_backend_with_retry(origin, destination, config),
+                None,
+                False,
+            )
         cache_key = cache.key(
             origin=origin,
             destination=destination,
@@ -270,12 +295,52 @@ class SeaRouter:
             engine=self._backend.name,
             engine_version=self._backend.version,
         )
-        cached = cache.get(cache_key)
+        try:
+            cached = cache.get(cache_key)
+        except Exception as error:
+            raise self._cache_access_error("read", error) from error
         if cached is not None:
-            return cached
-        result = self._call_backend_with_retry(origin, destination, config)
-        cache.put(cache_key, result)
-        return result
+            return cached, cache_key, True
+        return (
+            self._call_backend_with_retry(origin, destination, config),
+            cache_key,
+            False,
+        )
+
+    def _validate_geometry(self, geometry: object) -> None:
+        if not isinstance(geometry, dict) or geometry.get("type") != "LineString":
+            raise self._malformed_geometry_error()
+        coordinates = geometry.get("coordinates")
+        if not isinstance(coordinates, (list, tuple)) or len(coordinates) < 2:
+            raise self._malformed_geometry_error()
+        for point in coordinates:
+            if not isinstance(point, (list, tuple)) or len(point) < 2:
+                raise self._malformed_geometry_error()
+            try:
+                longitude = float(point[0])
+                latitude = float(point[1])
+            except (TypeError, ValueError) as error:
+                raise self._malformed_geometry_error() from error
+            if (
+                not isfinite(latitude)
+                or not isfinite(longitude)
+                or not -90 <= latitude <= 90
+                or not -180 <= longitude <= 180
+            ):
+                raise self._malformed_geometry_error()
+
+    def _malformed_geometry_error(self) -> RoutingError:
+        return RoutingError(
+            f"routing backend {self._backend.name!r} returned an unusable geometry",
+            reason=RoutingErrorReason.MALFORMED_BACKEND_RESULT,
+        )
+
+    @staticmethod
+    def _cache_access_error(action: str, error: Exception) -> RoutingError:
+        return RoutingError(
+            f"route cache {action} failed: {error}",
+            reason=RoutingErrorReason.CACHE_ACCESS_FAILED,
+        )
 
     def _call_backend_with_retry(
         self,
@@ -290,7 +355,12 @@ class SeaRouter:
                 final_attempt = attempt + 1 == self.retry_attempts
                 if final_attempt or not _is_transient_backend_error(error):
                     raise
-                time.sleep(self.backoff_seconds * (2**attempt))
+                time.sleep(
+                    min(
+                        self.backoff_seconds * (2**attempt),
+                        _MAX_BACKOFF_SECONDS,
+                    )
+                )
         raise AssertionError("retry loop exhausted without returning or raising")
 
     def route_ids(
@@ -337,9 +407,18 @@ class SeaRouter:
 
         size = len(ports)
         matrix = [[0.0] * size for _ in range(size)]
-        pairs = [
-            (row, column) for row in range(size) for column in range(row + 1, size)
-        ]
+        symmetric = bool(getattr(self._backend, "symmetric", False))
+        if symmetric:
+            pairs = [
+                (row, column) for row in range(size) for column in range(row + 1, size)
+            ]
+        else:
+            pairs = [
+                (row, column)
+                for row in range(size)
+                for column in range(size)
+                if row != column
+            ]
         if not pairs:
             return matrix
         workers = max_workers
@@ -382,7 +461,8 @@ class SeaRouter:
                 results = list(executor.map(_matrix_route, tasks))
         for row, column, distance in results:
             matrix[row][column] = distance
-            matrix[column][row] = distance
+            if symmetric:
+                matrix[column][row] = distance
         return matrix
 
     @staticmethod

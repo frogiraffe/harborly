@@ -25,6 +25,7 @@ from sea_mile.router import SeaRouter
 class DeterministicBackend:
     name = "deterministic"
     version = "1"
+    symmetric = True
 
     def route(
         self, origin: LatLon, destination: LatLon, config: RoutingConfig
@@ -53,6 +54,20 @@ class FlakyBackend(DeterministicBackend):
         if self.calls < 3:
             raise TimeoutError("temporary timeout")
         return super().route(origin, destination, config)
+
+
+class AsymmetricBackend(DeterministicBackend):
+    symmetric = False
+
+    def route(
+        self, origin: LatLon, destination: LatLon, config: RoutingConfig
+    ) -> BackendRoute:
+        result = super().route(origin, destination, config)
+        direction_adjustment = max(destination.latitude - origin.latitude, 0.0)
+        return BackendRoute(
+            distance_nmi=result.distance_nmi + direction_adjustment,
+            geometry=result.geometry,
+        )
 
 
 def _port(identifier: str, latitude: float, longitude: float) -> Port:
@@ -131,6 +146,24 @@ def test_transient_backend_errors_use_exponential_backoff(monkeypatch) -> None:
     assert sleeps == pytest.approx([0.1, 0.2])
 
 
+@pytest.mark.parametrize(
+    ("attempts", "backoff"),
+    [
+        (9, 0.25),
+        (4, float("inf")),
+        (4, float("nan")),
+        (4, 8.01),
+    ],
+)
+def test_retry_configuration_has_hard_upper_bounds(attempts, backoff) -> None:
+    with pytest.raises(ValueError):
+        SeaRouter(
+            _routing_backend=DeterministicBackend(),
+            retry_attempts=attempts,
+            backoff_seconds=backoff,
+        )
+
+
 def test_distance_matrix_uses_process_workers_and_remains_symmetric(tmp_path) -> None:
     ports = [
         _port("A", 36.8, 34.65),
@@ -149,6 +182,18 @@ def test_distance_matrix_uses_process_workers_and_remains_symmetric(tmp_path) ->
         for row in range(4)
         for column in range(4)
     )
+
+
+def test_distance_matrix_calculates_both_directions_for_asymmetric_backend() -> None:
+    low = _port("LOW", 10.0, 20.0)
+    high = _port("HIGH", 12.0, 21.0)
+
+    matrix = SeaRouter(_routing_backend=AsymmetricBackend()).distance_matrix(
+        [low, high], max_workers=1
+    )
+
+    assert matrix[0][1] > matrix[1][0]
+    validate_distance_matrix(["LOW", "HIGH"], matrix)
 
 
 def test_sqlite_cache_handles_concurrent_process_writers(tmp_path) -> None:
@@ -195,6 +240,25 @@ def test_review_contract_rejects_invalid_rows() -> None:
         validate_review_decisions(
             pd.DataFrame([{"row_id": "", "chosen_registry_id": "WPI:1"}])
         )
+    with pytest.raises((pandera.errors.SchemaError, pandera.errors.SchemaErrors)):
+        validate_review_decisions(
+            pd.DataFrame([{"row_id": 1024, "chosen_registry_id": 77}])
+        )
+    with pytest.raises((pandera.errors.SchemaError, pandera.errors.SchemaErrors)):
+        validate_review_decisions(
+            pd.DataFrame([{"row_id": "   ", "chosen_registry_id": "WPI:1"}])
+        )
+
+
+def test_review_contract_preserves_leading_zero_ids() -> None:
+    frame = pd.DataFrame([{"row_id": "01024", "chosen_registry_id": "WPI:00077"}])
+
+    validated = validate_review_decisions(frame)
+
+    assert validated.iloc[0].to_dict() == {
+        "row_id": "01024",
+        "chosen_registry_id": "WPI:00077",
+    }
 
 
 def test_review_contract_allows_an_unresolved_row_without_candidates() -> None:

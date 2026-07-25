@@ -42,6 +42,9 @@ class _RoutingBackend(Protocol):
     @property
     def version(self) -> str: ...
 
+    @property
+    def symmetric(self) -> bool: ...
+
     def route(
         self,
         origin: LatLon,
@@ -60,6 +63,12 @@ class SeaRouteBackend:
     @property
     def version(self) -> str:
         return str(self._module().__version__)
+
+    @property
+    def symmetric(self) -> bool:
+        """The bundled searoute graph produces direction-independent distances."""
+
+        return True
 
     def route(
         self,

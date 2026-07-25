@@ -76,11 +76,11 @@ result with a tool such as `osmtogeojson` and save it as
 - License, per the package metadata: Apache-2.0.
 - Install: the `routing` extra.
 
-The searoute-py project builds realistic-looking routes for map display. It states that
-these routes are not for a mariner's use. sea-mile repeats that warning in every GeoJSON
-route. A sea-mile route does not account for draft, water depth, weather, a traffic
-separation scheme, a local notice, a vessel class, a port-entry rule, a closure, or a
-navigational hazard.
+The searoute-py project calculates approximate routes on a maritime graph. Its
+documentation states that these routes are not for a mariner's use. sea-mile repeats
+that warning in every GeoJSON route. A sea-mile route does not account for draft,
+water depth, weather, a traffic separation scheme, a local notice, a vessel class, a
+port-entry rule, a closure, or a navigational hazard.
 
 The searoute backend does not expose the graph nodes it uses when it snaps an endpoint
 to its routing network. sea-mile therefore does not report or estimate snapped

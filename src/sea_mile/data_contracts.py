@@ -8,29 +8,32 @@ import numpy as np
 import pandas as pd
 import pandera.pandas as pa
 
-_NON_EMPTY = pa.Check.str_length(min_value=1)
+_NON_EMPTY = pa.Check(lambda values: values.str.strip().str.len().ge(1))
+_REGISTRY_ID = pa.Check.str_matches(r"^[A-Z][A-Z0-9_]*:.+$")
 _LATITUDE = pa.Check.in_range(-90.0, 90.0)
 _LONGITUDE = pa.Check.in_range(-180.0, 180.0)
 
 REVIEW_SCHEMA = pa.DataFrameSchema(
     {
-        "row_id": pa.Column(str, _NON_EMPTY, nullable=False, coerce=True),
-        "input_name": pa.Column(str, nullable=False, coerce=True),
-        "input_country": pa.Column(str, nullable=False, coerce=True),
+        "row_id": pa.Column(str, _NON_EMPTY, nullable=False, coerce=False),
+        "input_name": pa.Column(str, nullable=False, coerce=False),
+        "input_country": pa.Column(str, nullable=False, coerce=False),
         "status": pa.Column(
             str,
             pa.Check.isin(["review_required", "unresolved"]),
             nullable=False,
-            coerce=True,
+            coerce=False,
         ),
-        "reason_code": pa.Column(str, _NON_EMPTY, nullable=False, coerce=True),
-        "candidate_registry_id": pa.Column(str, nullable=True, coerce=True),
-        "candidate_provider": pa.Column(str, nullable=True, coerce=True),
-        "candidate_name": pa.Column(str, nullable=True, coerce=True),
-        "candidate_country_code": pa.Column(str, nullable=True, coerce=True),
+        "reason_code": pa.Column(str, _NON_EMPTY, nullable=False, coerce=False),
+        "candidate_registry_id": pa.Column(
+            str, _REGISTRY_ID, nullable=True, coerce=False
+        ),
+        "candidate_provider": pa.Column(str, nullable=True, coerce=False),
+        "candidate_name": pa.Column(str, nullable=True, coerce=False),
+        "candidate_country_code": pa.Column(str, nullable=True, coerce=False),
         "candidate_latitude": pa.Column(float, _LATITUDE, nullable=True, coerce=True),
         "candidate_longitude": pa.Column(float, _LONGITUDE, nullable=True, coerce=True),
-        "candidate_unlocode": pa.Column(str, nullable=True, coerce=True),
+        "candidate_unlocode": pa.Column(str, nullable=True, coerce=False),
     },
     checks=pa.Check(
         lambda frame: (
@@ -45,8 +48,13 @@ REVIEW_SCHEMA = pa.DataFrameSchema(
 
 REVIEW_DECISIONS_SCHEMA = pa.DataFrameSchema(
     {
-        "row_id": pa.Column(str, _NON_EMPTY, nullable=False, unique=True, coerce=True),
-        "chosen_registry_id": pa.Column(str, _NON_EMPTY, nullable=False, coerce=True),
+        "row_id": pa.Column(str, _NON_EMPTY, nullable=False, unique=True, coerce=False),
+        "chosen_registry_id": pa.Column(
+            str,
+            [_NON_EMPTY, _REGISTRY_ID],
+            nullable=False,
+            coerce=False,
+        ),
     },
     strict=True,
     ordered=True,
@@ -55,8 +63,8 @@ REVIEW_DECISIONS_SCHEMA = pa.DataFrameSchema(
 
 MATRIX_EDGE_SCHEMA = pa.DataFrameSchema(
     {
-        "origin_id": pa.Column(str, _NON_EMPTY, nullable=False, coerce=True),
-        "destination_id": pa.Column(str, _NON_EMPTY, nullable=False, coerce=True),
+        "origin_id": pa.Column(str, _NON_EMPTY, nullable=False, coerce=False),
+        "destination_id": pa.Column(str, _NON_EMPTY, nullable=False, coerce=False),
         "distance_nmi": pa.Column(
             float,
             [pa.Check.ge(0.0), pa.Check(lambda values: np.isfinite(values))],
@@ -119,12 +127,10 @@ def validate_distance_matrix(
     )
     validated = MATRIX_EDGE_SCHEMA.validate(frame)
     values = np.asarray(matrix, dtype=float)
-    if not np.allclose(values, values.T) or not np.allclose(
-        np.diag(values), np.zeros(size)
-    ):
+    if not np.allclose(np.diag(values), np.zeros(size)):
         raise pa.errors.SchemaError(
             MATRIX_EDGE_SCHEMA,
             matrix,
-            "distance matrix must be symmetric with a zero diagonal",
+            "distance matrix must have a zero diagonal",
         )
     return validated

@@ -1368,7 +1368,7 @@ wheels = [
 
 [[package]]
 name = "sea-mile"
-version = "1.1.0"
+version = "1.1.1"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
@@ -1398,6 +1398,7 @@ tui = [
 dev = [
     { name = "hypothesis" },
     { name = "jsonschema" },
+    { name = "markdown-it-py" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "ruff" },
@@ -1422,6 +1423,7 @@ provides-extras = ["routing", "analysis", "fast", "tui"]
 dev = [
     { name = "hypothesis", specifier = ">=6.0" },
     { name = "jsonschema", specifier = ">=4.0" },
+    { name = "markdown-it-py", specifier = ">=4.0" },
     { name = "mypy", specifier = ">=2.3.0" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "ruff", specifier = ">=0.15.22" },

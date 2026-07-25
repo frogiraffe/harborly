@@ -95,6 +95,21 @@ def test_parser_skips_rows_with_unparsable_coordinates(tmp_path) -> None:
     assert registry["registry_id"].tolist() == ["GEONAMES:1"]
 
 
+def test_parser_skips_rows_with_out_of_bounds_coordinates(tmp_path) -> None:
+    archive_path = tmp_path / "sample.zip"
+    values = geonames_row("2", "Broken", "S", "PRT").split("\t")
+    values[4] = "999"
+    content = "\n".join([geonames_row("1", "Mersin", "S", "PRT"), "\t".join(values)])
+    with ZipFile(archive_path, "w") as archive:
+        archive.writestr("allCountries.txt", content)
+
+    registry, _ = load_geonames_port_archive(
+        archive_path, source_version="test-snapshot"
+    )
+
+    assert registry["registry_id"].tolist() == ["GEONAMES:1"]
+
+
 def test_archive_without_text_data_raises_registry_error(tmp_path) -> None:
     archive_path = tmp_path / "empty.zip"
     with ZipFile(archive_path, "w") as archive:

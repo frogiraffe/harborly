@@ -92,6 +92,15 @@ class RouteCache:
             else:
                 connection.commit()
 
+    def delete(self, cache_key: str) -> None:
+        """Remove a cached result that fails current validation rules."""
+
+        with self._connect() as connection:
+            connection.execute(
+                "DELETE FROM routes WHERE cache_key = ?",
+                (cache_key,),
+            )
+
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(
             self.path,

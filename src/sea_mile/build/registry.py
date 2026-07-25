@@ -124,7 +124,7 @@ def _split_aliases(value: object) -> list[str]:
 
 
 def _load_wpi(path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
-    raw = pd.read_csv(path, encoding="utf-8-sig", low_memory=False)
+    raw = pd.read_csv(path, encoding="utf-8-sig", low_memory=False, dtype=str)
     records: list[dict[str, object]] = []
     aliases: list[dict[str, str]] = []
     for row in raw.itertuples(index=False):

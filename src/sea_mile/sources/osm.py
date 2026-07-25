@@ -9,6 +9,7 @@ from pathlib import Path
 import pandas as pd
 
 from sea_mile.exceptions import RegistryDataError
+from sea_mile.geo import validate_coordinate
 from sea_mile.text import canonical_key, normalize_display_text
 
 _COUNTRY_KEYS = ("addr:country", "country", "ISO3166-1:alpha2", "is_in:country_code")
@@ -54,7 +55,11 @@ def _point(geometry: dict[str, object] | None) -> tuple[float, float] | None:
         latitude = float(coordinates[1])
     except (TypeError, ValueError):
         return None
-    if not isfinite(latitude) or not isfinite(longitude):
+    if (
+        not isfinite(latitude)
+        or not isfinite(longitude)
+        or not validate_coordinate(latitude, longitude).is_valid
+    ):
         return None
     return latitude, longitude
 

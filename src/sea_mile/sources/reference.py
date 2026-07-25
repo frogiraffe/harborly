@@ -23,6 +23,10 @@ def parse_wpi_dms(value: object) -> float | None:
     degrees = float(match.group("degrees"))
     minutes = float(match.group("minutes"))
     seconds = float(match.group("seconds"))
+    # WPI contains rounded values with 60 seconds. Keep that documented source
+    # convention, but reject larger seconds and all invalid minute values.
+    if minutes >= 60 or seconds > 60:
+        return None
     result = degrees + minutes / 60 + seconds / 3600
     direction = match.group("direction")
     if result > (90 if direction in {"N", "S"} else 180):
@@ -42,6 +46,8 @@ def parse_unlocode_coordinates(value: object) -> tuple[float, float] | None:
         return None
     lat_minutes = float(match.group("lat_minutes"))
     lon_minutes = float(match.group("lon_minutes"))
+    if lat_minutes >= 60 or lon_minutes >= 60:
+        return None
     latitude = float(match.group("lat_degrees")) + lat_minutes / 60
     longitude = float(match.group("lon_degrees")) + lon_minutes / 60
     if latitude > 90 or longitude > 180:

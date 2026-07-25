@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sea-mile"
-version = "1.1.0"
+version = "1.1.1"
 description = "Reproducible, source-aware port identity resolution with approximate sea-route distances"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -70,6 +70,7 @@ where = ["src"]
 dev = [
     "hypothesis>=6.0",
     "jsonschema>=4.0",
+    "markdown-it-py>=4.0",
     "mypy>=2.3.0",
     "pytest>=9.1.1",
     "ruff>=0.15.22",
