@@ -324,8 +324,17 @@ Folium preview. The route geometry crosses the visualization boundary as
 `LonLat(longitude, latitude)` before Folium receives its required latitude,
 longitude locations. Install the `map` and `routing` extras.
 
-The `tui` command displays search results in its existing Textual table and adds
-a Plotext coordinate map for the highlighted result. Install the `tui` extra.
+The `tui` command launches an interactive split-screen terminal UI built on
+Textual. The left pane shows a DataTable of search results; the right pane
+renders a braille world map with embedded NE 110m coastlines, port markers,
+and port clustering at low zoom levels.
+
+The UI supports vim-style modal navigation: press `Esc` to enter browse mode
+(pan, zoom, go-to-port shortcuts), then `i` to return to insert mode for
+search input. Viewport state (`zoom`, `center_lat`, `center_lon`) is managed
+by `BrailleWorldMap` in `sea_mile.tui.map_canvas`.
+
+Install the `tui` extra: `pip install sea-mile[tui]`.
 
 ## Coordinates and text helpers
 

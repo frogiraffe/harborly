@@ -103,7 +103,6 @@ class SeaMileTUI(App[None]):
     BINDINGS = [
         # Insert mode toggle
         Binding("escape", "enter_browse", "Browse mode"),
-        Binding("i", "enter_insert", "Insert mode", show=False),
         # Table navigation
         Binding("down", "browse_down", "Next"),
         Binding("up", "browse_up", "Prev"),
@@ -258,7 +257,7 @@ class SeaMileTUI(App[None]):
         if event.cursor_row is not None:
             self._show_map(event.cursor_row)
 
-    def on_braille_map_resized(self, event: BrailleMap.Resized) -> None:  # type: ignore[name-defined]
+    def on_braille_map_resized(self, event: BrailleMap.Resized) -> None:
         if not self._results:
             return
         table = self.query_one("#results", DataTable)

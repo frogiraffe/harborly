@@ -21,7 +21,6 @@ from sea_mile.tui.coastlines import load_coastlines
 _ANSI_RESET = "\033[0m"
 _ANSI_DIM_GRAY = "\033[90m"
 _ANSI_DIM_CYAN = "\033[36m"
-_ANSI_DIM_YELLOW = "\033[33m"
 _ANSI_BRIGHT_RED = "\033[91m"
 _ANSI_BOLD = "\033[1m"
 
