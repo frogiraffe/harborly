@@ -13,6 +13,19 @@ from sea_mile.geo import great_circle_nmi
 OFFICIAL_PROVIDERS = frozenset({"NGA_WPI", "UN_LOCODE"})
 
 
+@dataclass(frozen=True, slots=True)
+class MatchPolicy:
+    """Centralized configuration for matching thresholds and behavior."""
+
+    coordinate_agreement_nmi: float = 25.0
+    fuzzy_score_cutoff: float = 80.0
+    weak_fuzzy_cutoff: float = 55.0
+    max_strong_candidates: int = 5
+    max_weak_candidates: int = 3
+    require_country_review: bool = False
+    min_alias_length_ratio: float = 0.5
+
+
 class MatchStatus(StrEnum):
     AUTO_RESOLVED = "auto_resolved"
     REVIEW_REQUIRED = "review_required"
@@ -258,13 +271,20 @@ def _fuzzy_records(
 
 
 def generate_source_aware_candidates(
-    queries: pd.DataFrame, aliases: pd.DataFrame
+    queries: pd.DataFrame,
+    aliases: pd.DataFrame,
+    *,
+    policy: MatchPolicy | None = None,
 ) -> pd.DataFrame:
     """Generate official and GeoNames candidates without cross-source crowding.
 
     GeoNames is candidate evidence only. A GeoNames exact alias therefore must
     not suppress fuzzy WPI/UN/LOCODE candidate generation for the same query.
+    When *policy* is provided its thresholds replace the built-in defaults.
     """
+
+    if policy is None:
+        policy = MatchPolicy()
 
     valid_queries = queries[
         queries["country_code"].notna() & queries["destination_key"].ne("")
@@ -296,8 +316,8 @@ def generate_source_aware_candidates(
                 _fuzzy_records(
                     query_fields,
                     official_aliases.get(query.country_code, {}),
-                    score_cutoff=80,
-                    limit=5,
+                    score_cutoff=policy.fuzzy_score_cutoff,
+                    limit=policy.max_strong_candidates,
                     match_method="fuzzy_alias",
                 )
             )
@@ -306,8 +326,8 @@ def generate_source_aware_candidates(
                 _fuzzy_records(
                     query_fields,
                     geonames_aliases.get(query.country_code, {}),
-                    score_cutoff=80,
-                    limit=3,
+                    score_cutoff=policy.fuzzy_score_cutoff,
+                    limit=policy.max_weak_candidates,
                     match_method="fuzzy_alias",
                 )
             )
@@ -328,8 +348,8 @@ def generate_source_aware_candidates(
             _fuzzy_records(
                 query._asdict(),
                 official_aliases.get(query.country_code, {}),
-                score_cutoff=55,
-                limit=3,
+                score_cutoff=policy.weak_fuzzy_cutoff,
+                limit=policy.max_weak_candidates,
                 match_method="weak_fuzzy_review_only",
             )
         )

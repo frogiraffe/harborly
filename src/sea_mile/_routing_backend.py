@@ -3,10 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any, Protocol
 
 from sea_mile.coordinates import LatLon
 from sea_mile.exceptions import RoutingError, RoutingErrorReason
+
+
+class BackendErrorKind(StrEnum):
+    NETWORK = "network"
+    TIMEOUT = "timeout"
+    RATE_LIMIT = "rate_limit"
+    SERVER = "server"
+    UNKNOWN = "unknown"
 
 
 @dataclass(frozen=True, slots=True)

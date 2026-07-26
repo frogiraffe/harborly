@@ -7,6 +7,16 @@ from enum import StrEnum
 from math import isfinite
 
 
+@dataclass(frozen=True, slots=True)
+class RouteQualityPolicy:
+    """Centralized configuration for route quality thresholds."""
+
+    lower_bound_tolerance_nmi: float = 0.5
+    high_detour_ratio: float = 3.0
+    max_retry_attempts: int = 4
+    backoff_seconds: float = 0.25
+
+
 class RouteQualityFlag(StrEnum):
     OK = "ok"
     HIGH_DETOUR_RATIO = "high_detour_ratio"
@@ -28,10 +38,20 @@ def assess_route_length(
     sea_distance_nmi: float,
     great_circle_distance_nmi: float,
     *,
+    policy: RouteQualityPolicy | None = None,
     lower_bound_tolerance_nmi: float = 0.5,
     high_detour_ratio: float = 3.0,
 ) -> RouteAssessment:
-    """Check a sea-route result against basic physical plausibility rules."""
+    """Check a sea-route result against basic physical plausibility rules.
+
+    When *policy* is given, its thresholds take precedence over the explicit
+    keyword arguments.  The explicit kwargs still work and keep backward
+    compatibility.
+    """
+
+    if policy is not None:
+        lower_bound_tolerance_nmi = policy.lower_bound_tolerance_nmi
+        high_detour_ratio = policy.high_detour_ratio
 
     if not isfinite(sea_distance_nmi) or sea_distance_nmi < 0:
         return RouteAssessment(False, RouteQualityFlag.INVALID_ROUTE_DISTANCE, None)

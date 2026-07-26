@@ -13,6 +13,8 @@ _REGISTRY_ID = pa.Check.str_matches(r"^[A-Z][A-Z0-9_]*:.+$")
 _LATITUDE = pa.Check.in_range(-90.0, 90.0)
 _LONGITUDE = pa.Check.in_range(-180.0, 180.0)
 
+_REVIEW_STATUSES = ("review_required", "unresolved")
+
 REVIEW_SCHEMA = pa.DataFrameSchema(
     {
         "row_id": pa.Column(str, _NON_EMPTY, nullable=False, coerce=False),
@@ -20,7 +22,7 @@ REVIEW_SCHEMA = pa.DataFrameSchema(
         "input_country": pa.Column(str, nullable=False, coerce=False),
         "status": pa.Column(
             str,
-            pa.Check.isin(["review_required", "unresolved"]),
+            pa.Check.isin(_REVIEW_STATUSES),
             nullable=False,
             coerce=False,
         ),

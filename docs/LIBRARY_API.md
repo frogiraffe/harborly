@@ -8,7 +8,8 @@ searoute package.
 
 The stable top-level exports are the core types: `Port`, `PortGroup`, `PortRegistry`,
 `SeaRoute`, `SeaRouter`, `BatchMatchResult`, `MatchStatus`, `ConfidenceTier`,
-`MatchReason`, `RouteQualityFlag`, and the `SeaMileError` family (`RegistryDataError`,
+`MatchReason`, `MatchPolicy`, `RouteQualityFlag`, `RouteQualityPolicy`,
+`CanonicalEvidence`, `BackendErrorKind`, and the `SeaMileError` family (`RegistryDataError`,
 `SourceDataError`, `PortNotFoundError`, `AmbiguousPortError`, `PortCoordinateError`,
 `RoutingError`).
 
@@ -17,9 +18,10 @@ Lower-level APIs are imported from their defining modules:
 - `sea_mile.geo`: `validate_coordinate`, `CoordinateCheck`, `great_circle_nmi`.
 - `sea_mile.text`: `canonical_key`, `normalize_display_text`.
 - `sea_mile.sources`: `parse_wpi_dms`, `parse_unlocode_coordinates`.
-- `sea_mile.matching`: `decide_exact_match`, `ExactMatchDecision`, `MatchCandidate`.
+- `sea_mile.matching`: `decide_exact_match`, `ExactMatchDecision`, `MatchCandidate`, `MatchPolicy`, `generate_source_aware_candidates`.
 - `sea_mile.ports`: `PortSearchResult`, `NearbyPortResult`, `NearbyPortGroup`.
-- `sea_mile.canonical`: `assign_canonical_ids`.
+- `sea_mile.canonical`: `assign_canonical_ids`, `assign_canonical_ids_with_evidence`, `CanonicalEvidence`.
+- `sea_mile.routing`: `RouteQualityFlag`, `RouteQualityPolicy`, `assess_route_length`.
 - `sea_mile.build`: `build_reference_registry`, `download_reference_data`.
 
 ## Data lifecycle
@@ -205,6 +207,16 @@ candidate ID lists are already available.
 
 ### Matching pandas frames and large files
 
+`generate_source_aware_candidates` accepts an optional `MatchPolicy` to
+control fuzzy score cutoffs and candidate limits:
+
+```python
+from sea_mile.matching import generate_source_aware_candidates, MatchPolicy
+
+policy = MatchPolicy(fuzzy_score_cutoff=75, max_strong_candidates=10)
+candidates = generate_source_aware_candidates(queries, aliases, policy=policy)
+```
+
 `match_series` takes a pandas Series of names and returns the same `BatchMatchResult`
 list as `match_names`. It reads a missing cell as an empty name.
 
@@ -256,7 +268,17 @@ router.distance_matrix([origin, destination])
 ```
 
 The default settings use the searoute A* algorithm, the NetworkX backend, the
-`northwest` passage restriction, and explicit nautical-mile units. A `SeaRoute` holds:
+`northwest` passage restriction, and explicit nautical-mile units. Pass a
+`RouteQualityPolicy` to customise the plausibility thresholds:
+
+```python
+from sea_mile import SeaRouter, RouteQualityPolicy
+
+policy = RouteQualityPolicy(high_detour_ratio=2.5, lower_bound_tolerance_nmi=1.0)
+router = SeaRouter(quality_policy=policy)
+```
+
+A `SeaRoute` holds:
 
 - `distance_nmi` and `great_circle_nmi`.
 - `detour_ratio` and `quality_flag`.
@@ -291,7 +313,9 @@ points without a registry lookup. `route_many` routes a list of port pairs.
 `distance_matrix` returns the pairwise sea distance for a list of ports. The bundled
 searoute backend declares symmetric distances, so sea-mile calculates one route for
 each unordered pair. An internal backend that does not declare symmetry is calculated
-in both directions. Routing needs the `routing` extra. `SeaRouter` imports without it,
+in both directions. Each worker process runs an initializer that pre-imports the
+routing backend modules, so the first task in a worker does not pay the import cost.
+Routing needs the `routing` extra. `SeaRouter` imports without it,
 but a route call raises `ImportError` when it is missing.
 
 ## Optional service and visualizations
@@ -348,6 +372,15 @@ normalizes Unicode and whitespace but keeps accents. `parse_wpi_dms` and
 `None` for an out-of-range value or for an invalid minute or second component.
 WPI values with 60 seconds are accepted because the source uses that value for
 rounded coordinates.
+
+`assess_route_length` checks a sea-route result against physical plausibility
+rules. It accepts an optional `RouteQualityPolicy` to customise thresholds:
+
+```python
+from sea_mile.routing import assess_route_length, RouteQualityPolicy
+
+assessment = assess_route_length(400, 300, policy=RouteQualityPolicy(high_detour_ratio=2.0))
+```
 
 ## Error types
 

@@ -143,7 +143,9 @@ def test_transient_backend_errors_use_exponential_backoff(monkeypatch) -> None:
 
     assert result.distance_nmi > 0
     assert backend.calls == 3
-    assert sleeps == pytest.approx([0.1, 0.2])
+    assert len(sleeps) == 2
+    assert 0.05 <= sleeps[0] <= 0.15
+    assert 0.1 <= sleeps[1] <= 0.3
 
 
 @pytest.mark.parametrize(

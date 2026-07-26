@@ -8,8 +8,11 @@ import sea_mile
 
 _CORE = {
     "AmbiguousPortError",
+    "BackendErrorKind",
     "BatchMatchResult",
+    "CanonicalEvidence",
     "ConfidenceTier",
+    "MatchPolicy",
     "MatchReason",
     "MatchStatus",
     "Port",
@@ -19,6 +22,7 @@ _CORE = {
     "PortRegistry",
     "RegistryDataError",
     "RouteQualityFlag",
+    "RouteQualityPolicy",
     "RoutingError",
     "SeaMileError",
     "SeaRoute",

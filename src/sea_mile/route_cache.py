@@ -39,6 +39,7 @@ class RouteCache:
         config: RoutingConfig,
         engine: str,
         engine_version: str,
+        graph_version: str = "",
     ) -> str:
         """Build a stable, direction-sensitive key for effective route inputs."""
 
@@ -49,6 +50,7 @@ class RouteCache:
             "config": config.to_dict(),
             "engine": engine,
             "engine_version": engine_version,
+            "graph_version": graph_version,
         }
         encoded = json.dumps(
             payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True
@@ -63,10 +65,20 @@ class RouteCache:
             ).fetchone()
         if row is None:
             return None
-        geometry = json.loads(str(row[1]))
-        if not isinstance(geometry, dict):
+        try:
+            geometry = json.loads(str(row[1]))
+        except (json.JSONDecodeError, TypeError):
+            self.delete(cache_key)
             return None
-        return BackendRoute(distance_nmi=float(row[0]), geometry=geometry)
+        if not isinstance(geometry, dict):
+            self.delete(cache_key)
+            return None
+        try:
+            distance = float(row[0])
+        except (TypeError, ValueError):
+            self.delete(cache_key)
+            return None
+        return BackendRoute(distance_nmi=distance, geometry=geometry)
 
     def put(self, cache_key: str, result: BackendRoute) -> None:
         geometry_json = json.dumps(
@@ -111,3 +123,9 @@ class RouteCache:
         connection.execute("PRAGMA busy_timeout=30000")
         connection.execute("PRAGMA synchronous=NORMAL")
         return connection
+
+    def __enter__(self) -> RouteCache:
+        return self
+
+    def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
+        pass

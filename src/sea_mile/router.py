@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import multiprocessing
 import os
+import random
 import time
 from collections.abc import Iterable, Sequence
 from concurrent.futures import ProcessPoolExecutor
@@ -31,7 +32,7 @@ from sea_mile.exceptions import (
 from sea_mile.geo import great_circle_nmi, validate_coordinate
 from sea_mile.ports import Port, PortRegistry
 from sea_mile.route_cache import RouteCache
-from sea_mile.routing import RouteQualityFlag, assess_route_length
+from sea_mile.routing import RouteQualityFlag, RouteQualityPolicy, assess_route_length
 
 _DEFAULT_RETRY_ATTEMPTS = 4
 _DEFAULT_BACKOFF_SECONDS = 0.25
@@ -112,6 +113,7 @@ def _matrix_route(
         _RoutingBackend,
         int,
         float,
+        RouteQualityPolicy | None,
     ],
 ) -> tuple[int, int, float]:
     """Calculate one matrix edge in an isolated worker process."""
@@ -128,6 +130,7 @@ def _matrix_route(
         routing_backend,
         retry_attempts,
         backoff_seconds,
+        quality_policy,
     ) = task
     router = SeaRouter(
         algorithm=algorithm,
@@ -136,9 +139,19 @@ def _matrix_route(
         cache_path=cache_path,
         retry_attempts=retry_attempts,
         backoff_seconds=backoff_seconds,
+        quality_policy=quality_policy,
         _routing_backend=routing_backend,
     )
     return row, column, router.route(origin, destination).distance_nmi
+
+
+def _worker_initializer() -> None:
+    """Pre-import heavy dependencies in each worker process.
+
+    Called once per worker before any tasks execute.  This avoids repeated
+    module-level imports inside ``SeaRouter`` construction across many tasks.
+    """
+    import sea_mile._routing_backend  # noqa: F401, PLC0415
 
 
 def _is_transient_backend_error(error: BaseException) -> bool:
@@ -178,6 +191,7 @@ class SeaRouter:
         cache_path: str | Path | None = None,
         retry_attempts: int = _DEFAULT_RETRY_ATTEMPTS,
         backoff_seconds: float = _DEFAULT_BACKOFF_SECONDS,
+        quality_policy: RouteQualityPolicy | None = None,
         _routing_backend: _RoutingBackend | None = None,
     ) -> None:
         if retry_attempts < 1:
@@ -199,6 +213,7 @@ class SeaRouter:
         self._backend: _RoutingBackend = (
             _routing_backend if _routing_backend is not None else SeaRouteBackend()
         )
+        self._quality_policy = quality_policy
         self._persistent_cache = RouteCache(cache_path) if cache_path else None
         # Memoized per instance, keyed on the ports and the config, so a
         # repeated pair in a batch skips recomputation.
@@ -240,7 +255,11 @@ class SeaRouter:
             ) from error
         try:
             self._validate_geometry(result.geometry)
-            assessment = assess_route_length(result.distance_nmi, great_circle)
+            assessment = assess_route_length(
+                result.distance_nmi,
+                great_circle,
+                policy=self._quality_policy,
+            )
             if not assessment.is_valid:
                 raise RoutingError(
                     f"route failed the plausibility check: {assessment.flag}",
@@ -355,12 +374,12 @@ class SeaRouter:
                 final_attempt = attempt + 1 == self.retry_attempts
                 if final_attempt or not _is_transient_backend_error(error):
                     raise
-                time.sleep(
-                    min(
-                        self.backoff_seconds * (2**attempt),
-                        _MAX_BACKOFF_SECONDS,
-                    )
+                base_wait = min(
+                    self.backoff_seconds * (2**attempt),
+                    _MAX_BACKOFF_SECONDS,
                 )
+                jittered = base_wait * (0.5 + random.random())
+                time.sleep(jittered)
         raise AssertionError("retry loop exhausted without returning or raising")
 
     def route_ids(
@@ -451,12 +470,14 @@ class SeaRouter:
                     self._backend,
                     self.retry_attempts,
                     self.backoff_seconds,
+                    self._quality_policy,
                 )
                 for row, column in pairs
             )
             with ProcessPoolExecutor(
                 max_workers=workers,
                 mp_context=multiprocessing.get_context("spawn"),
+                initializer=_worker_initializer,
             ) as executor:
                 results = list(executor.map(_matrix_route, tasks))
         for row, column, distance in results:

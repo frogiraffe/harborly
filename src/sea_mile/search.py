@@ -11,6 +11,7 @@ from rapidfuzz import fuzz, process
 from sea_mile.text import canonical_key
 
 _MIN_FUZZY_QUERY_LENGTH = 3
+_MIN_GLOBAL_FUZZY_QUERY_LENGTH = 4
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,6 +76,9 @@ class AliasSearchIndex:
         if not fuzzy_enabled or not distinct_keys:
             return AliasCandidates(empty, empty.copy(), empty.copy())
 
+        min_fuzzy_len = (
+            _MIN_FUZZY_QUERY_LENGTH if country else _MIN_GLOBAL_FUZZY_QUERY_LENGTH
+        )
         prefix_keys = [key for key in distinct_keys if key.startswith(query_key)]
         prefix = self._for_keys(prefix_keys, country)
         if not prefix.empty:
@@ -82,7 +86,7 @@ class AliasSearchIndex:
             prefix["name_score"] = 95.0
 
         fuzzy = empty.copy()
-        if len(query_key) >= _MIN_FUZZY_QUERY_LENGTH:
+        if len(query_key) >= min_fuzzy_len:
             minimum_length = -(-len(query_key) // 2)
             prefix_set = set(prefix_keys)
             candidate_keys = [

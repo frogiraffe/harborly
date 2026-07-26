@@ -2,6 +2,8 @@
 
 from typing import TYPE_CHECKING
 
+from ._routing_backend import BackendErrorKind
+from .canonical import CanonicalEvidence
 from .exceptions import (
     AmbiguousPortError,
     PortCoordinateError,
@@ -14,11 +16,12 @@ from .exceptions import (
 from .matching import (
     BatchMatchResult,
     ConfidenceTier,
+    MatchPolicy,
     MatchReason,
     MatchStatus,
 )
 from .ports import Port, PortGroup, PortRegistry
-from .routing import RouteQualityFlag
+from .routing import RouteQualityFlag, RouteQualityPolicy
 
 if TYPE_CHECKING:
     from .router import SeaRoute, SeaRouter
@@ -47,8 +50,11 @@ def __dir__() -> list[str]:
 
 __all__ = [
     "AmbiguousPortError",
+    "BackendErrorKind",
     "BatchMatchResult",
+    "CanonicalEvidence",
     "ConfidenceTier",
+    "MatchPolicy",
     "MatchReason",
     "MatchStatus",
     "Port",
@@ -58,6 +64,7 @@ __all__ = [
     "PortRegistry",
     "RegistryDataError",
     "RouteQualityFlag",
+    "RouteQualityPolicy",
     "RoutingError",
     "SeaMileError",
     "SeaRoute",
