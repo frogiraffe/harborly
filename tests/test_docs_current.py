@@ -78,9 +78,10 @@ def _subcommands(parser: argparse.ArgumentParser) -> dict[str, argparse.Argument
 def test_only_json_emitting_commands_accept_the_json_flag() -> None:
     commands = _subcommands(_parser())
 
-    # export selects output with --format, and tui is interactive.
+    # export selects output with --format; tui and serve are interactive.
     assert not _has_json_option(commands["export"])
     assert not _has_json_option(commands["tui"])
+    assert not _has_json_option(commands["serve"])
 
     for name in ("info", "search", "show", "near", "match", "route", "matrix"):
         assert _has_json_option(commands[name]), name

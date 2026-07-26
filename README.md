@@ -77,10 +77,16 @@ Install the complete CLI with routing:
 uv tool install 'sea-mile[routing]'
 ```
 
+Add `api`, `map`, or `tui` to install the optional server and visualizations:
+
+```bash
+uv tool install 'sea-mile[routing,api,map,tui]'
+```
+
 For a source checkout:
 
 ```bash
-uv sync --dev --extra analysis --extra fast --extra routing --extra tui
+uv sync --dev --extra analysis --extra api --extra fast --extra map --extra routing --extra tui
 uv run sea-mile info
 ```
 
@@ -126,7 +132,8 @@ See [Library API](docs/LIBRARY_API.md), [API compatibility](docs/API_COMPATIBILI
 | `matrix` | Calculate a process-parallel distance matrix |
 | `match` | Match CSV rows and emit review data |
 | `export` | Export CSV or GeoJSON |
-| `tui` | Launch the interactive terminal UI |
+| `tui` | Launch the interactive terminal search and map |
+| `serve` | Serve bundled port routes over HTTP |
 | `data download` | Download source snapshots |
 | `data build` | Build the normalized registry |
 | `data prepare` | Download and build source data |
@@ -137,11 +144,16 @@ See [Library API](docs/LIBRARY_API.md), [API compatibility](docs/API_COMPATIBILI
 sea-mile search Mersin --country TR
 sea-mile show TRMER
 sea-mile near 39.87 26.16 --country TR --limit 5
-sea-mile route TRMER GRPIR --geojson route.geojson
+sea-mile route TRMER GRPIR --geojson route.geojson --html-map route.html
 sea-mile matrix TRMER GRPIR TRIST --cache .cache/routes.sqlite3
 sea-mile export --country TR --format geojson --output tr.geojson
 sea-mile match ports.csv --country-column country
+sea-mile serve --host 127.0.0.1 --port 8000
 ```
+
+The server exposes
+`GET /route?origin=TRMER&destination=GRPIR`. It uses the bundled registry and
+returns `distance_nmi` together with a GeoJSON route feature.
 
 The registry lookup order is `--data-dir`, `SEA_MILE_DATA_DIR`, the checkout's
 `data/reference/processed`, then the bundled artifact.

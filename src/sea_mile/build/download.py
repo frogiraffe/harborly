@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sys
 import threading
 from datetime import UTC, datetime
@@ -22,19 +23,28 @@ from tenacity import (
 from sea_mile.exceptions import SourceDataError
 
 WPI_URL = "https://msi.nga.mil/api/publications/world-port-index?output=csv"
+# Kept as compatibility aliases for callers that imported the previously pinned
+# release. Downloads now discover the current official release from
+# UNLOCODE_RELEASES_URL instead of using these values.
 UNLOCODE_RELEASE = "2025-1"
 UNLOCODE_URL = (
     "https://opensource.unicc.org/un/unece/uncefact/vocab-locode/-/jobs/"
     "artifacts/2025-1/download?job=package-release"
 )
+UNLOCODE_RELEASES_URL = (
+    "https://opensource.unicc.org/api/v4/projects/"
+    "un%2Funece%2Funcefact%2Fvocab-locode/releases/permalink/latest"
+)
+_UNLOCODE_ARTIFACT_URL = (
+    "https://opensource.unicc.org/un/unece/uncefact/vocab-locode/-/jobs/"
+    "artifacts/{release}/download?job=package-release"
+)
 GEONAMES_URL = "https://download.geonames.org/export/dump/allCountries.zip"
 
 _MIB = 1024 * 1024
-_MAX_DOWNLOAD_BYTES = {
-    WPI_URL: 64 * _MIB,
-    UNLOCODE_URL: 256 * _MIB,
-    GEONAMES_URL: 1024 * _MIB,
-}
+_WPI_MAX_DOWNLOAD_BYTES = 64 * _MIB
+_UNLOCODE_MAX_DOWNLOAD_BYTES = 256 * _MIB
+_GEONAMES_MAX_DOWNLOAD_BYTES = 1024 * _MIB
 
 _PROGRESS_STEP_BYTES = 8 * 1024 * 1024
 
@@ -115,6 +125,29 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _unlocode_artifact_url(release: str) -> str:
+    return _UNLOCODE_ARTIFACT_URL.format(release=release)
+
+
+def _discover_latest_unlocode_release(client: httpx.Client) -> str:
+    """Return the newest official UN/LOCODE release tag from GitLab."""
+
+    try:
+        payload = _fetch_latest_unlocode_release(client)
+    except (httpx.HTTPError, TimeoutError, ValueError) as error:
+        raise SourceDataError(
+            f"could not discover the latest UN/LOCODE release: {error}"
+        ) from error
+
+    release = payload.get("tag_name") if isinstance(payload, dict) else None
+    if not isinstance(release, str) or re.fullmatch(r"\d{4}-[1-9]\d*", release) is None:
+        raise SourceDataError(
+            "could not discover the latest UN/LOCODE release: "
+            "GitLab returned an invalid release tag"
+        )
+    return release
+
+
 def _send_with_deadline(client: httpx.Client, url: str) -> httpx.Response:
     request = client.build_request("GET", url)
     response: httpx.Response | None = None
@@ -142,6 +175,22 @@ def _send_with_deadline(client: httpx.Client, url: str) -> httpx.Response:
         raise error
     assert response is not None
     return response
+
+
+@retry(
+    retry=retry_if_exception(_is_retryable_download_error),
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=1, min=2, max=16),
+    reraise=True,
+)
+def _fetch_latest_unlocode_release(client: httpx.Client) -> object:
+    response = _send_with_deadline(client, UNLOCODE_RELEASES_URL)
+    try:
+        response.raise_for_status()
+        response.read()
+        return response.json()
+    finally:
+        response.close()
 
 
 def _chunk_ranges(total: int, chunk_bytes: int) -> list[tuple[int, int]]:
@@ -350,6 +399,16 @@ def _newest_snapshot(raw_root: Path, provider: str, filename: str) -> Path | Non
     return candidates[0] if candidates else None
 
 
+def _newest_unlocode_snapshot(raw_root: Path) -> Path | None:
+    candidates: list[tuple[tuple[int, int], Path]] = []
+    for path in (raw_root / "unlocode").glob("*/unlocode-*-artifacts.zip"):
+        release = path.parent.name
+        match = re.fullmatch(r"(\d{4})-([1-9]\d*)", release)
+        if match is not None and path.name == f"unlocode-{release}-artifacts.zip":
+            candidates.append(((int(match[1]), int(match[2])), path))
+    return max(candidates, key=lambda item: item[0])[1] if candidates else None
+
+
 def _snapshot_target(
     raw_root: Path,
     provider: str,
@@ -409,40 +468,65 @@ def download_reference_data(
     wpi_path = _snapshot_target(
         raw_root, "wpi", "UpdatedPub150.csv", label, refresh, explicit_label
     )
-    unlocode_path = (
-        raw_root
-        / "unlocode"
-        / UNLOCODE_RELEASE
-        / f"unlocode-{UNLOCODE_RELEASE}-artifacts.zip"
-    )
     geonames_path = _snapshot_target(
         raw_root, "geonames", "allCountries.zip", label, refresh, explicit_label
     )
-    downloads = [
-        (url, path, _MAX_DOWNLOAD_BYTES[url])
-        for url, path in (
-            (WPI_URL, wpi_path),
-            (UNLOCODE_URL, unlocode_path),
-            (GEONAMES_URL, geonames_path),
-        )
-        if refresh or not path.exists()
-    ]
+    unlocode_path = None if refresh else _newest_unlocode_snapshot(raw_root)
+    unlocode_release = unlocode_path.parent.name if unlocode_path is not None else None
     headers = {"User-Agent": _user_agent()}
-    if downloads:
+    downloaded: set[Path] = set()
+    needs_network = (
+        refresh
+        or not wpi_path.exists()
+        or unlocode_path is None
+        or not geonames_path.exists()
+    )
+    if needs_network:
         try:
             with httpx.Client(
                 follow_redirects=True,
                 timeout=httpx.Timeout(10.0, read=30.0),
                 headers=headers,
             ) as client:
+                if unlocode_path is None:
+                    unlocode_release = _discover_latest_unlocode_release(client)
+                    unlocode_path = (
+                        raw_root
+                        / "unlocode"
+                        / unlocode_release
+                        / f"unlocode-{unlocode_release}-artifacts.zip"
+                    )
+                if unlocode_path is None or unlocode_release is None:
+                    raise SourceDataError("no UN/LOCODE snapshot could be selected")
+                unlocode_url = _unlocode_artifact_url(unlocode_release)
+                downloads = [
+                    (url, path, max_bytes)
+                    for url, path, max_bytes in (
+                        (WPI_URL, wpi_path, _WPI_MAX_DOWNLOAD_BYTES),
+                        (
+                            unlocode_url,
+                            unlocode_path,
+                            _UNLOCODE_MAX_DOWNLOAD_BYTES,
+                        ),
+                        (
+                            GEONAMES_URL,
+                            geonames_path,
+                            _GEONAMES_MAX_DOWNLOAD_BYTES,
+                        ),
+                    )
+                    if refresh or not path.exists()
+                ]
                 for url, path, max_bytes in downloads:
                     _download(client, url, path, max_bytes=max_bytes)
-        except (httpx.HTTPError, OSError) as error:
+                downloaded = {path for _, path, _ in downloads}
+        except (httpx.HTTPError, OSError, TimeoutError) as error:
             raise SourceDataError(
                 f"public reference download failed: {error}"
             ) from error
 
-    downloaded = {path for _, path, _ in downloads}
+    if unlocode_path is None or unlocode_release is None:
+        raise SourceDataError("no UN/LOCODE snapshot could be selected")
+    unlocode_url = _unlocode_artifact_url(unlocode_release)
     prior_sources: dict[str, object] = {}
     manifest_path = reference_root / "manifest.json"
     if manifest_path.exists():
@@ -466,8 +550,8 @@ def download_reference_data(
             },
             "unlocode": {
                 "publisher": "United Nations Economic Commission for Europe",
-                "url": UNLOCODE_URL,
-                "release": UNLOCODE_RELEASE,
+                "url": unlocode_url,
+                "release": unlocode_release,
                 "path": unlocode_path.relative_to(reference_root).as_posix(),
                 "sha256": _checksum(
                     reference_root,

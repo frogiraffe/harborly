@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 pytest.importorskip("textual", reason="tests the optional 'tui' extra")
+pytest.importorskip("plotext", reason="tests the optional 'tui' extra")
 
 from test_ports import alias_frame, registry_frame  # noqa: E402
 from textual.widgets import DataTable, Static  # noqa: E402
@@ -18,6 +19,10 @@ def anyio_backend() -> str:
 
 def _detail_text(app: SeaMileTUI) -> str | None:
     return getattr(app.query_one("#detail", Static), "_Static__content", None)
+
+
+def _map_text(app: SeaMileTUI) -> str:
+    return str(getattr(app.query_one("#map", Static), "_Static__content", ""))
 
 
 async def _type(pilot, text: str) -> None:
@@ -41,6 +46,38 @@ async def test_typing_populates_results_and_detail() -> None:
         assert table.row_count == 1
         assert _detail_text(app) is not None
         assert "Mersin" in _detail_text(app)
+        assert "Search result coordinates" in _map_text(app)
+
+
+@pytest.mark.anyio
+async def test_map_uses_widget_size_and_rerenders_after_resize(monkeypatch) -> None:
+    calls: list[tuple[int, int]] = []
+
+    def render(groups, *, selected, width, height):
+        calls.append((width, height))
+        return "map"
+
+    monkeypatch.setattr("sea_mile.tui.render_port_map", render)
+    registry = PortRegistry(registry_frame(), alias_frame())
+    app = SeaMileTUI(registry)
+    async with app.run_test(size=(80, 24)) as pilot:
+        await _type(pilot, "Mersin")
+
+        map_widget = app.query_one("#map", Static)
+        assert calls[-1] == (
+            map_widget.content_size.width,
+            map_widget.content_size.height,
+        )
+
+        before = calls[-1]
+        await pilot.resize_terminal(120, 40)
+        await pilot.pause()
+
+        assert calls[-1] != before
+        assert calls[-1] == (
+            map_widget.content_size.width,
+            map_widget.content_size.height,
+        )
 
 
 @pytest.mark.anyio

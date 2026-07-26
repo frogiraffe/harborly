@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import csv
 import json
+import sys
 
 import pandas as pd
 import pytest
 
+import sea_mile
 from sea_mile.cli import main
 
 
@@ -263,6 +265,96 @@ def test_route_can_write_geojson(tmp_path, capsys) -> None:
     feature = json.loads(output.read_text())
     assert summary["distance_nmi"] > 0
     assert feature["properties"]["routing_units"] == "nautical_miles"
+
+
+def test_route_can_write_html_map(tmp_path, capsys) -> None:
+    pytest.importorskip("folium", reason="HTML maps need the map extra")
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+    output = tmp_path / "route.html"
+
+    status = main(
+        [
+            "--data-dir",
+            str(data_directory),
+            "route",
+            "TRMER",
+            "GRPIR",
+            "--html-map",
+            str(output),
+        ]
+    )
+
+    assert status == 0
+    assert "html_map:" in capsys.readouterr().out
+    assert "leaflet" in output.read_text(encoding="utf-8").lower()
+
+
+def test_route_html_map_reports_missing_extra(tmp_path, capsys, monkeypatch) -> None:
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+    monkeypatch.setitem(sys.modules, "sea_mile.html_map", None)
+    monkeypatch.setattr(
+        "sea_mile.router.SeaRouter.route",
+        lambda *args, **kwargs: pytest.fail("route should not be calculated"),
+    )
+    geojson = tmp_path / "route.geojson"
+
+    status = main(
+        [
+            "--data-dir",
+            str(data_directory),
+            "route",
+            "TRMER",
+            "GRPIR",
+            "--html-map",
+            str(tmp_path / "route.html"),
+            "--geojson",
+            str(geojson),
+            "--json",
+        ]
+    )
+
+    assert status == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "sea-mile[map]" in captured.err
+    assert not geojson.exists()
+
+
+def test_serve_delegates_to_optional_api(monkeypatch) -> None:
+    calls: list[tuple[str, int]] = []
+
+    monkeypatch.setattr(
+        "sea_mile.api.run_server",
+        lambda *, host, port: calls.append((host, port)),
+    )
+
+    status = main(["serve", "--host", "0.0.0.0", "--port", "9000"])
+
+    assert status == 0
+    assert calls == [("0.0.0.0", 9000)]
+
+
+def test_serve_reports_missing_extra(capsys, monkeypatch) -> None:
+    monkeypatch.setitem(sys.modules, "sea_mile.api", None)
+
+    status = main(["serve"])
+
+    assert status == 2
+    assert "sea-mile[api]" in capsys.readouterr().err
+
+
+def test_tui_reports_missing_extra(tmp_path, capsys, monkeypatch) -> None:
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+    monkeypatch.delattr(sea_mile, "tui", raising=False)
+    monkeypatch.setitem(sys.modules, "sea_mile.tui", None)
+
+    status = main(["--data-dir", str(data_directory), "tui"])
+
+    assert status == 2
+    assert "sea-mile[tui]" in capsys.readouterr().err
 
 
 def test_route_json_error_carries_a_stable_reason(

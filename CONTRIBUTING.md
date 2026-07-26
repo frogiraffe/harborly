@@ -3,7 +3,7 @@
 ## Environment
 
 ```bash
-uv sync --dev --extra analysis --extra fast --extra routing --extra tui
+uv sync --dev --extra analysis --extra api --extra fast --extra map --extra routing --extra tui
 ```
 
 ## Validation

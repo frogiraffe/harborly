@@ -3,17 +3,29 @@
 from __future__ import annotations
 
 from rich.markup import escape
+from rich.text import Text
 from textual import work
 from textual.app import App, ComposeResult
-from textual.containers import Horizontal
+from textual.containers import Horizontal, Vertical
+from textual.events import Resize
+from textual.message import Message
 from textual.timer import Timer
 from textual.widgets import DataTable, Footer, Header, Input, Static
 
 from sea_mile.ports import Port, PortGroup, PortRegistry, source_short_label
+from sea_mile.terminal_map import render_port_map
 
 _RESULT_COLUMNS = ("Name", "Country", "UN/LOCODE", "Sources", "Coord")
 _SEARCH_DEBOUNCE_SECONDS = 0.15
 _SEARCH_RESULT_LIMIT = 60
+
+
+class PortMap(Static):
+    class Resized(Message):
+        pass
+
+    def on_resize(self, event: Resize) -> None:
+        self.post_message(self.Resized())
 
 
 def _member_lines(port: Port) -> list[str]:
@@ -62,15 +74,23 @@ class SeaMileTUI(App[None]):
         height: 1fr;
     }
     #results {
-        width: 68%;
+        width: 62%;
+        height: 100%;
+    }
+    #side {
+        width: 38%;
         height: 100%;
     }
     #detail {
-        width: 32%;
-        height: 100%;
+        height: 55%;
         border: solid $accent;
         padding: 1 2;
         overflow-y: auto;
+    }
+    #map {
+        height: 45%;
+        border: solid $accent;
+        overflow: hidden;
     }
     """
 
@@ -94,7 +114,9 @@ class SeaMileTUI(App[None]):
         yield Input(placeholder="Search a port name or UN/LOCODE code...", id="query")
         with Horizontal(id="body"):
             yield DataTable(id="results", cursor_type="row")
-            yield Static(id="detail", markup=True)
+            with Vertical(id="side"):
+                yield Static(id="detail", markup=True)
+                yield PortMap(id="map", markup=False)
         yield Footer()
 
     def on_mount(self) -> None:
@@ -106,6 +128,7 @@ class SeaMileTUI(App[None]):
         )
         self.sub_title = self._base_sub_title
         self.query_one("#detail", Static).update("Type to search.")
+        self.query_one("#map", Static).update("Search results will appear here.")
         self.query_one(Input).focus()
 
     def on_input_changed(self, event: Input.Changed) -> None:
@@ -163,10 +186,20 @@ class SeaMileTUI(App[None]):
             self.query_one("#detail", Static).update(
                 "No matches." if query else "Type to search."
             )
+            self.query_one("#map", Static).update(
+                "No coordinates." if query else "Search results will appear here."
+            )
 
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         if event.cursor_row is not None:
             self._show_detail(event.cursor_row)
+
+    def on_port_map_resized(self, event: PortMap.Resized) -> None:
+        if not self._results:
+            return
+        table = self.query_one("#results", DataTable)
+        if table.cursor_row is not None:
+            self._show_map(table.cursor_row)
 
     def action_browse_down(self) -> None:
         if self._results:
@@ -181,6 +214,20 @@ class SeaMileTUI(App[None]):
             return
         group = self._results[index]
         self.query_one("#detail", Static).update("\n".join(_detail_lines(group)))
+        self._show_map(index)
+
+    def _show_map(self, index: int) -> None:
+        widget = self.query_one("#map", Static)
+        if widget.content_size.width < 10 or widget.content_size.height < 3:
+            widget.update("Terminal too small for map.")
+            return
+        terminal_map = render_port_map(
+            self._results,
+            selected=index,
+            width=widget.content_size.width,
+            height=widget.content_size.height,
+        )
+        widget.update(Text.from_ansi(terminal_map))
 
 
 def run(registry: PortRegistry) -> None:

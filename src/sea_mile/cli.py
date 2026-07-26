@@ -11,10 +11,10 @@ import logging
 import os
 import sys
 from collections import Counter
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from sea_mile.exceptions import SeaMileError, SourceDataError
 from sea_mile.matching import BatchMatchResult, MatchReason, MatchStatus
@@ -29,6 +29,9 @@ from sea_mile.ports import (
 )
 
 logger = logging.getLogger("sea_mile")
+
+if TYPE_CHECKING:
+    from sea_mile.router import SeaRoute
 
 _PORT_FIELDS = [field.name for field in dataclasses.fields(Port)]
 
@@ -340,6 +343,19 @@ def _cmd_near(args: argparse.Namespace) -> int:
 def _cmd_route(args: argparse.Namespace) -> int:
     from sea_mile.router import SeaRouter
 
+    html_map_writer: Callable[[SeaRoute, Path], None] | None = None
+    if args.html_map:
+        try:
+            from sea_mile.html_map import write_route_html
+        except ImportError:
+            print(
+                "sea-mile: error: --html-map needs the 'map' extra "
+                "(pip install 'sea-mile[map]' or uv sync --extra map)",
+                file=sys.stderr,
+            )
+            return 2
+        html_map_writer = write_route_html
+
     registry = _load_registry(args)
     origin = _endpoint_port(registry, args.origin, args.origin_country)
     destination = _endpoint_port(registry, args.destination, args.destination_country)
@@ -373,6 +389,10 @@ def _cmd_route(args: argparse.Namespace) -> int:
         )
         if not args.json:
             print(f"geojson: {args.geojson}")
+    if args.html_map and html_map_writer is not None:
+        html_map_writer(result, args.html_map)
+        if not args.json:
+            print(f"html_map: {args.html_map}")
     return 0
 
 
@@ -742,6 +762,20 @@ def _cmd_tui(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_serve(args: argparse.Namespace) -> int:
+    try:
+        from sea_mile.api import run_server
+    except ImportError:
+        print(
+            "sea-mile: error: the serve command needs the 'api' extra "
+            "(pip install 'sea-mile[api]' or uv sync --extra api)",
+            file=sys.stderr,
+        )
+        return 2
+    run_server(host=args.host, port=args.port)
+    return 0
+
+
 def _print_download_manifest(manifest: dict[str, Any]) -> None:
     print(f"retrieved_at_utc: {manifest['retrieved_at_utc']}")
     for source, details in manifest["sources"].items():
@@ -872,9 +906,17 @@ def _parser() -> argparse.ArgumentParser:
 
     tui = subparsers.add_parser(
         "tui",
-        help="launch an interactive terminal port search (needs the tui extra)",
+        help="launch an interactive terminal port map (needs the tui extra)",
     )
     tui.set_defaults(func=_cmd_tui)
+
+    serve = subparsers.add_parser(
+        "serve",
+        help="serve bundled port routes over HTTP (needs the api and routing extras)",
+    )
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", type=int, default=8000)
+    serve.set_defaults(func=_cmd_serve)
 
     search = subparsers.add_parser(
         "search", parents=[common], help="search port names and aliases"
@@ -964,6 +1006,11 @@ def _parser() -> argparse.ArgumentParser:
         "--geojson", type=Path, help="write the route as a GeoJSON Feature"
     )
     route.add_argument(
+        "--html-map",
+        type=Path,
+        help="write an interactive route map (needs the map extra)",
+    )
+    route.add_argument(
         "--cache",
         type=Path,
         help="persist routing results in this SQLite cache",
@@ -1050,7 +1097,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             level=logging.INFO, format="%(levelname)s %(name)s: %(message)s"
         )
     try:
-        return args.func(args)
+        command = cast(Callable[[argparse.Namespace], int], args.func)
+        return command(args)
     except KeyboardInterrupt:
         print("sea-mile: interrupted", file=sys.stderr)
         return 130

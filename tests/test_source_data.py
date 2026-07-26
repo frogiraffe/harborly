@@ -9,6 +9,7 @@ import pytest
 
 from sea_mile.build.download import (
     _chunk_ranges,
+    _discover_latest_unlocode_release,
     _download,
     _send_with_deadline,
     download_reference_data,
@@ -128,6 +129,10 @@ def test_refresh_redownloads_into_new_folder(tmp_path, monkeypatch) -> None:
         calls.append(destination)
 
     monkeypatch.setattr("sea_mile.build.download._download", fake_download)
+    monkeypatch.setattr(
+        "sea_mile.build.download._discover_latest_unlocode_release",
+        lambda client: "2026-1",
+    )
 
     manifest = download_reference_data(
         tmp_path, snapshot_label="2099-12-31", refresh=True
@@ -139,8 +144,29 @@ def test_refresh_redownloads_into_new_folder(tmp_path, monkeypatch) -> None:
     assert sources["geonames"]["path"] == "raw/geonames/2099-12-31/allCountries.zip"
     assert (
         sources["unlocode"]["path"]
-        == "raw/unlocode/2025-1/unlocode-2025-1-artifacts.zip"
+        == "raw/unlocode/2026-1/unlocode-2026-1-artifacts.zip"
     )
+    assert sources["unlocode"]["release"] == "2026-1"
+    assert "/artifacts/2026-1/" in sources["unlocode"]["url"]
+
+
+def test_discovers_latest_official_unlocode_release() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"tag_name": "2026-2"}, request=request)
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        assert _discover_latest_unlocode_release(client) == "2026-2"
+
+
+def test_rejects_invalid_discovered_unlocode_release() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"tag_name": "../main"}, request=request)
+
+    with (
+        httpx.Client(transport=httpx.MockTransport(handler)) as client,
+        pytest.raises(SourceDataError, match="invalid release tag"),
+    ):
+        _discover_latest_unlocode_release(client)
 
 
 def test_download_rejects_oversized_content_length(tmp_path) -> None:

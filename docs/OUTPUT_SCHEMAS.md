@@ -117,5 +117,7 @@ A missing routing extra is not a `routing_error`. A route call without the extra
 | `data verify` | the verification report object |
 | `data lock` | the source lockfile object |
 
-The `export` command writes CSV or GeoJSON selected by `--format`. The `tui`
-command is interactive. Neither command implements `--json`.
+The `export` command writes CSV or GeoJSON selected by `--format`. The `tui` and
+`serve` commands are interactive processes. None of these commands implements
+`--json`. `route --html-map` writes an HTML side artifact without changing the
+route command's JSON data shape.

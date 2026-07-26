@@ -28,7 +28,7 @@ jobs:
         run: |
           echo "hash=$(jq -r .registry_content_hash src/sea_mile/data/registry_manifest.json)" >> "$GITHUB_OUTPUT"
 
-      - name: Download WPI + GeoNames source snapshots
+      - name: Download latest source snapshots
         run: uv run sea-mile data download --reference-root data/reference --refresh
 
       - name: Rebuild the bundled registry

@@ -294,6 +294,39 @@ each unordered pair. An internal backend that does not declare symmetry is calcu
 in both directions. Routing needs the `routing` extra. `SeaRouter` imports without it,
 but a route call raises `ImportError` when it is missing.
 
+## Optional service and visualizations
+
+`sea-mile serve` starts the FastAPI application from `sea_mile.api` with Uvicorn.
+The `GET /route` endpoint accepts `origin`, `destination`, and optional
+`origin_country` and `destination_country` query parameters. It resolves both
+ports through `PortRegistry.bundled()`, routes them with `SeaRouter`, and returns:
+
+```json
+{
+  "distance_nmi": 412.5,
+  "geojson": {
+    "type": "Feature",
+    "properties": {},
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [[34.65, 36.8], [23.63, 37.94]]
+    }
+  }
+}
+```
+
+Install the `api` and `routing` extras for this command. `create_app` accepts
+injected registry and router objects for isolated application tests; the default
+application uses the bundled registry.
+
+`sea-mile route ORIGIN DESTINATION --html-map route.html` writes an interactive
+Folium preview. The route geometry crosses the visualization boundary as
+`LonLat(longitude, latitude)` before Folium receives its required latitude,
+longitude locations. Install the `map` and `routing` extras.
+
+The `tui` command displays search results in its existing Textual table and adds
+a Plotext coordinate map for the highlighted result. Install the `tui` extra.
+
 ## Coordinates and text helpers
 
 `validate_coordinate` returns a `CoordinateCheck` and rejects missing, non-numeric,

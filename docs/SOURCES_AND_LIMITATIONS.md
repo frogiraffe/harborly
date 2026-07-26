@@ -34,8 +34,9 @@ U.S.C. A local download records the checksum and retrieval date in
 
 UN/LOCODE is a location-code list rather than a berth database. Many port-coded
 records have no coordinate. Coordinates use arc-minute precision and may be less
-precise than WPI or GeoNames coordinates. sea-mile downloads the official release
-for local processing and does not include derived UN/LOCODE records in the wheel.
+precise than WPI or GeoNames coordinates. sea-mile discovers and downloads the
+latest official GitLab release for local processing and records the resolved
+release in its manifest. It does not include derived UN/LOCODE records in the wheel.
 
 ### GeoNames
 
@@ -94,9 +95,13 @@ The interface is internal. It is not a public plugin point.
 ## Optional extras
 
 - `routing`: searoute, for sea routing and the distance matrix.
-- `tui`: textual, for the interactive terminal search.
+- `tui`: textual and plotext, for interactive terminal search and mapping.
+- `api`: FastAPI and Uvicorn, for the optional HTTP server.
+- `map`: Folium, for interactive HTML route previews.
 - `fast`: scipy, for a k-d tree in `nearest`.
 - `analysis`: pyproj, for the WGS84 route cross-check in `data verify`.
+
+The API and HTML map features also need `routing` when they calculate a route.
 
 ## What the registry count means
 
