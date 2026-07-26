@@ -171,11 +171,8 @@ class BrailleWorldMap:
                     # Empty cell — no dots set.
                     parts.append(ch)
                     continue
-                # Determine dominant color: check if any dot in this cell
-                # belongs to a selected port.
-                color = _ANSI_DIM_GRAY  # default: coastline color
-                px_center = col_idx * 2 + 1
-                py_center = row_idx * 4 + 2
+                # Default: coastline color.
+                color = _ANSI_DIM_GRAY
                 for idx, group in enumerate(groups):
                     if group.latitude is None or group.longitude is None:
                         continue
@@ -190,11 +187,7 @@ class BrailleWorldMap:
                         self._pixel_height,
                     )
                     # Check if this cell contains the port dot.
-                    if (gx // 2 == col_idx and gy // 4 == row_idx) or (
-                        idx == selected
-                        and abs(gx - px_center) <= 3
-                        and abs(gy - py_center) <= 5
-                    ):
+                    if gx // 2 == col_idx and gy // 4 == row_idx:
                         if idx == selected:
                             color = _ANSI_BRIGHT_RED + _ANSI_BOLD
                         else:
