@@ -29,6 +29,10 @@ async def _type(pilot, text: str) -> None:
     await pilot.pause()
 
 
+async def _enter_browse(app: SeaMileTUI) -> None:
+    app.action_enter_browse()
+
+
 @pytest.mark.anyio
 async def test_typing_populates_results_and_map() -> None:
     registry = PortRegistry(registry_frame(), alias_frame())
@@ -99,7 +103,6 @@ async def test_arrow_down_updates_map() -> None:
         if table.row_count < 2:
             pytest.skip("Need at least 2 results for comparison")
 
-        # Zoom in so individual ports become distinguishable.
         app._zoom = 8.0
         app._center_lat = 36.8
         app._center_lon = 34.6
@@ -152,6 +155,7 @@ async def test_zoom_in_increases_zoom_level() -> None:
     app = SeaMileTUI(registry)
     async with app.run_test() as pilot:
         await _type(pilot, "Mersin")
+        await _enter_browse(app)
         assert app._zoom == 1.0
 
         app.action_zoom_in()
@@ -165,6 +169,7 @@ async def test_zoom_out_decreases_zoom_level() -> None:
     app = SeaMileTUI(registry)
     async with app.run_test() as pilot:
         await _type(pilot, "Mersin")
+        await _enter_browse(app)
         app._zoom = 4.0
 
         app.action_zoom_out()
@@ -178,6 +183,7 @@ async def test_zoom_reset_restores_default() -> None:
     app = SeaMileTUI(registry)
     async with app.run_test() as pilot:
         await _type(pilot, "Mersin")
+        await _enter_browse(app)
         app._zoom = 8.0
         app._center_lat = 40.0
         app._center_lon = 30.0
@@ -195,6 +201,7 @@ async def test_go_to_port_centers_on_selected() -> None:
     app = SeaMileTUI(registry)
     async with app.run_test() as pilot:
         await _type(pilot, "Mersin")
+        await _enter_browse(app)
 
         app.action_go_to_port()
         await pilot.pause()
@@ -203,3 +210,49 @@ async def test_go_to_port_centers_on_selected() -> None:
         assert app._center_lat == group.latitude
         assert app._center_lon == group.longitude
         assert app._zoom >= 4.0
+
+
+@pytest.mark.anyio
+async def test_escape_enters_browse_mode() -> None:
+    registry = PortRegistry(registry_frame(), alias_frame())
+    app = SeaMileTUI(registry)
+    async with app.run_test() as pilot:
+        await _type(pilot, "Mersin")
+        assert not app._browse_mode
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert app._browse_mode
+
+
+@pytest.mark.anyio
+async def test_i_enters_insert_mode() -> None:
+    registry = PortRegistry(registry_frame(), alias_frame())
+    app = SeaMileTUI(registry)
+    async with app.run_test() as pilot:
+        await _type(pilot, "Mersin")
+        await _enter_browse(app)
+        assert app._browse_mode
+
+        await pilot.press("i")
+        await pilot.pause()
+        assert not app._browse_mode
+
+
+@pytest.mark.anyio
+async def test_browse_mode_pan_and_zoom_via_keys() -> None:
+    registry = PortRegistry(registry_frame(), alias_frame())
+    app = SeaMileTUI(registry)
+    async with app.run_test() as pilot:
+        await _type(pilot, "Mersin")
+        await _enter_browse(app)
+
+        orig_lon = app._center_lon
+        await pilot.press("l")
+        await pilot.pause()
+        assert app._center_lon != orig_lon
+
+        orig_zoom = app._zoom
+        await pilot.press("plus")
+        await pilot.pause()
+        assert app._zoom > orig_zoom

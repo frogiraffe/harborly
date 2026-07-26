@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from rich.markup import escape
 from rich.text import Text
-from textual import work
+from textual import events, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
@@ -101,6 +101,9 @@ class SeaMileTUI(App[None]):
     """
 
     BINDINGS = [
+        # Insert mode toggle
+        Binding("escape", "enter_browse", "Browse mode"),
+        Binding("i", "enter_insert", "Insert mode", show=False),
         # Table navigation
         Binding("down", "browse_down", "Next"),
         Binding("up", "browse_up", "Prev"),
@@ -124,6 +127,7 @@ class SeaMileTUI(App[None]):
         self._results: list[PortGroup] = []
         self._debounce_timer: Timer | None = None
         self._base_sub_title = ""
+        self._browse_mode = False
         # Map viewport state.
         self._zoom: float = 1.0
         self._center_lat: float = 0.0
@@ -149,6 +153,40 @@ class SeaMileTUI(App[None]):
             "[dim]Search to display ports on the world map.[/dim]"
         )
         self.query_one(Input).focus()
+
+    # ── mode switching ───────────────────────────────────────────────
+
+    def action_enter_browse(self) -> None:
+        self._browse_mode = True
+        self.query_one(Input).blur()
+        self._refresh_map()
+
+    def action_enter_insert(self) -> None:
+        self._browse_mode = False
+        self.query_one(Input).focus()
+
+    _BROWSE_KEYS = {
+        "h": "pan_left",
+        "j": "pan_down",
+        "k": "pan_up",
+        "l": "pan_right",
+        "plus": "zoom_in",
+        "minus": "zoom_out",
+        "equal": "zoom_in",
+        "0": "zoom_reset",
+        "g": "go_to_port",
+        "i": "enter_insert",
+    }
+
+    def on_key(self, event: events.Key) -> None:
+        if not self._browse_mode:
+            return
+        action_name = self._BROWSE_KEYS.get(event.key)
+        if action_name is not None:
+            event.stop()
+            action_fn = getattr(self, f"action_{action_name}", None)
+            if action_fn is not None:
+                action_fn()
 
     # ── search pipeline ──────────────────────────────────────────────
 
