@@ -92,6 +92,18 @@ def _coordinate(value: str) -> float:
         ) from None
 
 
+def _port(value: str) -> int:
+    try:
+        port = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not a valid port") from None
+    if not 0 <= port <= 65535:
+        raise argparse.ArgumentTypeError(
+            f"{value!r} is not a port in the range 0-65535"
+        )
+    return port
+
+
 def _default_reference_root() -> Path:
     project_reference = Path.cwd() / "data" / "reference"
     if project_reference.exists():
@@ -364,6 +376,20 @@ def _cmd_route(args: argparse.Namespace) -> int:
     except ImportError as error:
         print(f"sea-mile: error: {error}", file=sys.stderr)
         return 2
+    if args.geojson:
+        args.geojson.parent.mkdir(parents=True, exist_ok=True)
+        args.geojson.write_text(
+            json.dumps(result.to_geojson_feature(), ensure_ascii=False, indent=2)
+            + "\n",
+            encoding="utf-8",
+        )
+    if args.html_map and html_map_writer is not None:
+        try:
+            html_map_writer(result, args.html_map)
+        except OSError as error:
+            raise ValueError(
+                f"could not write HTML map to {args.html_map}: {error}"
+            ) from error
     if args.json:
         _emit_json(args, result.summary())
     else:
@@ -380,18 +406,9 @@ def _cmd_route(args: argparse.Namespace) -> int:
             f"engine: {result.engine} {result.engine_version} "
             f"({result.algorithm}, {result.backend})"
         )
-    if args.geojson:
-        args.geojson.parent.mkdir(parents=True, exist_ok=True)
-        args.geojson.write_text(
-            json.dumps(result.to_geojson_feature(), ensure_ascii=False, indent=2)
-            + "\n",
-            encoding="utf-8",
-        )
-        if not args.json:
+        if args.geojson:
             print(f"geojson: {args.geojson}")
-    if args.html_map and html_map_writer is not None:
-        html_map_writer(result, args.html_map)
-        if not args.json:
+        if args.html_map:
             print(f"html_map: {args.html_map}")
     return 0
 
@@ -915,7 +932,7 @@ def _parser() -> argparse.ArgumentParser:
         help="serve bundled port routes over HTTP (needs the api and routing extras)",
     )
     serve.add_argument("--host", default="127.0.0.1")
-    serve.add_argument("--port", type=int, default=8000)
+    serve.add_argument("--port", type=_port, default=8000)
     serve.set_defaults(func=_cmd_serve)
 
     search = subparsers.add_parser(

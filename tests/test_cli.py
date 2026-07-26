@@ -322,6 +322,37 @@ def test_route_html_map_reports_missing_extra(tmp_path, capsys, monkeypatch) -> 
     assert not geojson.exists()
 
 
+def test_route_html_map_write_failure_does_not_emit_success(
+    tmp_path, capsys, monkeypatch
+) -> None:
+    pytest.importorskip("folium", reason="HTML maps need the map extra")
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+
+    def fail_write(*args, **kwargs) -> None:
+        raise OSError("read-only file system")
+
+    monkeypatch.setattr("sea_mile.html_map.write_route_html", fail_write)
+
+    status = main(
+        [
+            "--data-dir",
+            str(data_directory),
+            "route",
+            "TRMER",
+            "GRPIR",
+            "--html-map",
+            str(tmp_path / "route.html"),
+            "--json",
+        ]
+    )
+
+    assert status == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert "data" not in payload
+    assert "could not write HTML map" in payload["error"]["message"]
+
+
 def test_serve_delegates_to_optional_api(monkeypatch) -> None:
     calls: list[tuple[str, int]] = []
 
@@ -343,6 +374,14 @@ def test_serve_reports_missing_extra(capsys, monkeypatch) -> None:
 
     assert status == 2
     assert "sea-mile[api]" in capsys.readouterr().err
+
+
+def test_serve_rejects_out_of_range_port(capsys) -> None:
+    with pytest.raises(SystemExit) as caught:
+        main(["serve", "--port", "65536"])
+
+    assert caught.value.code == 2
+    assert "range 0-65535" in capsys.readouterr().err
 
 
 def test_tui_reports_missing_extra(tmp_path, capsys, monkeypatch) -> None:
