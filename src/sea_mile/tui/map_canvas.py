@@ -80,16 +80,23 @@ def _in_viewport(
     )
 
 
-def _bresenham(x0: int, y0: int, x1: int, y1: int) -> list[tuple[int, int]]:
-    """Return all integer pixels on the line from (x0,y0) to (x1,y1)."""
+def _bresenham(
+    x0: int, y0: int, x1: int, y1: int, *, step: int = 1
+) -> list[tuple[int, int]]:
+    """Return pixels on the line from (x0,y0) to (x1,y1).
+
+    *step* skips intermediate pixels to thin long lines at low zoom.
+    """
     points: list[tuple[int, int]] = []
     dx = abs(x1 - x0)
     dy = abs(y1 - y0)
     sx = 1 if x0 < x1 else -1
     sy = 1 if y0 < y1 else -1
     err = dx - dy
+    count = 0
     while True:
-        points.append((x0, y0))
+        if count % step == 0:
+            points.append((x0, y0))
         if x0 == x1 and y0 == y1:
             break
         e2 = 2 * err
@@ -99,6 +106,7 @@ def _bresenham(x0: int, y0: int, x1: int, y1: int) -> list[tuple[int, int]]:
         if e2 < dx:
             err += dx
             y0 += sy
+        count += 1
     return points
 
 
@@ -303,7 +311,10 @@ class BrailleWorldMap:
                     center_lat=self._center_lat,
                     center_lon=self._center_lon,
                 )
-                for px, py in _bresenham(prev[0], prev[1], cur[0], cur[1]):
+                dist = max(abs(cur[0] - prev[0]), abs(cur[1] - prev[1]))
+                # Thin long segments at low zoom to avoid solid lines.
+                step = max(1, dist // 12)
+                for px, py in _bresenham(prev[0], prev[1], cur[0], cur[1], step=step):
                     self._canvas.set_pixel(px, py)
                 prev = cur
 
