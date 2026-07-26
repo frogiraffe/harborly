@@ -58,6 +58,16 @@ that PR does not publish a release by itself — `release.yml` only runs on a
 `v*` tag push, so bump the version as part of the merge if you want the
 refreshed data to reach PyPI.
 
+## Coastline data
+
+The embedded coastline in `src/sea_mile/tui/coastlines.py` is auto-generated from
+Natural Earth 110m (Public Domain / CC0). To regenerate after an upstream update:
+
+```bash
+uv pip install pyshp
+uv run scripts/build_coastline.py
+```
+
 ## Commits
 
 Use an imperative subject. Explain externally observable behavior and the reason

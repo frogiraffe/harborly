@@ -95,7 +95,7 @@ The interface is internal. It is not a public plugin point.
 ## Optional extras
 
 - `routing`: searoute, for sea routing and the distance matrix.
-- `tui`: textual and plotext, for interactive terminal search and mapping.
+- `tui`: textual, for interactive terminal search with a braille world map.
 - `api`: FastAPI and Uvicorn, for the optional HTTP server.
 - `map`: Folium, for interactive HTML route previews.
 - `fast`: scipy, for a k-d tree in `nearest`.

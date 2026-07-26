@@ -46,7 +46,6 @@ fast = [
     "scipy>=1.16",
 ]
 tui = [
-    "plotext>=5.3.2",
     "textual>=0.60",
 ]
 api = [
@@ -96,7 +95,6 @@ no_implicit_optional = true
 module = [
     "folium.*",
     "pandas.*",
-    "plotext.*",
     "pyproj.*",
     "scipy.*",
     "searoute.*",

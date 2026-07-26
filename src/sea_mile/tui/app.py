@@ -1,4 +1,14 @@
-"""Interactive terminal port search over a local registry, built on Textual."""
+"""Interactive split-screen port search TUI built on Textual.
+
+Layout::
+
+    Header
+    Input (#query)              search bar
+    Horizontal (#body):
+      DataTable (#results, 40%)   port list
+      BrailleMap (#map, 60%)      braille world map
+    Footer
+"""
 
 from __future__ import annotations
 
@@ -6,21 +16,23 @@ from rich.markup import escape
 from rich.text import Text
 from textual import work
 from textual.app import App, ComposeResult
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal
 from textual.events import Resize
 from textual.message import Message
 from textual.timer import Timer
 from textual.widgets import DataTable, Footer, Header, Input, Static
 
 from sea_mile.ports import Port, PortGroup, PortRegistry, source_short_label
-from sea_mile.terminal_map import render_port_map
+from sea_mile.tui.map_canvas import BrailleWorldMap
 
 _RESULT_COLUMNS = ("Name", "Country", "UN/LOCODE", "Sources", "Coord")
 _SEARCH_DEBOUNCE_SECONDS = 0.15
 _SEARCH_RESULT_LIMIT = 60
 
 
-class PortMap(Static):
+class BrailleMap(Static):
+    """Widget wrapper that fires a message on terminal resize."""
+
     class Resized(Message):
         pass
 
@@ -43,7 +55,6 @@ def _member_lines(port: Port) -> list[str]:
 
 
 def _detail_lines(group: PortGroup) -> list[str]:
-    # Provider text is escaped because it can contain Rich markup characters.
     lines = [
         f"[b]{escape(group.name)}[/b]",
         f"country: {escape(group.country_code)}",
@@ -64,9 +75,8 @@ def _detail_lines(group: PortGroup) -> list[str]:
 
 
 class SeaMileTUI(App[None]):
-    """Live fuzzy port search with a detail pane, over a local registry."""
+    """Live fuzzy port search with a braille world map, over a local registry."""
 
-    # No custom commands are registered, so the command palette adds nothing.
     ENABLE_COMMAND_PALETTE = False
 
     CSS = """
@@ -74,28 +84,17 @@ class SeaMileTUI(App[None]):
         height: 1fr;
     }
     #results {
-        width: 62%;
+        width: 40%;
         height: 100%;
-    }
-    #side {
-        width: 38%;
-        height: 100%;
-    }
-    #detail {
-        height: 55%;
-        border: solid $accent;
-        padding: 1 2;
-        overflow-y: auto;
     }
     #map {
-        height: 45%;
+        width: 60%;
+        height: 100%;
         border: solid $accent;
         overflow: hidden;
     }
     """
 
-    # The input keeps focus, so arrow keys are bound at the app level and
-    # forwarded to the results table.
     BINDINGS = [
         ("down", "browse_down", "Next result"),
         ("up", "browse_up", "Previous result"),
@@ -114,9 +113,7 @@ class SeaMileTUI(App[None]):
         yield Input(placeholder="Search a port name or UN/LOCODE code...", id="query")
         with Horizontal(id="body"):
             yield DataTable(id="results", cursor_type="row")
-            with Vertical(id="side"):
-                yield Static(id="detail", markup=True)
-                yield PortMap(id="map", markup=False)
+            yield BrailleMap(id="map", markup=False)
         yield Footer()
 
     def on_mount(self) -> None:
@@ -127,18 +124,18 @@ class SeaMileTUI(App[None]):
             f"{len(self._port_registry.providers)} providers"
         )
         self.sub_title = self._base_sub_title
-        self.query_one("#detail", Static).update("Type to search.")
-        self.query_one("#map", Static).update("Search results will appear here.")
+        self.query_one("#map", Static).update(
+            "[dim]Search to display ports on the world map.[/dim]"
+        )
         self.query_one(Input).focus()
 
+    # ── search pipeline ──────────────────────────────────────────────
+
     def on_input_changed(self, event: Input.Changed) -> None:
-        # Debounced and run off the main thread so a full-registry search does
-        # not block key handling.
         if self._debounce_timer is not None:
             self._debounce_timer.stop()
         query = event.value.strip()
         if not query:
-            # Cancel in-flight workers so a late result cannot refill the table.
             self._debounce_timer = None
             self.workers.cancel_group(self, "search")
             self._apply_results(query, [])
@@ -153,7 +150,6 @@ class SeaMileTUI(App[None]):
         self.call_from_thread(self._apply_results, query, groups)
 
     def _apply_results(self, query: str, results: list[PortGroup]) -> None:
-        # A cancelled worker can still call in, so apply only current results.
         if query != self.query_one(Input).value.strip():
             return
         self._results = results
@@ -163,6 +159,7 @@ class SeaMileTUI(App[None]):
             self.sub_title = f"{len(results)}+ ports"
         else:
             self.sub_title = f"{len(results)} ports"
+
         table = self.query_one("#results", DataTable)
         table.clear()
         for group in results:
@@ -176,25 +173,26 @@ class SeaMileTUI(App[None]):
                 group.name,
                 group.country_code,
                 group.unlocode or "-",
-                ", ".join(source_short_label(source) for source in group.sources),
+                ", ".join(source_short_label(s) for s in group.sources),
                 coordinate,
             )
         if results:
             table.move_cursor(row=0)
-            self._show_detail(0)
+            self._show_map(0)
         else:
-            self.query_one("#detail", Static).update(
-                "No matches." if query else "Type to search."
-            )
             self.query_one("#map", Static).update(
-                "No coordinates." if query else "Search results will appear here."
+                "[dim]No matching ports.[/dim]"
+                if query
+                else "[dim]Search to display ports on the world map.[/dim]"
             )
+
+    # ── selection sync ───────────────────────────────────────────────
 
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         if event.cursor_row is not None:
-            self._show_detail(event.cursor_row)
+            self._show_map(event.cursor_row)
 
-    def on_port_map_resized(self, event: PortMap.Resized) -> None:
+    def on_braille_map_resized(self, event: BrailleMap.Resized) -> None:  # type: ignore[name-defined]
         if not self._results:
             return
         table = self.query_one("#results", DataTable)
@@ -209,26 +207,20 @@ class SeaMileTUI(App[None]):
         if self._results:
             self.query_one("#results", DataTable).action_cursor_up()
 
-    def _show_detail(self, index: int) -> None:
-        if not 0 <= index < len(self._results):
-            return
-        group = self._results[index]
-        self.query_one("#detail", Static).update("\n".join(_detail_lines(group)))
-        self._show_map(index)
+    # ── rendering ────────────────────────────────────────────────────
 
     def _show_map(self, index: int) -> None:
         widget = self.query_one("#map", Static)
-        if widget.content_size.width < 10 or widget.content_size.height < 3:
-            widget.update("Terminal too small for map.")
+        char_w = widget.size.width
+        char_h = widget.size.height
+        if char_w < 10 or char_h < 3:
+            widget.update("[dim]Terminal too small for map.[/dim]")
             return
-        terminal_map = render_port_map(
-            self._results,
-            selected=index,
-            width=widget.content_size.width,
-            height=widget.content_size.height,
-        )
-        widget.update(Text.from_ansi(terminal_map))
+        world_map = BrailleWorldMap(char_w, char_h)
+        rendered = world_map.render(self._results, selected=index)
+        widget.update(Text.from_ansi(rendered))
 
 
 def run(registry: PortRegistry) -> None:
+    """Launch the interactive TUI."""
     SeaMileTUI(registry).run()
