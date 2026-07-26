@@ -134,6 +134,10 @@ See [Library API](docs/LIBRARY_API.md), [API compatibility](docs/API_COMPATIBILI
 | `export` | Export CSV or GeoJSON |
 | `tui` | Launch the interactive terminal search and map |
 | `serve` | Serve bundled port routes over HTTP |
+
+The TUI displays a braille world map with embedded coastlines. Use `+`/`-` to
+zoom, `h`/`j`/`k`/`l` to pan, `g` to center on the selected port, and `0` to
+reset the view.
 | `data download` | Download source snapshots |
 | `data build` | Build the normalized registry |
 | `data prepare` | Download and build source data |
