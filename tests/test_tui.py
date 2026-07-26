@@ -93,10 +93,19 @@ async def test_arrow_down_updates_map() -> None:
     registry = PortRegistry(registry_frame(), alias_frame())
     app = SeaMileTUI(registry)
     async with app.run_test() as pilot:
-        await _type(pilot, "Piraeus")
+        await _type(pilot, "Mersin")
+
+        table = app.query_one("#results", DataTable)
+        if table.row_count < 2:
+            pytest.skip("Need at least 2 results for comparison")
+
+        # Zoom in so individual ports become distinguishable.
+        app._zoom = 8.0
+        app._center_lat = 36.8
+        app._center_lon = 34.6
 
         before = _map_text(app)
-        await pilot.press("down")
+        app.action_browse_down()
         await pilot.pause()
         after = _map_text(app)
 
@@ -135,3 +144,62 @@ async def test_clearing_the_query_mid_search_keeps_results_empty() -> None:
         table = app.query_one("#results", DataTable)
         assert table.row_count == 0
         assert "Search to display" in _map_text(app)
+
+
+@pytest.mark.anyio
+async def test_zoom_in_increases_zoom_level() -> None:
+    registry = PortRegistry(registry_frame(), alias_frame())
+    app = SeaMileTUI(registry)
+    async with app.run_test() as pilot:
+        await _type(pilot, "Mersin")
+        assert app._zoom == 1.0
+
+        app.action_zoom_in()
+        await pilot.pause()
+        assert app._zoom > 1.0
+
+
+@pytest.mark.anyio
+async def test_zoom_out_decreases_zoom_level() -> None:
+    registry = PortRegistry(registry_frame(), alias_frame())
+    app = SeaMileTUI(registry)
+    async with app.run_test() as pilot:
+        await _type(pilot, "Mersin")
+        app._zoom = 4.0
+
+        app.action_zoom_out()
+        await pilot.pause()
+        assert app._zoom < 4.0
+
+
+@pytest.mark.anyio
+async def test_zoom_reset_restores_default() -> None:
+    registry = PortRegistry(registry_frame(), alias_frame())
+    app = SeaMileTUI(registry)
+    async with app.run_test() as pilot:
+        await _type(pilot, "Mersin")
+        app._zoom = 8.0
+        app._center_lat = 40.0
+        app._center_lon = 30.0
+
+        app.action_zoom_reset()
+        await pilot.pause()
+        assert app._zoom == 1.0
+        assert app._center_lat == 0.0
+        assert app._center_lon == 0.0
+
+
+@pytest.mark.anyio
+async def test_go_to_port_centers_on_selected() -> None:
+    registry = PortRegistry(registry_frame(), alias_frame())
+    app = SeaMileTUI(registry)
+    async with app.run_test() as pilot:
+        await _type(pilot, "Mersin")
+
+        app.action_go_to_port()
+        await pilot.pause()
+
+        group = app._results[0]
+        assert app._center_lat == group.latitude
+        assert app._center_lon == group.longitude
+        assert app._zoom >= 4.0

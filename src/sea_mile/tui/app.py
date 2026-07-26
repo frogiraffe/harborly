@@ -6,7 +6,7 @@ Layout::
     Input (#query)              search bar
     Horizontal (#body):
       DataTable (#results, 40%)   port list
-      BrailleMap (#map, 60%)      braille world map
+      BrailleMap (#map, 60%)      braille world map with zoom/pan
     Footer
 """
 
@@ -16,6 +16,7 @@ from rich.markup import escape
 from rich.text import Text
 from textual import work
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.events import Resize
 from textual.message import Message
@@ -28,6 +29,10 @@ from sea_mile.tui.map_canvas import BrailleWorldMap
 _RESULT_COLUMNS = ("Name", "Country", "UN/LOCODE", "Sources", "Coord")
 _SEARCH_DEBOUNCE_SECONDS = 0.15
 _SEARCH_RESULT_LIMIT = 60
+_ZOOM_STEP = 1.5
+_ZOOM_MIN = 1.0
+_ZOOM_MAX = 16.0
+_PAN_STEP_DEG = 10.0
 
 
 class BrailleMap(Static):
@@ -96,8 +101,20 @@ class SeaMileTUI(App[None]):
     """
 
     BINDINGS = [
-        ("down", "browse_down", "Next result"),
-        ("up", "browse_up", "Previous result"),
+        # Table navigation
+        Binding("down", "browse_down", "Next"),
+        Binding("up", "browse_up", "Prev"),
+        # Zoom
+        Binding("plus", "zoom_in", "Zoom in"),
+        Binding("minus", "zoom_out", "Zoom out"),
+        Binding("0", "zoom_reset", "Reset view"),
+        # Pan (vim-style)
+        Binding("h", "pan_left", "Pan left"),
+        Binding("l", "pan_right", "Pan right"),
+        Binding("k", "pan_up", "Pan up"),
+        Binding("j", "pan_down", "Pan down"),
+        # Go to selected port
+        Binding("g", "go_to_port", "Center on port"),
     ]
     TITLE = "sea-mile"
 
@@ -107,6 +124,10 @@ class SeaMileTUI(App[None]):
         self._results: list[PortGroup] = []
         self._debounce_timer: Timer | None = None
         self._base_sub_title = ""
+        # Map viewport state.
+        self._zoom: float = 1.0
+        self._center_lat: float = 0.0
+        self._center_lon: float = 0.0
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -153,12 +174,7 @@ class SeaMileTUI(App[None]):
         if query != self.query_one(Input).value.strip():
             return
         self._results = results
-        if not query:
-            self.sub_title = self._base_sub_title
-        elif len(results) >= _SEARCH_RESULT_LIMIT:
-            self.sub_title = f"{len(results)}+ ports"
-        else:
-            self.sub_title = f"{len(results)} ports"
+        self._update_subtitle(query, results)
 
         table = self.query_one("#results", DataTable)
         table.clear()
@@ -186,6 +202,18 @@ class SeaMileTUI(App[None]):
                 else "[dim]Search to display ports on the world map.[/dim]"
             )
 
+    def _update_subtitle(self, query: str, results: list[PortGroup]) -> None:
+        if not query:
+            self.sub_title = self._base_sub_title
+            return
+        if len(results) >= _SEARCH_RESULT_LIMIT:
+            base = f"{len(results)}+ ports"
+        else:
+            base = f"{len(results)} ports"
+        zoom_tag = f"zoom {self._zoom:.1f}x" if self._zoom > 1.05 else ""
+        parts = [p for p in (base, zoom_tag) if p]
+        self.sub_title = " | ".join(parts)
+
     # ── selection sync ───────────────────────────────────────────────
 
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
@@ -207,6 +235,62 @@ class SeaMileTUI(App[None]):
         if self._results:
             self.query_one("#results", DataTable).action_cursor_up()
 
+    # ── zoom / pan actions ───────────────────────────────────────────
+
+    def action_zoom_in(self) -> None:
+        self._zoom = min(self._zoom * _ZOOM_STEP, _ZOOM_MAX)
+        self._refresh_map()
+
+    def action_zoom_out(self) -> None:
+        self._zoom = max(self._zoom / _ZOOM_STEP, _ZOOM_MIN)
+        self._refresh_map()
+
+    def action_zoom_reset(self) -> None:
+        self._zoom = 1.0
+        self._center_lat = 0.0
+        self._center_lon = 0.0
+        self._refresh_map()
+
+    def action_pan_left(self) -> None:
+        self._center_lon -= _PAN_STEP_DEG / self._zoom
+        if self._center_lon < -180.0:
+            self._center_lon += 360.0
+        self._refresh_map()
+
+    def action_pan_right(self) -> None:
+        self._center_lon += _PAN_STEP_DEG / self._zoom
+        if self._center_lon > 180.0:
+            self._center_lon -= 360.0
+        self._refresh_map()
+
+    def action_pan_up(self) -> None:
+        self._center_lat = min(90.0, self._center_lat + _PAN_STEP_DEG / self._zoom)
+        self._refresh_map()
+
+    def action_pan_down(self) -> None:
+        self._center_lat = max(-90.0, self._center_lat - _PAN_STEP_DEG / self._zoom)
+        self._refresh_map()
+
+    def action_go_to_port(self) -> None:
+        table = self.query_one("#results", DataTable)
+        idx = table.cursor_row
+        if idx is None or not 0 <= idx < len(self._results):
+            return
+        group = self._results[idx]
+        if group.latitude is not None and group.longitude is not None:
+            self._center_lat = group.latitude
+            self._center_lon = group.longitude
+            if self._zoom < 4.0:
+                self._zoom = 4.0
+            self._refresh_map()
+
+    def _refresh_map(self) -> None:
+        table = self.query_one("#results", DataTable)
+        if table.cursor_row is not None and self._results:
+            self._show_map(table.cursor_row)
+        query = self.query_one(Input).value.strip()
+        self._update_subtitle(query, self._results)
+
     # ── rendering ────────────────────────────────────────────────────
 
     def _show_map(self, index: int) -> None:
@@ -216,7 +300,13 @@ class SeaMileTUI(App[None]):
         if char_w < 10 or char_h < 3:
             widget.update("[dim]Terminal too small for map.[/dim]")
             return
-        world_map = BrailleWorldMap(char_w, char_h)
+        world_map = BrailleWorldMap(
+            char_w,
+            char_h,
+            zoom=self._zoom,
+            center_lat=self._center_lat,
+            center_lon=self._center_lon,
+        )
         rendered = world_map.render(self._results, selected=index)
         widget.update(Text.from_ansi(rendered))
 
