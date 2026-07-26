@@ -93,10 +93,13 @@ no_implicit_optional = true
 
 [[tool.mypy.overrides]]
 module = [
+    "fastapi.*",
     "folium.*",
     "pandas.*",
+    "plotext.*",
     "pyproj.*",
     "scipy.*",
     "searoute.*",
+    "uvicorn.*",
 ]
 ignore_missing_imports = true
