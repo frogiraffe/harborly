@@ -2216,6 +2216,7 @@ fast = [
     { name = "scipy", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
 map = [
+    { name = "branca" },
     { name = "folium" },
 ]
 routing = [
@@ -2242,6 +2243,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "branca", marker = "extra == 'map'", specifier = ">=0.8" },
     { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.115" },
     { name = "folium", marker = "extra == 'map'", specifier = ">=0.19" },
     { name = "httpx", specifier = ">=0.28.1" },

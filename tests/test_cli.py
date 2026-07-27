@@ -286,7 +286,9 @@ def test_route_can_write_html_map(tmp_path, capsys) -> None:
     )
 
     assert status == 0
-    assert "html_map:" in capsys.readouterr().out
+    output_text = capsys.readouterr().out
+    assert "html_map:" in output_text
+    assert "direct file viewing uses an embedded coastline" in output_text
     assert "leaflet" in output.read_text(encoding="utf-8").lower()
 
 

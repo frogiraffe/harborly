@@ -84,3 +84,21 @@ def test_route_html_writes_an_interactive_map(tmp_path) -> None:
     assert "412.50 nautical miles" in html
     assert "Mersin" in html
     assert "Piraeus" in html
+    assert "Natural Earth 110m coastline" in html
+    assert 'window.location.protocol === "http:"' in html
+    assert "https://tile.openstreetmap.org/{z}/{x}/{y}.png" in html
+    assert "Embedded coastline preview" in html
+    assert ".removeLayer(" in html
+
+
+def test_route_html_has_no_unconditional_remote_tile_layer(tmp_path) -> None:
+    output = tmp_path / "route.html"
+
+    write_route_html(_route(), output)
+
+    html = output.read_text(encoding="utf-8")
+    protocol_check = html.index('window.location.protocol === "http:"')
+    fallback_removal = html.index(".removeLayer(")
+    tile_layer = html.index("https://tile.openstreetmap.org/{z}/{x}/{y}.png")
+    fallback = html.index("Embedded coastline preview")
+    assert protocol_check < fallback_removal < tile_layer < fallback

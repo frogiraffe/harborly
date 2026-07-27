@@ -122,4 +122,6 @@ A missing routing extra is not a `routing_error`. A route call without the extra
 The `export` command writes CSV or GeoJSON selected by `--format`. The `tui` and
 `serve` commands are interactive processes. None of these commands implements
 `--json`. `route --html-map` writes an HTML side artifact without changing the
-route command's JSON data shape.
+route command's JSON data shape. The artifact renders bundled Natural Earth
+coastlines when opened directly and adds detailed OpenStreetMap tiles only when
+served over HTTP or HTTPS.

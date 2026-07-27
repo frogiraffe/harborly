@@ -452,6 +452,10 @@ def _cmd_route(args: argparse.Namespace) -> int:
             print(f"geojson: {args.geojson}")
         if args.html_map:
             print(f"html_map: {args.html_map}")
+            print(
+                "html_map_note: direct file viewing uses an embedded coastline; "
+                "serve the output directory over localhost for detailed map tiles"
+            )
     return 0
 
 

@@ -175,6 +175,17 @@ Its base URL redirects to the interactive API documentation at `/docs`;
 `GET /route?origin=TRMER&destination=GRPIR`, which uses the bundled registry and
 returns `distance_nmi` together with a GeoJSON route feature.
 
+HTML maps opened directly from disk use the bundled Natural Earth coastline
+instead of requesting remote tiles. This avoids the missing-`Referer` 403
+response that public OpenStreetMap tile servers apply to `file://` pages. For
+the detailed OpenStreetMap layer, serve the output directory locally and open
+the HTTP URL:
+
+```bash
+python -m http.server 8000
+# Open http://127.0.0.1:8000/route.html
+```
+
 `sea-mile serve` defaults to the loopback interface for local use. It does not
 provide authentication, TLS termination, or rate limiting; do not expose it
 directly to the public internet without an appropriate production ASGI

@@ -380,6 +380,16 @@ Folium preview. The route geometry crosses the visualization boundary as
 `LonLat(longitude, latitude)` before Folium receives its required latitude,
 longitude locations. Install the `map` and `routing` extras.
 
+When opened directly as a `file://` URL, the HTML uses the embedded Natural
+Earth 110m coastline and does not request public raster tiles. When served over
+HTTP or HTTPS, it adds the detailed OpenStreetMap layer. This prevents local
+files, which cannot supply the required web-page referrer, from rendering a
+grid of 403 responses. To view detailed tiles locally, run
+`python -m http.server 8000` in the output directory and open
+`http://127.0.0.1:8000/route.html`. Folium's generated HTML can still reference
+Leaflet and supporting front-end assets on CDNs, so the artifact is not a
+fully offline application.
+
 The `tui` command launches an interactive split-screen terminal UI built on
 Textual. The left pane shows a DataTable of search results; the right pane
 renders a braille world map with embedded NE 110m coastlines, port markers,

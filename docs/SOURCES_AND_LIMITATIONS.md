@@ -105,6 +105,13 @@ The interface is internal. It is not a public plugin point.
 - `analysis`: pyproj, for the WGS84 route cross-check in `data verify`.
 
 The API and HTML map features also need `routing` when they calculate a route.
+HTML previews include the public-domain Natural Earth 110m coastline for
+tile-independent `file://` viewing. The detailed OpenStreetMap raster layer is
+enabled only when the page is served over HTTP or HTTPS so the browser can send
+the referrer required by the public tile service. Folium's output may still load
+Leaflet and supporting assets from CDNs, so the HTML is not fully offline.
+Public OSM tiles are a best-effort external service, not a bundled data source
+or availability guarantee.
 
 ## What the registry count means
 

@@ -54,6 +54,7 @@ api = [
     "uvicorn>=0.30",
 ]
 map = [
+    "branca>=0.8",
     "folium>=0.19",
 ]
 
