@@ -17,7 +17,7 @@ def anyio_backend() -> str:
 
 
 def _map_text(app: SeaMileTUI) -> str:
-    return str(getattr(app.query_one("#map", Static), "_Static__content", ""))
+    return str(app.query_one("#map", Static).render())
 
 
 async def _type(pilot, text: str) -> None:

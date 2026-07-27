@@ -7,17 +7,43 @@ import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import asdict, dataclass
 from math import isfinite
 from pathlib import Path
 from time import monotonic, sleep
-from typing import TypeGuard
+from typing import TypeGuard, cast
 
 from sea_mile._routing_backend import BackendRoute, RoutingConfig
 from sea_mile.coordinates import LatLon
 
-_SCHEMA_VERSION = 1
+_CACHE_KEY_SCHEMA_VERSION = 1
+_DATABASE_SCHEMA_VERSION = 1
 _BUSY_TIMEOUT_MS = 30_000
 _WAL_RETRY_SECONDS = 0.05
+_ROUTE_COLUMNS = {
+    "cache_key",
+    "distance_nmi",
+    "geometry_json",
+    "created_at",
+}
+
+
+@dataclass(frozen=True, slots=True)
+class CacheInfo:
+    """Operational metadata for one persistent route cache."""
+
+    path: str
+    schema_version: int
+    entries: int
+    oldest_created_at: str | None
+    newest_created_at: str | None
+    database_bytes: int
+    wal_bytes: int
+
+    def to_dict(self) -> dict[str, str | int | None]:
+        """Return a JSON-serializable representation."""
+
+        return cast(dict[str, str | int | None], asdict(self))
 
 
 def _is_finite_number(value: object) -> TypeGuard[int | float]:
@@ -72,6 +98,13 @@ class RouteCache:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as connection:
+            version = int(connection.execute("PRAGMA user_version").fetchone()[0])
+            if version > _DATABASE_SCHEMA_VERSION:
+                raise ValueError(
+                    "route cache schema "
+                    f"{version} is newer than supported schema "
+                    f"{_DATABASE_SCHEMA_VERSION}"
+                )
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS routes (
@@ -82,6 +115,17 @@ class RouteCache:
                 )
                 """
             )
+            columns = {
+                str(row[1])
+                for row in connection.execute("PRAGMA table_info(routes)").fetchall()
+            }
+            if columns != _ROUTE_COLUMNS:
+                raise ValueError(
+                    "route cache has an unsupported routes table; create a new "
+                    "cache file or remove the incompatible cache"
+                )
+            if version < _DATABASE_SCHEMA_VERSION:
+                connection.execute(f"PRAGMA user_version = {_DATABASE_SCHEMA_VERSION}")
 
     def key(
         self,
@@ -96,7 +140,7 @@ class RouteCache:
         """Build a stable, direction-sensitive key for effective route inputs."""
 
         payload = {
-            "schema": _SCHEMA_VERSION,
+            "schema": _CACHE_KEY_SCHEMA_VERSION,
             "origin": origin.as_tuple(),
             "destination": destination.as_tuple(),
             "config": config.to_dict(),
@@ -176,6 +220,72 @@ class RouteCache:
                 "DELETE FROM routes WHERE cache_key = ?",
                 (cache_key,),
             )
+
+    def info(self) -> CacheInfo:
+        """Return entry counts, timestamps, schema version, and file sizes."""
+
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT
+                    COUNT(*),
+                    MIN(created_at),
+                    MAX(created_at)
+                FROM routes
+                """
+            ).fetchone()
+            schema_version = int(
+                connection.execute("PRAGMA user_version").fetchone()[0]
+            )
+        wal_path = Path(f"{self.path}-wal")
+        return CacheInfo(
+            path=str(self.path.resolve()),
+            schema_version=schema_version,
+            entries=int(row[0]),
+            oldest_created_at=str(row[1]) if row[1] is not None else None,
+            newest_created_at=str(row[2]) if row[2] is not None else None,
+            database_bytes=self.path.stat().st_size if self.path.exists() else 0,
+            wal_bytes=wal_path.stat().st_size if wal_path.exists() else 0,
+        )
+
+    def prune(self, *, older_than_days: int) -> int:
+        """Delete entries older than a positive number of days."""
+
+        if isinstance(older_than_days, bool) or older_than_days < 1:
+            raise ValueError("older_than_days must be a positive integer")
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                cursor = connection.execute(
+                    "DELETE FROM routes WHERE created_at < datetime('now', ?)",
+                    (f"-{older_than_days} days",),
+                )
+            except BaseException:
+                connection.rollback()
+                raise
+            else:
+                connection.commit()
+                return max(0, cursor.rowcount)
+
+    def clear(self) -> int:
+        """Delete every cached route and return the number removed."""
+
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                cursor = connection.execute("DELETE FROM routes")
+            except BaseException:
+                connection.rollback()
+                raise
+            else:
+                connection.commit()
+                return max(0, cursor.rowcount)
+
+    def vacuum(self) -> None:
+        """Reclaim free pages after explicit maintenance."""
+
+        with self._connect() as connection:
+            connection.execute("VACUUM")
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:

@@ -268,3 +268,69 @@ def test_graph_version_default(cache):
     key1 = _cache_key(cache)
     key2 = _cache_key(cache, graph_version="")
     assert key1 == key2
+
+
+def test_cache_records_and_reports_database_schema(cache):
+    info = cache.info()
+
+    assert info.schema_version == 1
+    assert info.entries == 0
+    assert info.path == str(cache.path.resolve())
+    assert info.database_bytes > 0
+
+
+def test_legacy_unversioned_cache_is_adopted(tmp_path):
+    path = tmp_path / "legacy.db"
+    with closing(sqlite3.connect(path)) as connection, connection:
+        connection.execute(
+            """
+            CREATE TABLE routes (
+                cache_key TEXT PRIMARY KEY,
+                distance_nmi REAL NOT NULL,
+                geometry_json TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+    cache = RouteCache(path)
+
+    assert cache.info().schema_version == 1
+
+
+def test_newer_cache_schema_is_rejected(tmp_path):
+    path = tmp_path / "future.db"
+    with closing(sqlite3.connect(path)) as connection, connection:
+        connection.execute("PRAGMA user_version = 2")
+
+    with pytest.raises(ValueError, match="newer than supported"):
+        RouteCache(path)
+
+
+def test_cache_prune_clear_and_vacuum(cache):
+    old_key = _cache_key(cache, graph_version="old")
+    current_key = _cache_key(cache, graph_version="current")
+    route = BackendRoute(
+        distance_nmi=10.0,
+        geometry={"type": "LineString", "coordinates": [[0.0, 0.0], [1.0, 1.0]]},
+    )
+    cache.put(old_key, route)
+    cache.put(current_key, route)
+    with closing(sqlite3.connect(cache.path)) as connection, connection:
+        connection.execute(
+            "UPDATE routes SET created_at = datetime('now', '-120 days') "
+            "WHERE cache_key = ?",
+            (old_key,),
+        )
+
+    assert cache.prune(older_than_days=90) == 1
+    assert cache.info().entries == 1
+    cache.vacuum()
+    assert cache.clear() == 1
+    assert cache.info().entries == 0
+
+
+@pytest.mark.parametrize("days", [0, -1, True])
+def test_cache_prune_rejects_invalid_retention(cache, days):
+    with pytest.raises(ValueError, match="positive integer"):
+        cache.prune(older_than_days=days)

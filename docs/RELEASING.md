@@ -8,7 +8,9 @@ tag whose commit is already contained in `origin/main` and whose value matches
 
 The protected `main` branch requires the Linux Python 3.11–3.14 test matrix,
 Python 3.14 tests on macOS and Windows, dependency and source security scans, and
-the package build job. CI uses the committed lockfile and a pinned uv version.
+the package build job. A separate Python 3.11 job runs the complete suite with
+the declared minimum direct dependencies. CI uses the committed lockfile and a
+pinned uv version.
 
 The build job:
 
@@ -35,8 +37,8 @@ creates a GitHub Release containing all artifacts and metadata.
 
 The `pypi` GitHub environment permits only `v*` tags and requires approval from
 the repository maintainer. The maintainer should compare the release diff,
-confirm the version and `CITATION.cff` date, and review source-data changes
-before approving.
+confirm the version and `CITATION.cff` date, move the relevant `CHANGELOG.md`
+items out of `Unreleased`, and review source-data changes before approving.
 
 ## Local reproduction
 

@@ -2527,7 +2527,7 @@ wheels = [
 
 [[package]]
 name = "sea-mile"
-version = "1.5.0"
+version = "1.6.0"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
@@ -2586,15 +2586,15 @@ requires-dist = [
     { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.115" },
     { name = "folium", marker = "extra == 'map'", specifier = ">=0.19" },
     { name = "httpx", specifier = ">=0.28.1" },
-    { name = "numpy", specifier = ">=2.0" },
-    { name = "pandas", specifier = ">=3.0.3" },
+    { name = "numpy", specifier = ">=1.26.4" },
+    { name = "pandas", specifier = ">=2.2.3" },
     { name = "pandera", specifier = ">=0.26.1" },
-    { name = "pyarrow", specifier = ">=25.0.0" },
+    { name = "pyarrow", specifier = ">=17.0.0" },
     { name = "pyproj", marker = "extra == 'analysis'", specifier = ">=3.7.2" },
-    { name = "rapidfuzz", specifier = ">=3.14.5" },
+    { name = "rapidfuzz", specifier = ">=3.9.7" },
     { name = "scipy", marker = "extra == 'fast'", specifier = ">=1.16" },
     { name = "searoute", marker = "extra == 'routing'", specifier = ">=1.6.0" },
-    { name = "tenacity", specifier = ">=9.1.4" },
+    { name = "tenacity", specifier = ">=8.2.3" },
     { name = "textual", marker = "extra == 'tui'", specifier = ">=0.60" },
     { name = "uvicorn", marker = "extra == 'api'", specifier = ">=0.30" },
 ]
@@ -2608,7 +2608,7 @@ audit = [
     { name = "twine", specifier = ">=6.2.0" },
 ]
 dev = [
-    { name = "hypothesis", specifier = ">=6.0" },
+    { name = "hypothesis", specifier = ">=6.92.7" },
     { name = "jsonschema", specifier = ">=4.0" },
     { name = "markdown-it-py", specifier = ">=4.0" },
     { name = "mypy", specifier = ">=2.3.0" },

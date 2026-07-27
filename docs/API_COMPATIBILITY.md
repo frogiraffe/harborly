@@ -49,7 +49,8 @@ snapshots and are not API constants.
 ## Supported environments
 
 CI validates Python 3.11, 3.12, 3.13, and 3.14 on Linux. Python 3.14 is also
-validated on macOS and Windows. Dependency version constraints are defined in
-`pyproject.toml`.
+validated on macOS and Windows. The complete suite also runs on Python 3.11
+with the declared minimum direct dependencies. Dependency constraints and
+update rules are described in [Dependency policy](DEPENDENCY_POLICY.md).
 
 Security reports follow [SECURITY.md](../SECURITY.md).

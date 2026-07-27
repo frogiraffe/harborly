@@ -1,79 +1,30 @@
 # sea-mile
 
+[![CI](https://github.com/frogiraffe/sea-mile/actions/workflows/ci.yml/badge.svg)](https://github.com/frogiraffe/sea-mile/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/sea-mile.svg)](https://pypi.org/project/sea-mile/)
+[![Python](https://img.shields.io/pypi/pyversions/sea-mile.svg)](https://pypi.org/project/sea-mile/)
+[![License](https://img.shields.io/pypi/l/sea-mile.svg)](LICENSE)
+
 **Port identity, spatial search, and analytical sea routing.**
 
-sea-mile is a typed Python SDK and CLI for resolving real-world port identities,
+`sea-mile` is a typed Python SDK and CLI for resolving real-world port identities,
 finding nearby ports, reviewing ambiguous CSV matches, and calculating
 approximate sea-route distances in nautical miles. The package ships with a
-source-aware registry, works offline for search, and preserves the public 1.x
-API while its internals evolve.
+source-aware offline registry and preserves its documented public interfaces
+throughout the 1.x series.
 
 > Routes are analytical approximations on the `searoute` maritime graph. They
 > are not suitable for navigation, voyage planning, or safety-critical use.
 
-## Architecture
+## What it does
 
-### Stable API, modular core
-
-`PortRegistry` remains the public facade in `ports.py`. Internal loading,
-search, grouping, and resolution services live in `_registry_data.py`,
-`_registry_search.py`, and `_registry_services.py`. Alias and coordinate indexes
-remain isolated in `search.py` and `spatial.py`. Lazy top-level imports allow the
-package to load without the optional routing dependency.
-
-### Spatial correctness
-
-Coordinate order is explicit at every boundary:
-
-- `LatLon(latitude, longitude)` is the SDK/internal contract;
-- `LonLat(longitude, latitude)` is the X/Y contract used by searoute and
-  GeoJSON;
-- cKDTree indexes Earth-centered Cartesian XYZ, derived from validated WGS84
-  latitude and longitude.
-
-Latitude is constrained to `[-90, 90]`, longitude to `[-180, 180]`, and route
-lengths are checked against their great-circle lower bound. Source parsers also
-reject invalid degree-minute-second components.
-
-### Artifact bundling
-
-Source archives are not stored in Python modules. A scheduled GitHub Actions
-workflow downloads public snapshots, normalizes the records, and computes a
-deterministic content hash. The workflow opens a pull request when the normalized
-content changes. CI includes the Parquet files in the wheel and tests the built
-wheel.
-
-### Concurrency, caching, and backoff
-
-The bundled searoute backend declares that its distances are symmetric. For this
-backend, an `n`-port matrix calculates `n(n-1)/2` route edges. A backend that
-does not declare symmetry calculates both directions. `SeaRouter` distributes
-the route edges across a spawn-based `ProcessPoolExecutor`. Work is submitted in
-bounded batches, the automatic worker count is capped at four, and
-`max_workers=1` selects sequential execution. A dense matrix still needs O(n²)
-memory; `iter_distance_edges` and CLI `matrix --edge-csv` stream edges without
-retaining that matrix.
-
-Each process opens its own short-lived SQLite connection. WAL mode,
-`busy_timeout=30000`, a 30-second connection timeout, autocommit isolation, and
-`BEGIN IMMEDIATE` serializes cache writes from concurrent workers.
-Deterministic cache keys include coordinates, effective routing configuration,
-engine, engine version, and the backend graph version.
-
-Transient backend failures—timeouts, transport errors, HTTP 429, and HTTP
-5xx—receive exponential backoff. The implementation permits at most eight
-attempts. The default policy caps each delay at eight seconds; callers can
-provide a validated `RetryPolicy` with a different finite, non-negative cap.
-Malformed geometry and other permanent failures fail immediately. The default
-`searoute` engine is local.
-
-### Data contracts and quality
-
-Strict Pandera schemas validate human-reviewed decision CSVs, generated
-`review.csv` rows, and distance-matrix edges. ID columns are read as strings
-without coercion. The schemas reject extra columns, duplicate or missing row
-IDs, invalid types, non-finite distances, and out-of-range coordinates. CI runs
-Ruff, mypy, pytest, and wheel builds through `uv`.
+- Resolves registry IDs, canonical IDs, UN/LOCODEs, and exact aliases.
+- Searches port names with exact, prefix, fuzzy, country, and proximity filters.
+- Matches CSV rows and supports an auditable human-review decision workflow.
+- Calculates approximate sea routes and bounded-process distance matrices.
+- Streams large matrix edge sets without constructing a dense matrix.
+- Exports CSV, GeoJSON, HTML maps, and a terminal UI.
+- Builds and verifies source-aware registry artifacts.
 
 ## Installation
 
@@ -108,6 +59,50 @@ packages added to the checkout's `.venv`.
 The wheel contains the compact bundled registry. Search, resolution, and nearest
 queries need no download; routing requires the `routing` extra.
 
+## 30-second quick start
+
+```bash
+sea-mile search Mersin --country TR
+sea-mile show TRMER
+sea-mile near 39.87 26.16 --country TR --limit 5
+sea-mile route TRMER GRPIR
+```
+
+Create reusable route artifacts:
+
+```bash
+sea-mile route TRMER GRPIR \
+  --geojson route.geojson \
+  --html-map route.html
+```
+
+The route command prints the resolved ports, approximate distance, routing
+engine, physical-quality flag, and the navigation warning. Use `--json` when a
+script needs the stable schema described in
+[output schemas](docs/OUTPUT_SCHEMAS.md).
+
+Example output:
+
+```text
+origin: Mersin (WPI:44860)
+destination: Piraievs (WPI:42230)
+distance_nmi: 594.46
+great_circle_nmi: 528.19
+detour_ratio: 1.125
+quality_flag: ok
+engine: searoute 1.6.0 (astar, networkx)
+```
+
+## Accuracy and limitations
+
+Registry coordinates retain source provenance and resolution, but they do not
+represent berth-level positions. Route geometry follows an approximate
+maritime graph; restrictions, graph coverage, and source coordinates can all
+affect the result. Treat `quality_flag` as a physical consistency check, not a
+navigation certificate. See
+[sources, attribution, and limitations](docs/SOURCES_AND_LIMITATIONS.md) for
+the complete data boundary.
+
 ## Python SDK
 
 ```python
@@ -133,7 +128,8 @@ fuzzy match. Ambiguity raises `AmbiguousPortError`.
 
 See [Library API](docs/LIBRARY_API.md), [API compatibility](docs/API_COMPATIBILITY.md),
 [data dictionary](docs/DATA_DICTIONARY.md), and
-[output schemas](docs/OUTPUT_SCHEMAS.md).
+[output schemas](docs/OUTPUT_SCHEMAS.md). Task-oriented examples are collected
+in the [cookbook](docs/COOKBOOK.md).
 
 ## CLI
 
@@ -145,6 +141,7 @@ See [Library API](docs/LIBRARY_API.md), [API compatibility](docs/API_COMPATIBILI
 | `near` | Find nearby ports |
 | `route` | Calculate one sea route |
 | `matrix` | Calculate a process-parallel distance matrix |
+| `cache` | Inspect, prune, or clear a persistent route cache |
 | `match` | Match CSV rows and emit review data |
 | `export` | Export CSV or GeoJSON |
 | `tui` | Launch the interactive terminal search and map |
@@ -159,6 +156,7 @@ The TUI displays a braille world map with embedded coastlines and port markers.
 Press `Esc` to enter browse mode, then use `+`/`-` to zoom, `h`/`j`/`k`/`l`
 to pan, `g` to center on the selected port, and `0` to reset the view. Press
 `i` to return to insert mode and continue typing in the search bar.
+See the dedicated [TUI guide](docs/TUI.md) for installation and controls.
 
 ```bash
 sea-mile search Mersin --country TR
@@ -167,6 +165,8 @@ sea-mile near 39.87 26.16 --country TR --limit 5
 sea-mile route TRMER GRPIR --geojson route.geojson --html-map route.html
 sea-mile matrix TRMER GRPIR TRIST --workers 4 --cache .cache/routes.sqlite3
 sea-mile matrix TRMER GRPIR TRIST --workers 4 --edge-csv route-edges.csv
+sea-mile cache info .cache/routes.sqlite3
+sea-mile cache prune .cache/routes.sqlite3 --older-than-days 90 --vacuum
 sea-mile export --country TR --format geojson --output tr.geojson
 sea-mile match ports.csv --country-column country
 sea-mile serve --host 127.0.0.1 --port 8000
@@ -193,7 +193,8 @@ python -m http.server 8000
 `sea-mile serve` defaults to the loopback interface for local use. It does not
 provide authentication, TLS termination, or rate limiting; do not expose it
 directly to the public internet without an appropriate production ASGI
-deployment and reverse proxy.
+deployment and reverse proxy. The HTTP application deliberately exposes one
+route per request and has no matrix endpoint.
 
 The registry lookup order is `--data-dir`, `SEA_MILE_DATA_DIR`, the checkout's
 `data/reference/processed`, then the bundled artifact.
@@ -291,10 +292,24 @@ uv run twine check dist/*
 ```
 
 Python 3.11–3.14 are tested on Linux; Python 3.14 is also tested on macOS and
-Windows. The release workflow reruns the complete reusable CI gate before
-publishing the exact artifacts tested by CI. It creates a reproducible CycloneDX
-SBOM, SHA-256 checksum file, GitHub build-provenance attestation, and GitHub
-Release. CI installs both the core-only wheel and the optional API/routing/map
-workflow in isolated environments. See [release procedure](docs/RELEASING.md).
+Windows. A separate Python 3.11 job resolves every declared direct dependency at
+its minimum supported version. The release workflow reruns the complete reusable
+CI gate before publishing the exact artifacts tested by CI. It creates a
+reproducible CycloneDX SBOM, SHA-256 checksum file, GitHub build-provenance
+attestation, and GitHub Release. CI installs both the core-only wheel and the
+optional API/routing/map workflow in isolated environments.
+
+Design and maintenance details live outside this user guide:
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Routing and cache operations](docs/ROUTING_AND_CACHE.md)
+- [HTTP service](docs/API_SERVICE.md)
+- [TUI guide](docs/TUI.md)
+- [Cookbook](docs/COOKBOOK.md)
+- [Dependency policy](docs/DEPENDENCY_POLICY.md)
+- [API compatibility](docs/API_COMPATIBILITY.md)
+- [Release procedure](docs/RELEASING.md)
+- [Changelog](CHANGELOG.md)
+
 Security reports follow [SECURITY.md](SECURITY.md); contributions follow
 [CONTRIBUTING.md](CONTRIBUTING.md).

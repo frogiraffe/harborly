@@ -352,6 +352,12 @@ yield both directions.
 Routing needs the `routing` extra. `SeaRouter` imports without it,
 but a route call raises `ImportError` when it is missing.
 
+Persistent caches are opt-in through `SeaRouter(cache_path=...)`. The CLI can
+inspect and maintain the same explicit file with `cache info`, `cache prune`,
+and `cache clear`. Cache schema, retention, retry, circuit-breaker, and partial
+result behavior are documented in
+[Routing and cache operations](ROUTING_AND_CACHE.md).
+
 ## Optional service and visualizations
 
 `sea-mile serve` starts the FastAPI application from `sea_mile.api` with Uvicorn
@@ -381,6 +387,10 @@ The OpenAPI document defines the route, GeoJSON, port-provenance, health, and
 error response models. HTTP 404 indicates an unknown port, 409 an ambiguous
 identity, 422 invalid input, 502 a routing-backend failure, and 503 an
 unavailable routing dependency.
+
+The local application intentionally has no matrix endpoint and supplies no
+authentication, rate limiting, TLS termination, or request deadline. See
+[HTTP service](API_SERVICE.md) before deploying it outside a workstation.
 
 Install the `api` and `routing` extras together for this command. `create_app` accepts
 injected registry and router objects for isolated application tests; the default

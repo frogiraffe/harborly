@@ -164,8 +164,8 @@ OUTPUT_SCHEMA_VERSION = "1"
 
 
 def _command_label(args: argparse.Namespace) -> str:
-    if args.command == "data":
-        return f"data {args.data_command}"
+    if args.command in {"cache", "data"}:
+        return f"{args.command} {getattr(args, f'{args.command}_command')}"
     return str(args.command)
 
 
@@ -973,6 +973,43 @@ def _cmd_data(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_cache(args: argparse.Namespace) -> int:
+    from sea_mile.route_cache import RouteCache
+
+    if not args.path.is_file():
+        raise ValueError(f"route cache does not exist: {args.path}")
+    cache = RouteCache(args.path)
+    removed = 0
+    if args.cache_command == "prune":
+        removed = cache.prune(older_than_days=args.older_than_days)
+    elif args.cache_command == "clear":
+        removed = cache.clear()
+    if getattr(args, "vacuum", False):
+        cache.vacuum()
+
+    payload = cache.info().to_dict()
+    payload["operation"] = args.cache_command
+    if args.cache_command != "info":
+        payload["removed_entries"] = removed
+        payload["vacuumed"] = bool(args.vacuum)
+
+    if args.json:
+        _emit_json(args, payload)
+        return 0
+
+    print(f"path: {payload['path']}")
+    print(f"schema_version: {payload['schema_version']}")
+    print(f"entries: {payload['entries']}")
+    print(f"oldest_created_at: {payload['oldest_created_at'] or '-'}")
+    print(f"newest_created_at: {payload['newest_created_at'] or '-'}")
+    print(f"database_bytes: {payload['database_bytes']}")
+    print(f"wal_bytes: {payload['wal_bytes']}")
+    if args.cache_command != "info":
+        print(f"removed_entries: {removed}")
+        print(f"vacuumed: {'yes' if args.vacuum else 'no'}")
+    return 0
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="sea-mile",
@@ -1141,6 +1178,42 @@ def _parser() -> argparse.ArgumentParser:
         help="stream unique route edges to CSV instead of building a dense matrix",
     )
     matrix.set_defaults(func=_cmd_matrix)
+
+    cache = subparsers.add_parser(
+        "cache", help="inspect or maintain a persistent SQLite route cache"
+    )
+    cache_subparsers = cache.add_subparsers(dest="cache_command", required=True)
+    cache_info = cache_subparsers.add_parser(
+        "info", parents=[common], help="show cache size and entry timestamps"
+    )
+    cache_info.add_argument("path", type=Path, help="SQLite route-cache path")
+    cache_info.set_defaults(func=_cmd_cache)
+    cache_prune = cache_subparsers.add_parser(
+        "prune", parents=[common], help="delete entries older than a retention period"
+    )
+    cache_prune.add_argument("path", type=Path, help="SQLite route-cache path")
+    cache_prune.add_argument(
+        "--older-than-days",
+        type=_positive_int,
+        required=True,
+        help="delete entries older than this many days",
+    )
+    cache_prune.add_argument(
+        "--vacuum",
+        action="store_true",
+        help="reclaim free SQLite pages after deleting entries",
+    )
+    cache_prune.set_defaults(func=_cmd_cache)
+    cache_clear = cache_subparsers.add_parser(
+        "clear", parents=[common], help="delete every entry from one route cache"
+    )
+    cache_clear.add_argument("path", type=Path, help="SQLite route-cache path")
+    cache_clear.add_argument(
+        "--vacuum",
+        action="store_true",
+        help="reclaim free SQLite pages after deleting entries",
+    )
+    cache_clear.set_defaults(func=_cmd_cache)
 
     export = subparsers.add_parser("export", help="export matching port records")
     export.add_argument("--query", help="port name to search for")

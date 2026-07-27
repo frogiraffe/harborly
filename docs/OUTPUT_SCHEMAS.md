@@ -112,6 +112,9 @@ A missing routing extra is not a `routing_error`. A route call without the extra
 | `near` | array of grouped ports by distance, or source records with `--all-sources` |
 | `route` | object with the route summary, both distances, and a quality flag |
 | `matrix` | object with `ports` and `distances_nmi` |
+| `cache info` | object with cache path, schema, entry count, timestamps, and file sizes |
+| `cache prune` | cache info plus removed entry count and vacuum status |
+| `cache clear` | cache info plus removed entry count and vacuum status |
 | `match` | array of one decision per input row, each with `rules_applied` and `candidates` |
 | `data download` | the download manifest object |
 | `data build` | the build manifest object |

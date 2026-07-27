@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import csv
 import json
+import sqlite3
 import sys
+from contextlib import closing
 
 import pandas as pd
 import pytest
 
 import sea_mile
 from sea_mile.cli import main
+from sea_mile.route_cache import RouteCache
 
 
 def write_registry(directory) -> None:
@@ -634,6 +637,56 @@ def test_matrix_edge_csv_rejects_json(tmp_path, capsys) -> None:
 def test_matrix_rejects_nonpositive_worker_count() -> None:
     with pytest.raises(SystemExit):
         main(["matrix", "TRMER", "GRPIR", "--workers", "0"])
+
+
+def test_cache_info_and_clear_support_json(tmp_path, capsys) -> None:
+    cache_path = tmp_path / "routes.sqlite3"
+    RouteCache(cache_path)
+
+    assert main(["cache", "info", str(cache_path), "--json"]) == 0
+    info = json.loads(capsys.readouterr().out)
+    assert info["command"] == "cache info"
+    assert info["data"]["schema_version"] == 1
+    assert info["data"]["entries"] == 0
+
+    with closing(sqlite3.connect(cache_path)) as connection, connection:
+        connection.execute(
+            """
+            INSERT INTO routes (cache_key, distance_nmi, geometry_json)
+            VALUES (?, ?, ?)
+            """,
+            (
+                "test",
+                1.0,
+                '{"type":"LineString","coordinates":[[0,0],[1,1]]}',
+            ),
+        )
+
+    assert main(["cache", "clear", str(cache_path), "--json"]) == 0
+    cleared = json.loads(capsys.readouterr().out)
+    assert cleared["command"] == "cache clear"
+    assert cleared["data"]["removed_entries"] == 1
+    assert cleared["data"]["entries"] == 0
+
+
+def test_cache_prune_requires_positive_retention(tmp_path) -> None:
+    with pytest.raises(SystemExit):
+        main(
+            [
+                "cache",
+                "prune",
+                str(tmp_path / "routes.sqlite3"),
+                "--older-than-days",
+                "0",
+            ]
+        )
+
+
+def test_cache_info_rejects_a_missing_file(tmp_path, capsys) -> None:
+    status = main(["cache", "info", str(tmp_path / "missing.sqlite3")])
+
+    assert status == 2
+    assert "does not exist" in capsys.readouterr().err
 
 
 def test_data_build_reports_missing_sources_without_loading_registry(

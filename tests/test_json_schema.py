@@ -8,6 +8,7 @@ from jsonschema import Draft202012Validator
 from test_cli import write_registry
 
 from sea_mile.cli import main
+from sea_mile.route_cache import RouteCache
 
 SCHEMA_PATH = (
     Path(__file__).resolve().parents[1]
@@ -82,6 +83,13 @@ def test_data_command_json_matches_schema(
     validator.validate(json.loads(capsys.readouterr().out))
 
     main(["data", "prepare", "--reference-root", str(tmp_path), "--json"])
+    validator.validate(json.loads(capsys.readouterr().out))
+
+
+def test_cache_command_json_matches_schema(tmp_path, capsys, validator) -> None:
+    cache_path = tmp_path / "routes.sqlite3"
+    RouteCache(cache_path)
+    main(["cache", "info", str(cache_path), "--json"])
     validator.validate(json.loads(capsys.readouterr().out))
 
 

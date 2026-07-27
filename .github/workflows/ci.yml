@@ -49,6 +49,52 @@ jobs:
       - name: Run tests
         run: uv run pytest --cov=sea_mile -W error::ResourceWarning -W error::pytest.PytestUnraisableExceptionWarning -q -rs
 
+  minimum-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.21"
+
+      - name: Set up Python 3.11
+        run: uv python install 3.11
+
+      - name: Install declared minimum dependencies
+        run: |
+          uv venv --python 3.11 .venv-min
+          uv pip install \
+            --python .venv-min/bin/python \
+            --resolution lowest-direct \
+            -e '.[analysis,api,fast,map,routing,tui]' \
+            'hypothesis>=6.92.7' \
+            'jsonschema>=4.0' \
+            'markdown-it-py>=4.0' \
+            'pytest>=9.1.1' \
+            'pytest-cov>=7.0.0'
+
+      - name: Report resolved direct versions
+        run: |
+          .venv-min/bin/python - <<'PY'
+          from importlib.metadata import version
+
+          for package in (
+              "httpx",
+              "numpy",
+              "pandas",
+              "pandera",
+              "pyarrow",
+              "rapidfuzz",
+              "tenacity",
+          ):
+              print(f"{package}=={version(package)}")
+          PY
+
+      - name: Run tests against declared minimums
+        run: .venv-min/bin/pytest -q
+
   security:
     runs-on: ubuntu-latest
     steps:
@@ -73,7 +119,7 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
-    needs: [test, security]
+    needs: [test, minimum-dependencies, security]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 

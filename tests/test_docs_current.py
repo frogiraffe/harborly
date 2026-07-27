@@ -110,8 +110,12 @@ def test_only_json_emitting_commands_accept_the_json_flag() -> None:
         assert _has_json_option(commands[name]), name
 
     data_commands = _subcommands(commands["data"])
-    for name in ("download", "build", "prepare", "verify"):
+    for name in ("download", "build", "prepare", "verify", "lock"):
         assert _has_json_option(data_commands[name]), name
+
+    cache_commands = _subcommands(commands["cache"])
+    for name in ("info", "prune", "clear"):
+        assert _has_json_option(cache_commands[name]), name
 
 
 def test_readme_scopes_json_and_documents_exit_codes() -> None:
