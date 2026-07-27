@@ -349,6 +349,7 @@ def test_distance_edges_use_bounded_batches_and_default_worker_cap(
             return CompletedBatch(self, tasks)
 
     monkeypatch.setattr("sea_mile.router.ProcessPoolExecutor", RecordingExecutor)
+    monkeypatch.setattr("sea_mile.router.os.cpu_count", lambda: 64)
     ports = [
         _port(str(index), float(index % 80), float(index % 170)) for index in range(50)
     ]
