@@ -96,6 +96,8 @@ def test_verify_passes_on_a_consistent_build(tmp_path, no_pyproj) -> None:
     report = verify_reference_data(tmp_path)
 
     assert report["status"] == "passed"
+    assert report["data_source"] == "local_reference_build"
+    assert report["reference_root"] == str(tmp_path.resolve())
     names = {check["name"] for check in report["checks"]}
     assert "checksum_wpi" in names
     assert "registry_id_unique" in names

@@ -48,14 +48,17 @@ wheel.
 The bundled searoute backend declares that its distances are symmetric. For this
 backend, an `n`-port matrix calculates `n(n-1)/2` route edges. A backend that
 does not declare symmetry calculates both directions. `SeaRouter` distributes
-the route edges across a spawn-based `ProcessPoolExecutor`. Set
-`max_workers=1` for sequential execution.
+the route edges across a spawn-based `ProcessPoolExecutor`. Work is submitted in
+bounded batches, the automatic worker count is capped at four, and
+`max_workers=1` selects sequential execution. A dense matrix still needs O(n²)
+memory; `iter_distance_edges` and CLI `matrix --edge-csv` stream edges without
+retaining that matrix.
 
 Each process opens its own short-lived SQLite connection. WAL mode,
 `busy_timeout=30000`, a 30-second connection timeout, autocommit isolation, and
 `BEGIN IMMEDIATE` serializes cache writes from concurrent workers.
 Deterministic cache keys include coordinates, effective routing configuration,
-engine, and engine version.
+engine, engine version, and the backend graph version.
 
 Transient backend failures—timeouts, transport errors, HTTP 429, and HTTP
 5xx—receive exponential backoff. The implementation permits at most eight
@@ -162,7 +165,8 @@ sea-mile search Mersin --country TR
 sea-mile show TRMER
 sea-mile near 39.87 26.16 --country TR --limit 5
 sea-mile route TRMER GRPIR --geojson route.geojson --html-map route.html
-sea-mile matrix TRMER GRPIR TRIST --cache .cache/routes.sqlite3
+sea-mile matrix TRMER GRPIR TRIST --workers 4 --cache .cache/routes.sqlite3
+sea-mile matrix TRMER GRPIR TRIST --workers 4 --edge-csv route-edges.csv
 sea-mile export --country TR --format geojson --output tr.geojson
 sea-mile match ports.csv --country-column country
 sea-mile serve --host 127.0.0.1 --port 8000
@@ -257,6 +261,10 @@ sea-mile data lock
 sea-mile data build --lock sea-mile.lock.json
 ```
 
+`data verify` checks a local reference build, not the compact registry embedded
+in the wheel. Its text and JSON output include `data_source` and the resolved
+`reference_root` so automation records exactly which data was checked.
+
 Snapshots are bounded by timeout and retry policies. The lock records URL,
 snapshot label, byte size, and SHA-256, while the normalized registry carries
 provider versions and a deterministic content hash.
@@ -268,19 +276,25 @@ can add UN/LOCODE and user-supplied OpenStreetMap data. See
 ## Development and release gate
 
 ```bash
-uv sync --all-extras --group audit --python 3.14
+uv sync --locked --all-extras --group audit --python 3.14
 uv run ruff format --check src tests scripts
 uv run ruff check src tests scripts
 uv run mypy src
-uv run pytest -q
-uv run bandit -r src
+uv run pytest --cov=sea_mile -W error::ResourceWarning \
+  -W error::pytest.PytestUnraisableExceptionWarning -q
+uv run bandit -r src scripts
 uv run pip-audit
-uv build
+SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" uv build
+SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" \
+  uv run python scripts/normalize_sdist.py dist/*.tar.gz
 uv run twine check dist/*
 ```
 
 Python 3.11–3.14 are tested on Linux; Python 3.14 is also tested on macOS and
 Windows. The release workflow reruns the complete reusable CI gate before
-publishing, and CI installs the core-only wheel in an isolated environment.
+publishing the exact artifacts tested by CI. It creates a reproducible CycloneDX
+SBOM, SHA-256 checksum file, GitHub build-provenance attestation, and GitHub
+Release. CI installs both the core-only wheel and the optional API/routing/map
+workflow in isolated environments. See [release procedure](docs/RELEASING.md).
 Security reports follow [SECURITY.md](SECURITY.md); contributions follow
 [CONTRIBUTING.md](CONTRIBUTING.md).

@@ -266,6 +266,11 @@ route.to_geojson_feature()
 router.route_coordinates(36.8, 34.65, 37.94, 23.63)
 router.route_many([(origin, destination)])
 router.distance_matrix([origin, destination])
+for row, column, distance_nmi in router.iter_distance_edges(
+    [origin, destination],
+    max_workers=4,
+):
+    print(row, column, distance_nmi)
 ```
 
 The default settings use the searoute A* algorithm, the NetworkX backend, the
@@ -338,6 +343,12 @@ searoute backend declares symmetric distances, so sea-mile calculates one route 
 each unordered pair. An internal backend that does not declare symmetry is calculated
 in both directions. Each worker process runs an initializer that pre-imports the
 routing backend modules, so the first task in a worker does not pay the import cost.
+The default worker count is capped at four, tasks are submitted as bounded batches,
+and `max_workers` can override the count. The dense `distance_matrix` result itself
+uses O(n²) memory. `iter_distance_edges` uses the same bounded scheduler but yields
+`(row_index, column_index, distance_nmi)` tuples without constructing the matrix.
+For symmetric backends it yields each unordered pair once; directional backends
+yield both directions.
 Routing needs the `routing` extra. `SeaRouter` imports without it,
 but a route call raises `ImportError` when it is missing.
 

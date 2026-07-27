@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import sys
+from contextlib import closing
 
 import pytest
 
@@ -28,12 +29,14 @@ class FakeBackend:
         *,
         name="fake",
         version="9.9",
+        graph_version=None,
         distance_nmi=None,
         geometry=_UNSET,
         error=None,
     ):
         self._name = name
         self._version = version
+        self._graph_version = graph_version if graph_version is not None else version
         self._distance = distance_nmi
         self._geometry = GEOMETRY if geometry is _UNSET else geometry
         self._error = error
@@ -46,6 +49,10 @@ class FakeBackend:
     @property
     def version(self):
         return self._version
+
+    @property
+    def graph_version(self):
+        return self._graph_version
 
     def route(self, origin, destination, config):
         self.calls.append((origin, destination, config))
@@ -142,6 +149,28 @@ def test_persistent_cache_key_includes_direction_config_and_engine_version(tmp_p
     assert len(backend.calls) == 3
 
 
+def test_persistent_cache_key_includes_backend_graph_version(tmp_path):
+    cache_path = tmp_path / "routes.sqlite3"
+    first_backend = FakeBackend(
+        version="1.0", graph_version="graph-a", distance_nmi=600.0
+    )
+    second_backend = FakeBackend(
+        version="1.0", graph_version="graph-b", distance_nmi=700.0
+    )
+
+    first = SeaRouter(
+        cache_path=cache_path, _routing_backend=first_backend
+    ).route_coordinates(*ORIGIN, *DESTINATION)
+    second = SeaRouter(
+        cache_path=cache_path, _routing_backend=second_backend
+    ).route_coordinates(*ORIGIN, *DESTINATION)
+
+    assert first.distance_nmi == 600.0
+    assert second.distance_nmi == 700.0
+    assert len(first_backend.calls) == 1
+    assert len(second_backend.calls) == 1
+
+
 def test_backend_failure_becomes_a_routing_error():
     router = SeaRouter(_routing_backend=FakeBackend(error=RuntimeError("boom")))
 
@@ -208,7 +237,7 @@ def test_invalid_existing_cache_entry_is_evicted(tmp_path):
         engine=backend.name,
         engine_version=backend.version,
     )
-    with sqlite3.connect(cache_path) as connection:
+    with closing(sqlite3.connect(cache_path)) as connection, connection:
         connection.execute(
             "INSERT INTO routes (cache_key, distance_nmi, geometry_json) "
             "VALUES (?, ?, ?)",

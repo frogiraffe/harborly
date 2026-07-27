@@ -320,3 +320,110 @@ def test_download_stays_sequential_without_range_support(tmp_path, monkeypatch) 
         _download(client, "https://example.test/source", destination, max_bytes=10_000)
 
     assert destination.read_bytes() == content
+
+
+def test_download_falls_back_when_server_ignores_ranges(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("sea_mile.build.download._PARALLEL_THRESHOLD_BYTES", 100)
+    monkeypatch.setattr("sea_mile.build.download._PARALLEL_CONNECTIONS", 2)
+    monkeypatch.setattr("sea_mile.build.download._PARALLEL_CHUNK_BYTES", 100)
+
+    content = bytes(range(200))
+    ordinary_requests = 0
+    range_requests = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal ordinary_requests, range_requests
+        if request.headers.get("Range") is not None:
+            range_requests += 1
+            return httpx.Response(200, content=content, request=request)
+        ordinary_requests += 1
+        return httpx.Response(
+            200,
+            headers={"Content-Length": str(len(content)), "Accept-Ranges": "bytes"},
+            content=content,
+            request=request,
+        )
+
+    destination = tmp_path / "source.bin"
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        _download(client, "https://example.test/source", destination, max_bytes=250)
+
+    assert destination.read_bytes() == content
+    assert ordinary_requests == 2
+    assert range_requests >= 1
+
+
+def test_download_range_fallback_still_enforces_size_limit(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setattr("sea_mile.build.download._PARALLEL_THRESHOLD_BYTES", 100)
+    monkeypatch.setattr("sea_mile.build.download._PARALLEL_CONNECTIONS", 1)
+
+    advertised = b"x" * 200
+    oversized = b"x" * 300
+    ordinary_requests = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal ordinary_requests
+        if request.headers.get("Range") is not None:
+            return httpx.Response(200, content=advertised, request=request)
+        ordinary_requests += 1
+        content = advertised if ordinary_requests == 1 else oversized
+        headers = (
+            {"Content-Length": str(len(advertised)), "Accept-Ranges": "bytes"}
+            if ordinary_requests == 1
+            else {}
+        )
+        return httpx.Response(200, headers=headers, content=content, request=request)
+
+    destination = tmp_path / "source.bin"
+    with (
+        httpx.Client(transport=httpx.MockTransport(handler)) as client,
+        pytest.raises(SourceDataError, match="download limit"),
+    ):
+        _download(client, "https://example.test/source", destination, max_bytes=250)
+
+    assert not destination.exists()
+    assert not (tmp_path / "source.bin.part").exists()
+
+
+@pytest.mark.parametrize(
+    ("content_range", "body", "message"),
+    [
+        ("bytes 1-99/200", b"x" * 99, "unexpected Content-Range"),
+        ("not-a-range", b"x" * 100, "invalid Content-Range"),
+        ("bytes 0-99/200", b"x" * 99, "99 bytes for a 100-byte range"),
+        ("bytes 0-99/200", b"x" * 101, "too many bytes"),
+    ],
+)
+def test_download_rejects_invalid_range_responses(
+    tmp_path, monkeypatch, content_range, body, message
+) -> None:
+    monkeypatch.setattr("sea_mile.build.download._PARALLEL_THRESHOLD_BYTES", 100)
+    monkeypatch.setattr("sea_mile.build.download._PARALLEL_CONNECTIONS", 1)
+    monkeypatch.setattr("sea_mile.build.download._PARALLEL_CHUNK_BYTES", 100)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.headers.get("Range") is None:
+            return httpx.Response(
+                200,
+                headers={"Content-Length": "200", "Accept-Ranges": "bytes"},
+                content=b"x" * 200,
+                request=request,
+            )
+        return httpx.Response(
+            206,
+            headers={"Content-Range": content_range},
+            content=body,
+            request=request,
+        )
+
+    destination = tmp_path / "source.bin"
+    with (
+        httpx.Client(transport=httpx.MockTransport(handler)) as client,
+        pytest.raises(SourceDataError, match=message),
+    ):
+        _download(client, "https://example.test/source", destination, max_bytes=250)
+
+    assert not destination.exists()
+    assert not (tmp_path / "source.bin.part").exists()

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import multiprocessing
 import sqlite3
+from contextlib import closing
 from types import SimpleNamespace
 
 import pandas as pd
@@ -215,7 +216,7 @@ def test_sqlite_cache_handles_concurrent_process_writers(tmp_path) -> None:
     with context.Pool(4) as pool:
         pool.map(_cache_writer, [(str(cache_path), value) for value in range(24)])
 
-    with sqlite3.connect(cache_path) as connection:
+    with closing(sqlite3.connect(cache_path)) as connection, connection:
         journal_mode = connection.execute("PRAGMA journal_mode").fetchone()[0]
         rows = connection.execute("SELECT COUNT(*) FROM routes").fetchone()[0]
         geometries = connection.execute("SELECT geometry_json FROM routes").fetchall()
@@ -313,6 +314,56 @@ def test_distance_matrix_custom_backend_multiprocessing_regression() -> None:
     matrix_asym_w2 = router_asym.distance_matrix(ports, max_workers=2)
     assert matrix_asym_w1 == matrix_asym_w2
     assert matrix_asym_w2[0][1] != matrix_asym_w2[1][0]
+
+
+def test_distance_edges_use_bounded_batches_and_default_worker_cap(
+    monkeypatch,
+) -> None:
+    class CompletedBatch:
+        def __init__(self, owner, tasks):
+            self.owner = owner
+            self.tasks = tasks
+
+        def result(self):
+            self.owner.outstanding -= 1
+            return [(row, column, 1.0) for row, column, _, _ in self.tasks]
+
+    class RecordingExecutor:
+        instance = None
+
+        def __init__(self, *, max_workers, **kwargs):
+            self.max_workers = max_workers
+            self.outstanding = 0
+            self.max_outstanding = 0
+            RecordingExecutor.instance = self
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def submit(self, function, tasks):
+            self.outstanding += 1
+            self.max_outstanding = max(self.max_outstanding, self.outstanding)
+            return CompletedBatch(self, tasks)
+
+    monkeypatch.setattr("sea_mile.router.ProcessPoolExecutor", RecordingExecutor)
+    ports = [
+        _port(str(index), float(index % 80), float(index % 170)) for index in range(50)
+    ]
+
+    edges = list(
+        SeaRouter(_routing_backend=DeterministicBackend()).iter_distance_edges(ports)
+    )
+
+    executor = RecordingExecutor.instance
+    assert executor is not None
+    assert executor.max_workers == 4
+    assert executor.max_outstanding <= 8
+    assert len(edges) == 50 * 49 // 2
+    assert edges[0][:2] == (0, 1)
+    assert edges[-1][:2] == (48, 49)
 
 
 def test_distance_matrix_unpicklable_backend() -> None:

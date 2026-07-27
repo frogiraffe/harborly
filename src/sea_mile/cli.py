@@ -137,6 +137,18 @@ def _port(value: str) -> int:
     return port
 
 
+def _positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"{value!r} is not a positive integer"
+        ) from None
+    if parsed < 1:
+        raise argparse.ArgumentTypeError(f"{value!r} is not a positive integer")
+    return parsed
+
+
 def _default_reference_root() -> Path:
     project_reference = Path.cwd() / "data" / "reference"
     if project_reference.exists():
@@ -466,12 +478,35 @@ def _cmd_matrix(args: argparse.Namespace) -> int:
 
     registry = _load_registry(args)
     ports = [registry.resolve(identifier) for identifier in args.ports]
+    labels = [port.registry_id for port in ports]
+    router = SeaRouter(cache_path=args.cache)
     try:
-        matrix = SeaRouter(cache_path=args.cache).distance_matrix(ports)
+        if args.edge_csv:
+            if args.json:
+                raise ValueError("matrix --edge-csv cannot be combined with --json")
+            args.edge_csv.parent.mkdir(parents=True, exist_ok=True)
+            partial = args.edge_csv.with_suffix(args.edge_csv.suffix + ".part")
+            partial.unlink(missing_ok=True)
+            count = 0
+            try:
+                with partial.open("w", newline="", encoding="utf-8") as handle:
+                    writer = csv.writer(handle)
+                    writer.writerow(("origin", "destination", "distance_nmi"))
+                    for row, column, distance in router.iter_distance_edges(
+                        ports, max_workers=args.workers
+                    ):
+                        writer.writerow((labels[row], labels[column], distance))
+                        count += 1
+                partial.replace(args.edge_csv)
+            except Exception:
+                partial.unlink(missing_ok=True)
+                raise
+            print(f"wrote {count} route edges to {args.edge_csv}")
+            return 0
+        matrix = router.distance_matrix(ports, max_workers=args.workers)
     except ImportError as error:
         print(f"sea-mile: error: {error}", file=sys.stderr)
         return 2
-    labels = [port.registry_id for port in ports]
     from sea_mile.data_contracts import validate_distance_matrix
 
     validate_distance_matrix(labels, matrix)
@@ -875,6 +910,8 @@ def _print_source_lock(lock: dict[str, Any]) -> None:
 
 
 def _print_verify_report(report: dict[str, Any]) -> None:
+    print(f"data_source: {report['data_source']}")
+    print(f"reference_root: {report['reference_root']}")
     print(f"status: {report['status']}")
     for check in report["checks"]:
         mark = "ok" if check["passed"] else "FAIL"
@@ -1092,6 +1129,16 @@ def _parser() -> argparse.ArgumentParser:
         "--cache",
         type=Path,
         help="persist routing results in this SQLite cache",
+    )
+    matrix.add_argument(
+        "--workers",
+        type=_positive_int,
+        help="routing worker processes (default: at most 4)",
+    )
+    matrix.add_argument(
+        "--edge-csv",
+        type=Path,
+        help="stream unique route edges to CSV instead of building a dense matrix",
     )
     matrix.set_defaults(func=_cmd_matrix)
 

@@ -6,8 +6,10 @@ import multiprocessing
 import os
 import secrets
 import time
+from collections import deque
 from collections.abc import Iterable, Sequence
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import Future, ProcessPoolExecutor
+from contextlib import suppress
 from dataclasses import dataclass
 from functools import lru_cache
 from math import isfinite
@@ -42,6 +44,10 @@ from sea_mile.routing import (
     RouteQualityPolicy,
     assess_route_length,
 )
+
+_DEFAULT_MATRIX_WORKER_LIMIT = 4
+_MATRIX_BATCH_SIZE = 32
+_MATRIX_PENDING_BATCHES_PER_WORKER = 2
 
 
 def _coordinate_port(label: str, latitude: float, longitude: float) -> Port:
@@ -145,6 +151,42 @@ def _matrix_route(
     if _worker_router is None:
         raise RuntimeError("worker router instance was not initialized")
     return row, column, _worker_router.route(origin, destination).distance_nmi
+
+
+def _matrix_route_batch(
+    tasks: tuple[tuple[int, int, Port, Port], ...],
+) -> list[tuple[int, int, float]]:
+    """Calculate a bounded batch of matrix edges in one worker call."""
+
+    return [_matrix_route(task) for task in tasks]
+
+
+def _matrix_pairs(size: int, *, symmetric: bool) -> Iterable[tuple[int, int]]:
+    """Yield matrix indices without retaining the quadratic pair collection."""
+
+    if symmetric:
+        return ((row, column) for row in range(size) for column in range(row + 1, size))
+    return (
+        (row, column) for row in range(size) for column in range(size) if row != column
+    )
+
+
+def _matrix_task_batches(
+    ports: Sequence[Port],
+    pairs: Iterable[tuple[int, int]],
+    *,
+    batch_size: int,
+) -> Iterable[tuple[tuple[int, int, Port, Port], ...]]:
+    """Yield fixed-size task batches while keeping only one batch in memory."""
+
+    batch: list[tuple[int, int, Port, Port]] = []
+    for row, column in pairs:
+        batch.append((row, column, ports[row], ports[column]))
+        if len(batch) == batch_size:
+            yield tuple(batch)
+            batch.clear()
+    if batch:
+        yield tuple(batch)
 
 
 def _is_transient_backend_error(error: BaseException) -> bool:
@@ -305,6 +347,9 @@ class SeaRouter:
             config=config,
             engine=self._backend.name,
             engine_version=self._backend.version,
+            graph_version=str(
+                getattr(self._backend, "graph_version", self._backend.version)
+            ),
         )
         try:
             cached = cache.get(cache_key)
@@ -432,72 +477,101 @@ class SeaRouter:
         custom routing backends that cannot be serialized across processes.
         Raises :exc:`ValueError` if ``max_workers > 1`` and the configured routing
         backend cannot be serialized. Every worker opens its own WAL-enabled SQLite
-        connection when a persistent cache is configured.
+        connection when a persistent cache is configured. The returned square matrix
+        necessarily uses O(n²) memory; use :meth:`iter_distance_edges` when a dense
+        matrix is not required.
         """
 
         size = len(ports)
         matrix = [[0.0] * size for _ in range(size)]
         symmetric = bool(getattr(self._backend, "symmetric", False))
-        if symmetric:
-            pairs = [
-                (row, column) for row in range(size) for column in range(row + 1, size)
-            ]
-        else:
-            pairs = [
-                (row, column)
-                for row in range(size)
-                for column in range(size)
-                if row != column
-            ]
-        if not pairs:
-            return matrix
-        workers = max_workers
-        if workers is None:
-            workers = min(len(pairs), os.cpu_count() or 1)
-        if workers < 1:
-            raise ValueError("max_workers must be at least 1")
-        results: Iterable[tuple[int, int, float]]
-        if workers == 1:
-            results = (
-                (row, column, self.route(ports[row], ports[column]).distance_nmi)
-                for row, column in pairs
-            )
-        else:
-            try:
-                multiprocessing.reduction.ForkingPickler.dumps(self._backend)
-            except Exception:
-                raise ValueError(
-                    "routing backend must be serializable when max_workers is "
-                    "greater than one"
-                ) from None
-            cache_path = (
-                str(self._persistent_cache.path)
-                if self._persistent_cache is not None
-                else None
-            )
-            initargs = (
-                self.algorithm,
-                self.backend,
-                self.restrictions,
-                cache_path,
-                self.retry_policy,
-                self._quality_policy,
-                self._circuit_breaker.policy if self._circuit_breaker else None,
-                self._backend,
-            )
-            tasks = ((row, column, ports[row], ports[column]) for row, column in pairs)
-            with ProcessPoolExecutor(
-                max_workers=workers,
-                mp_context=multiprocessing.get_context("spawn"),
-                initializer=_worker_initializer,
-                initargs=initargs,
-            ) as executor:
-                results = list(executor.map(_matrix_route, tasks))
-        for row, column, distance in results:
+        for row, column, distance in self.iter_distance_edges(
+            ports, max_workers=max_workers
+        ):
             matrix[row][column] = distance
             if symmetric:
                 matrix[column][row] = distance
         return matrix
+
+    def iter_distance_edges(
+        self,
+        ports: Sequence[Port],
+        *,
+        max_workers: int | None = None,
+    ) -> Iterable[tuple[int, int, float]]:
+        """Yield pairwise route edges with bounded process-pool backpressure.
+
+        Symmetric backends yield each unordered pair once. Directional backends
+        yield both directions. At most two fixed-size batches per worker are
+        submitted at a time, and results are yielded in deterministic pair order.
+        """
+
+        if max_workers is not None and max_workers < 1:
+            raise ValueError("max_workers must be at least 1")
+        size = len(ports)
+        symmetric = bool(getattr(self._backend, "symmetric", False))
+        edge_count = size * (size - 1) // 2 if symmetric else size * (size - 1)
+        if edge_count == 0:
+            return
+        workers = max_workers
+        if workers is None:
+            workers = min(
+                edge_count,
+                os.cpu_count() or 1,
+                _DEFAULT_MATRIX_WORKER_LIMIT,
+            )
+        pairs = _matrix_pairs(size, symmetric=symmetric)
+        if workers == 1:
+            for row, column in pairs:
+                yield (
+                    row,
+                    column,
+                    self.route(ports[row], ports[column]).distance_nmi,
+                )
+            return
+
+        try:
+            multiprocessing.reduction.ForkingPickler.dumps(self._backend)
+        except Exception:
+            raise ValueError(
+                "routing backend must be serializable when max_workers is "
+                "greater than one"
+            ) from None
+        cache_path = (
+            str(self._persistent_cache.path)
+            if self._persistent_cache is not None
+            else None
+        )
+        initargs = (
+            self.algorithm,
+            self.backend,
+            self.restrictions,
+            cache_path,
+            self.retry_policy,
+            self._quality_policy,
+            self._circuit_breaker.policy if self._circuit_breaker else None,
+            self._backend,
+        )
+        batches = iter(
+            _matrix_task_batches(ports, pairs, batch_size=_MATRIX_BATCH_SIZE)
+        )
+        max_pending = workers * _MATRIX_PENDING_BATCHES_PER_WORKER
+        with ProcessPoolExecutor(
+            max_workers=workers,
+            mp_context=multiprocessing.get_context("spawn"),
+            initializer=_worker_initializer,
+            initargs=initargs,
+        ) as executor:
+            pending: deque[Future[list[tuple[int, int, float]]]] = deque()
+            for _ in range(max_pending):
+                try:
+                    pending.append(executor.submit(_matrix_route_batch, next(batches)))
+                except StopIteration:
+                    break
+            while pending:
+                yield from pending.popleft().result()
+                with suppress(StopIteration):
+                    pending.append(executor.submit(_matrix_route_batch, next(batches)))
 
     @staticmethod
     def _coordinates(port: Port) -> LatLon:

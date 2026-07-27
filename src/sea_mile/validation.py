@@ -182,6 +182,8 @@ def verify_reference_data(reference_root: str | Path) -> dict[str, Any]:
         )
 
     return {
+        "data_source": "local_reference_build",
+        "reference_root": str(reference_root.resolve()),
         "status": "passed" if all(check.passed for check in checks) else "failed",
         "checks": [
             {"name": check.name, "passed": check.passed, "detail": check.detail}

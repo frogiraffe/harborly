@@ -27,13 +27,13 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
-          version: "latest"
+          version: "0.11.21"
 
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: uv sync --dev --extra analysis --extra api --extra fast --extra map --extra tui --extra routing --python ${{ matrix.python-version }}
+        run: uv sync --locked --dev --extra analysis --extra api --extra fast --extra map --extra tui --extra routing --python ${{ matrix.python-version }}
 
       - name: Ruff format check
         run: uv run ruff format --check src tests scripts
@@ -47,7 +47,7 @@ jobs:
         run: uv run mypy src
 
       - name: Run tests
-        run: uv run pytest -q -rs
+        run: uv run pytest --cov=sea_mile -W error::ResourceWarning -W error::pytest.PytestUnraisableExceptionWarning -q -rs
 
   security:
     runs-on: ubuntu-latest
@@ -57,16 +57,16 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
-          version: "latest"
+          version: "0.11.21"
 
       - name: Set up Python 3.14
         run: uv python install 3.14
 
       - name: Install project and audit dependencies
-        run: uv sync --all-extras --group audit --python 3.14
+        run: uv sync --locked --all-extras --group audit --python 3.14
 
       - name: Scan source for security issues
-        run: uv run bandit -r src
+        run: uv run bandit -r src scripts
 
       - name: Audit installed dependencies
         run: uv run pip-audit
@@ -80,19 +80,36 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
-          version: "latest"
+          version: "0.11.21"
 
       - name: Set up Python 3.14
         run: uv python install 3.14
 
       - name: Install package verification tools
-        run: uv sync --group audit --python 3.14
+        run: uv sync --locked --group audit --python 3.14
 
       - name: Build sdist and wheel
-        run: uv build
+        run: |
+          SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          echo "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" >> "$GITHUB_ENV"
+          export SOURCE_DATE_EPOCH
+          uv build
+          uv run python scripts/normalize_sdist.py dist/*.tar.gz
+
+      - name: Verify reproducible artifacts
+        run: |
+          mkdir /tmp/sea-mile-repro
+          uv build --out-dir /tmp/sea-mile-repro
+          uv run python scripts/normalize_sdist.py /tmp/sea-mile-repro/*.tar.gz
+          for artifact in dist/*; do
+            cmp "$artifact" "/tmp/sea-mile-repro/$(basename "$artifact")"
+          done
 
       - name: Validate package metadata
-        run: uv run twine check dist/*
+        run: |
+          uv run twine check dist/*
+          tar -tzf dist/*.tar.gz | grep '/scripts/normalize_sdist.py$'
+          tar -tzf dist/*.tar.gz | grep '/docs/RELEASING.md$'
 
       - name: Smoke-test the core-only wheel
         run: |
@@ -101,6 +118,7 @@ jobs:
           pip install --quiet dist/*.whl
           sea-mile info --json
           python3 -c "from sea_mile import PortRegistry, SeaRouter; assert len(PortRegistry.bundled()) > 0"
+          python3 -c "import pandas as pd; from sea_mile.data_contracts import validate_distance_matrix, validate_review_decisions; validate_distance_matrix(['A', 'B'], [[0.0, 1.0], [1.0, 0.0]]); validate_review_decisions(pd.DataFrame([{'row_id': '01', 'chosen_registry_id': 'WPI:1'}]))"
 
       - name: Smoke-test the API, routing, and map workflow
         run: |
@@ -110,9 +128,41 @@ jobs:
           pip install --quiet "${wheels[0]}[api,routing,map]"
           sea-mile route TRMER GRPIR --html-map /tmp/sea-mile-route.html
           test -s /tmp/sea-mile-route.html
-          python3 -c "from fastapi.testclient import TestClient; from sea_mile.api import app; client = TestClient(app); assert client.get('/').status_code == 200; assert client.get('/healthz').json()['status'] == 'ok'"
+          python3 - <<'PY'
+          import asyncio
+          import httpx
+          from sea_mile.api import app
+
+          async def smoke() -> None:
+              transport = httpx.ASGITransport(app=app)
+              async with httpx.AsyncClient(
+                  transport=transport,
+                  base_url="http://test",
+                  follow_redirects=False,
+              ) as client:
+                  assert (await client.get("/")).status_code == 307
+                  assert (await client.get("/healthz")).json()["status"] == "ok"
+
+          asyncio.run(smoke())
+          PY
+
+      - name: Generate reproducible CycloneDX SBOM
+        run: |
+          version="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+          mkdir release-assets
+          uv run cyclonedx-py environment /tmp/sea-mile-ci-smoke/bin/python \
+            --pyproject pyproject.toml \
+            --mc-type library \
+            --output-reproducible \
+            --output-format JSON \
+            --output-file "release-assets/sea-mile-$version.cdx.json"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: dist
           path: dist/
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-assets
+          path: release-assets/

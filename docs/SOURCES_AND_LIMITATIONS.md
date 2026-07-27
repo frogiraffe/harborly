@@ -10,6 +10,12 @@ UN/LOCODE records are generated only by a local build and are not redistributed
 in the wheel. OpenStreetMap records are included only when a user supplies a
 local export.
 
+The current bundled manifest contains 20,070 WPI and GeoNames source records
+and 34,216 aliases. Of those records, 2,563 carry a UN/LOCODE supplied by WPI.
+Counts can change in later releases; `sea-mile info --json` and the bundled
+manifest are authoritative for the installed wheel. A local reference build
+can add the complete port-function subset of the discovered UN/LOCODE release.
+
 ## Data sources
 
 ### NGA World Port Index
@@ -129,6 +135,11 @@ refer to different terminals, use different precision, or contain upstream
 errors. `sea-mile data verify --json` reports cross-provider agreement metrics;
 large differences are retained as provenance evidence and are not silently
 averaged or overwritten.
+
+`data verify` targets the local reference directory selected by
+`--reference-root`, the checkout fallback, or the user-data fallback. The report
+includes the resolved path and labels it `local_reference_build`; it does not
+verify or describe the smaller registry embedded in the wheel.
 
 ## A single exact match is not always the same port
 

@@ -119,9 +119,18 @@ A missing routing extra is not a `routing_error`. A route call without the extra
 | `data verify` | the verification report object |
 | `data lock` | the source lockfile object |
 
+The `data verify` report contains `data_source: "local_reference_build"` and an
+absolute `reference_root` in addition to its status, checks, coordinate-agreement,
+and route-check fields. It never implies that the wheel's compact bundled artifact
+was the verification target.
+
 The `export` command writes CSV or GeoJSON selected by `--format`. The `tui` and
 `serve` commands are interactive processes. None of these commands implements
 `--json`. `route --html-map` writes an HTML side artifact without changing the
 route command's JSON data shape. The artifact renders bundled Natural Earth
 coastlines when opened directly and adds detailed OpenStreetMap tiles only when
 served over HTTP or HTTPS.
+
+`matrix --edge-csv PATH` cannot be combined with `--json`. It writes
+`origin,destination,distance_nmi` incrementally and does not construct the dense
+matrix. Symmetric routing backends write each unordered pair once.

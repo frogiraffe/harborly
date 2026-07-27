@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from contextlib import closing
 from typing import Any
 
 import pytest
@@ -227,7 +228,7 @@ def test_get_evicts_invalid_geometry(cache, geometry):
 
     assert cache.get(key) is None
 
-    with sqlite3.connect(cache.path) as connection:
+    with closing(sqlite3.connect(cache.path)) as connection, connection:
         remaining = connection.execute(
             "SELECT COUNT(*) FROM routes WHERE cache_key = ?", (key,)
         ).fetchone()[0]

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import base64
 import gzip
+import hashlib
 import io
 import json
 import tempfile
@@ -22,6 +23,13 @@ from pathlib import Path
 from urllib.request import urlopen
 
 NE_URL = "https://naciscdn.org/naturalearth/110m/physical/ne_110m_coastline.zip"
+NE_SHA256 = "664449b39070027e882abb295974d182afec18ca21107273d17e9e8bf6f64817"
+NE_MAX_BYTES = 2 * 1024 * 1024
+NE_REQUIRED_FILES = (
+    "ne_110m_coastline.dbf",
+    "ne_110m_coastline.shp",
+    "ne_110m_coastline.shx",
+)
 TARGET = (
     Path(__file__).resolve().parent.parent
     / "src"
@@ -34,17 +42,39 @@ PRECISION = 1  # decimal places (~1.1 km)
 
 def download_shapefile() -> bytes:
     print(f"Downloading {NE_URL} ...")
-    with urlopen(NE_URL, timeout=30) as resp:  # noqa: S310
-        return resp.read()
+    if not NE_URL.startswith("https://"):
+        raise ValueError("Natural Earth URL must use HTTPS")
+    # The only permitted value is the constant HTTPS URL checked above.
+    with urlopen(NE_URL, timeout=30) as resp:  # nosec B310
+        declared = resp.headers.get("Content-Length")
+        if declared is not None and int(declared) > NE_MAX_BYTES:
+            raise ValueError("Natural Earth archive exceeds the download limit")
+        data = resp.read(NE_MAX_BYTES + 1)
+    if len(data) > NE_MAX_BYTES:
+        raise ValueError("Natural Earth archive exceeds the download limit")
+    if hashlib.sha256(data).hexdigest() != NE_SHA256:
+        raise ValueError("Natural Earth archive checksum does not match")
+    return data
+
+
+def _required_archive_members(data: bytes) -> dict[str, bytes]:
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        names = set(archive.namelist())
+        missing = set(NE_REQUIRED_FILES) - names
+        if missing:
+            raise ValueError(
+                "Natural Earth archive is missing: " + ", ".join(sorted(missing))
+            )
+        return {name: archive.read(name) for name in NE_REQUIRED_FILES}
 
 
 def extract_coastline(data: bytes) -> list[list[tuple[float, float]]]:
-    import shapefile  # type: ignore[import-untyped]
+    import shapefile  # type: ignore[import-not-found]
 
     with tempfile.TemporaryDirectory() as tmp:
-        with zipfile.ZipFile(io.BytesIO(data)) as zf:
-            zf.extractall(tmp)
-        shp_path = list(Path(tmp).glob("*.shp"))[0]
+        for name, content in _required_archive_members(data).items():
+            (Path(tmp) / name).write_bytes(content)
+        shp_path = Path(tmp) / "ne_110m_coastline.shp"
         sf = shapefile.Reader(str(shp_path))
         features: list[list[tuple[float, float]]] = []
         for sr in sf.iterShapeRecords():

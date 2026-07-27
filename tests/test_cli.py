@@ -581,6 +581,61 @@ def test_matrix_reports_pairwise_distance(tmp_path, capsys) -> None:
     assert payload["distances_nmi"][0][1] > 0
 
 
+def test_matrix_streams_edges_to_csv(tmp_path, capsys) -> None:
+    pytest.importorskip("searoute", reason="matrix needs the routing extra")
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+    output = tmp_path / "edges.csv"
+
+    status = main(
+        [
+            "--data-dir",
+            str(data_directory),
+            "matrix",
+            "TRMER",
+            "GRPIR",
+            "--workers",
+            "1",
+            "--edge-csv",
+            str(output),
+        ]
+    )
+
+    assert status == 0
+    assert "wrote 1 route edges" in capsys.readouterr().out
+    with output.open() as handle:
+        rows = list(csv.DictReader(handle))
+    assert rows[0]["origin"] == "WPI:1"
+    assert rows[0]["destination"] == "WPI:2"
+    assert float(rows[0]["distance_nmi"]) > 0
+
+
+def test_matrix_edge_csv_rejects_json(tmp_path, capsys) -> None:
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+
+    status = main(
+        [
+            "--data-dir",
+            str(data_directory),
+            "matrix",
+            "TRMER",
+            "GRPIR",
+            "--edge-csv",
+            str(tmp_path / "edges.csv"),
+            "--json",
+        ]
+    )
+
+    assert status == 2
+    assert "cannot be combined" in capsys.readouterr().out
+
+
+def test_matrix_rejects_nonpositive_worker_count() -> None:
+    with pytest.raises(SystemExit):
+        main(["matrix", "TRMER", "GRPIR", "--workers", "0"])
+
+
 def test_data_build_reports_missing_sources_without_loading_registry(
     tmp_path, capsys
 ) -> None:
@@ -689,7 +744,8 @@ def test_match_output_enriches_input_and_preserves_columns(tmp_path) -> None:
     )
 
     assert status == 0
-    row = next(csv.DictReader(output_csv.open(encoding="utf-8")))
+    with output_csv.open(encoding="utf-8") as handle:
+        row = next(csv.DictReader(handle))
     assert row["ref"] == "X-1"
     assert row["port_name"] == "Mersin"
     assert row["sea_mile_status"] == "auto_resolved"
@@ -722,7 +778,8 @@ def test_match_review_writes_one_row_per_candidate(tmp_path) -> None:
     )
 
     assert status == 0
-    rows = list(csv.DictReader(review_csv.open(encoding="utf-8")))
+    with review_csv.open(encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
     assert [row["candidate_registry_id"] for row in rows] == ["WPI:2", "UNLOCODE:USHAM"]
     assert all(row["row_id"] == "7" for row in rows)
     assert all(row["reason_code"] == "coordinate_conflict" for row in rows)
@@ -789,9 +846,8 @@ def test_match_preserves_leading_zero_explicit_ids(tmp_path) -> None:
     )
 
     assert status == 0
-    assert {
-        row["row_id"] for row in csv.DictReader(review_csv.open(encoding="utf-8"))
-    } == {"01024"}
+    with review_csv.open(encoding="utf-8") as handle:
+        assert {row["row_id"] for row in csv.DictReader(handle)} == {"01024"}
 
 
 def test_match_applies_a_reviewed_decision(tmp_path, capsys) -> None:
@@ -937,7 +993,8 @@ def test_match_output_streams_across_chunks(tmp_path, monkeypatch) -> None:
     )
 
     assert status == 0
-    rows = list(csv.DictReader(output_csv.open(encoding="utf-8")))
+    with output_csv.open(encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
     assert [row["row_id"] for row in rows] == ["1", "2", "3", "4", "5"]
     assert all(row["sea_mile_registry_id"] == "WPI:1" for row in rows)
 
@@ -968,5 +1025,6 @@ def test_match_review_row_ids_continue_across_chunks(tmp_path, monkeypatch) -> N
     )
 
     assert status == 0
-    rows = list(csv.DictReader(review_csv.open(encoding="utf-8")))
+    with review_csv.open(encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
     assert sorted({row["row_id"] for row in rows}) == ["1", "2", "3"]

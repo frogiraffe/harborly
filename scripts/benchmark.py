@@ -8,17 +8,24 @@ import random
 import sys
 import time
 from collections.abc import Callable, Sequence
+from typing import Any
 
 import pandas as pd
 
 import sea_mile.spatial
 from sea_mile import PortRegistry
+from sea_mile._routing_backend import BackendRoute, RoutingConfig
+from sea_mile.coordinates import LatLon
+from sea_mile.geo import great_circle_nmi
+from sea_mile.router import SeaRouter
 from sea_mile.text import canonical_key
 
 try:
-    import resource
+    import resource as _resource
 except ImportError:
-    resource = None
+    _resource = None
+
+resource: Any = _resource
 
 _LABEL = 22
 
@@ -34,6 +41,27 @@ _PREFIXES = (
     "Cape",
     "Santa",
 )
+
+
+class _BenchmarkRoutingBackend:
+    name = "benchmark-great-circle"
+    version = "1"
+    graph_version = "synthetic-1"
+    symmetric = True
+
+    def route(
+        self, origin: LatLon, destination: LatLon, config: RoutingConfig
+    ) -> BackendRoute:
+        return BackendRoute(
+            distance_nmi=great_circle_nmi(*origin, *destination) * 1.1,
+            geometry={
+                "type": "LineString",
+                "coordinates": [
+                    origin.to_lon_lat().as_list(),
+                    destination.to_lon_lat().as_list(),
+                ],
+            },
+        )
 
 
 def _synthetic(count: int) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -108,6 +136,12 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         action="store_true",
         help="disable the scipy k-d tree and measure nearest on the scan path",
     )
+    parser.add_argument(
+        "--matrix-size",
+        type=int,
+        default=0,
+        help="also build a dense synthetic matrix of this size with one worker",
+    )
     return parser.parse_args(argv)
 
 
@@ -165,6 +199,22 @@ def main(argv: Sequence[str] | None = None) -> None:
             limit=10,
         ),
     )
+
+    if args.matrix_size:
+        if not 2 <= args.matrix_size <= args.count:
+            raise ValueError("--matrix-size must be between 2 and the record count")
+        matrix_ports = registry.ports()[: args.matrix_size]
+        router = SeaRouter(_routing_backend=_BenchmarkRoutingBackend())
+        started = time.perf_counter()
+        matrix = router.distance_matrix(matrix_ports, max_workers=1)
+        elapsed = time.perf_counter() - started
+        edges = args.matrix_size * (args.matrix_size - 1) // 2
+        print(
+            f"{'distance matrix':{_LABEL}}{elapsed:8.3f} s  "
+            f"({args.matrix_size} ports, {edges:,} routes)"
+        )
+        if len(matrix) != args.matrix_size:
+            raise RuntimeError("matrix benchmark returned an unexpected shape")
 
     peak = _peak_memory_mb()
     reading = f"{peak:8.1f} MB" if peak is not None else "     n/a"

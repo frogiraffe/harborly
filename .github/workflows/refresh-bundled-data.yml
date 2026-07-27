@@ -9,6 +9,10 @@ permissions:
   contents: write
   pull-requests: write
 
+concurrency:
+  group: refresh-bundled-data
+  cancel-in-progress: false
+
 jobs:
   refresh:
     runs-on: ubuntu-latest
@@ -18,10 +22,10 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
-          version: "latest"
+          version: "0.11.21"
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --locked
 
       - name: Record the currently bundled registry hash
         id: before
@@ -56,10 +60,12 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           branch="refresh-bundled-data"
+          git fetch origin \
+            "refs/heads/$branch:refs/remotes/origin/$branch" || true
           git checkout -B "$branch"
           git add src/sea_mile/data
           git commit -m "Refresh bundled WPI + GeoNames registry data"
-          git push --force origin "$branch"
+          git push --force-with-lease origin "$branch"
           if [ "$(gh pr view "$branch" --json state -q .state 2>/dev/null)" = "OPEN" ]; then
             echo "PR for $branch is already open; the push above updated it"
           else

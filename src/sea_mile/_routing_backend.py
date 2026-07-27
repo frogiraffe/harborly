@@ -110,6 +110,9 @@ class _RoutingBackend(Protocol):
     def version(self) -> str: ...
 
     @property
+    def graph_version(self) -> str: ...
+
+    @property
     def symmetric(self) -> bool: ...
 
     def route(
@@ -130,6 +133,12 @@ class SeaRouteBackend:
     @property
     def version(self) -> str:
         return str(self._module().__version__)
+
+    @property
+    def graph_version(self) -> str:
+        """Identify the graph shipped with the installed searoute release."""
+
+        return self.version
 
     @property
     def symmetric(self) -> bool:

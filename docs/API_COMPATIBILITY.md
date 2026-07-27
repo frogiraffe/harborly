@@ -17,6 +17,10 @@ The names in `sea_mile.__all__` are stable:
 Breaking signature changes, removals, and incompatible semantic changes require
 a major version.
 
+`SeaRouter.distance_matrix` remains the dense matrix API.
+`SeaRouter.iter_distance_edges` is its bounded-memory streaming counterpart and
+yields `(row_index, column_index, distance_nmi)` tuples in deterministic order.
+
 Modules and names not exported through `sea_mile.__all__` are implementation
 interfaces unless another document explicitly defines them as public.
 

@@ -81,6 +81,10 @@ _PARALLEL_CHUNK_BYTES = 16 * _MIB
 _CONNECT_DEADLINE_SECONDS = 15.0
 
 
+class _RangeNotSupported(SourceDataError):
+    """Signal that a server advertised ranges but ignored a range request."""
+
+
 def _is_retryable_download_error(error: BaseException) -> bool:
     """Retry temporary network and HTTP failures, not permanent client errors."""
 
@@ -252,6 +256,7 @@ def _download_parallel(
     partial: Path,
     *,
     total: int,
+    max_bytes: int,
     destination_name: str,
     show_progress: bool,
     start_time: float,
@@ -289,11 +294,47 @@ def _download_parallel(
                 response = client.send(request, stream=True)
                 try:
                     response.raise_for_status()
+                    if response.status_code == 200:
+                        raise _RangeNotSupported(
+                            f"{destination_name} server ignored a byte-range request"
+                        )
+                    if response.status_code != 206:
+                        raise SourceDataError(
+                            f"{destination_name} returned HTTP "
+                            f"{response.status_code} for a byte-range request"
+                        )
+                    content_range = response.headers.get("Content-Range", "")
+                    match = re.fullmatch(r"bytes (\d+)-(\d+)/(\d+)", content_range)
+                    if match is None:
+                        raise SourceDataError(
+                            f"{destination_name} returned an invalid Content-Range"
+                        )
+                    actual_start, actual_end, actual_total = map(int, match.groups())
+                    if (actual_start, actual_end, actual_total) != (
+                        byte_start,
+                        byte_end,
+                        total,
+                    ):
+                        raise SourceDataError(
+                            f"{destination_name} returned an unexpected Content-Range"
+                        )
+                    expected = byte_end - byte_start + 1
+                    chunk_received = 0
                     with partial.open("r+b") as handle:
                         handle.seek(byte_start)
                         for chunk in response.iter_bytes():
-                            handle.write(chunk)
                             with lock:
+                                chunk_received += len(chunk)
+                                if chunk_received > expected:
+                                    raise SourceDataError(
+                                        f"{destination_name} returned too many bytes "
+                                        "for a requested range"
+                                    )
+                                if received + len(chunk) > max_bytes:
+                                    raise SourceDataError(
+                                        f"{destination_name} exceeds the "
+                                        f"{max_bytes}-byte download limit"
+                                    )
                                 received += len(chunk)
                                 if show_progress and received >= next_report:
                                     _report_progress(
@@ -303,6 +344,12 @@ def _download_parallel(
                                         elapsed=monotonic() - start_time,
                                     )
                                     next_report = received + _PROGRESS_STEP_BYTES
+                            handle.write(chunk)
+                    if chunk_received != expected:
+                        raise SourceDataError(
+                            f"{destination_name} returned {chunk_received} bytes for "
+                            f"a {expected}-byte range"
+                        )
                 finally:
                     response.close()
         except BaseException as exc:  # noqa: BLE001 - collected and re-raised below
@@ -316,6 +363,10 @@ def _download_parallel(
         thread.join()
     if errors:
         raise errors[0]
+    if received != total:
+        raise SourceDataError(
+            f"{destination_name} returned {received} bytes; expected {total}"
+        )
     if show_progress:
         _report_progress(
             destination_name, total, total, elapsed=monotonic() - start_time
@@ -344,7 +395,6 @@ def _download(
     if show_progress:
         sys.stderr.write(f"{destination.name}: connecting...")
         sys.stderr.flush()
-    parallel_eligible = False
     try:
         response = _send_with_deadline(client, url)
         try:
@@ -364,17 +414,46 @@ def _download(
                 and total >= _PARALLEL_THRESHOLD_BYTES
                 and response.headers.get("Accept-Ranges", "").lower() == "bytes"
             ):
-                parallel_eligible = True
                 response.close()
-                _download_parallel(
-                    client,
-                    url,
-                    partial,
-                    total=total,
-                    destination_name=destination.name,
-                    show_progress=show_progress,
-                    start_time=start,
-                )
+                try:
+                    _download_parallel(
+                        client,
+                        url,
+                        partial,
+                        total=total,
+                        max_bytes=max_bytes,
+                        destination_name=destination.name,
+                        show_progress=show_progress,
+                        start_time=start,
+                    )
+                except _RangeNotSupported:
+                    partial.unlink(missing_ok=True)
+                    fallback = _send_with_deadline(client, url)
+                    try:
+                        fallback.raise_for_status()
+                        fallback_length = fallback.headers.get("Content-Length")
+                        try:
+                            fallback_total = (
+                                int(fallback_length) if fallback_length else None
+                            )
+                        except ValueError:
+                            fallback_total = None
+                        if fallback_total is not None and fallback_total > max_bytes:
+                            raise SourceDataError(
+                                f"{destination.name} exceeds the "
+                                f"{max_bytes}-byte download limit"
+                            )
+                        _download_sequential(
+                            fallback,
+                            partial,
+                            destination_name=destination.name,
+                            total=fallback_total,
+                            max_bytes=max_bytes,
+                            show_progress=show_progress,
+                            start_time=start,
+                        )
+                    finally:
+                        fallback.close()
             else:
                 _download_sequential(
                     response,
@@ -386,8 +465,7 @@ def _download(
                     start_time=start,
                 )
         finally:
-            if not parallel_eligible:
-                response.close()
+            response.close()
     except Exception:
         partial.unlink(missing_ok=True)
         raise
