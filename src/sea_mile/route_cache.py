@@ -9,12 +9,15 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from math import isfinite
 from pathlib import Path
+from time import monotonic, sleep
 from typing import TypeGuard
 
 from sea_mile._routing_backend import BackendRoute, RoutingConfig
 from sea_mile.coordinates import LatLon
 
 _SCHEMA_VERSION = 1
+_BUSY_TIMEOUT_MS = 30_000
+_WAL_RETRY_SECONDS = 0.05
 
 
 def _is_finite_number(value: object) -> TypeGuard[int | float]:
@@ -45,6 +48,21 @@ def _is_valid_cache_geometry(geometry: object) -> bool:
         if not (_is_finite_number(pt[0]) and _is_finite_number(pt[1])):
             return False
     return True
+
+
+def _enable_wal(connection: sqlite3.Connection) -> None:
+    """Enable WAL while tolerating another process performing the same setup."""
+
+    deadline = monotonic() + (_BUSY_TIMEOUT_MS / 1_000)
+    while True:
+        try:
+            connection.execute("PRAGMA journal_mode=WAL")
+            return
+        except sqlite3.OperationalError as error:
+            remaining = deadline - monotonic()
+            if "locked" not in str(error).lower() or remaining <= 0:
+                raise
+            sleep(min(_WAL_RETRY_SECONDS, remaining))
 
 
 class RouteCache:
@@ -167,8 +185,8 @@ class RouteCache:
             isolation_level=None,
         )
         try:
-            connection.execute("PRAGMA journal_mode=WAL")
-            connection.execute("PRAGMA busy_timeout=30000")
+            connection.execute(f"PRAGMA busy_timeout={_BUSY_TIMEOUT_MS}")
+            _enable_wal(connection)
             connection.execute("PRAGMA synchronous=NORMAL")
             yield connection
         finally:

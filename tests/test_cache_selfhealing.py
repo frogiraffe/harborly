@@ -57,9 +57,22 @@ def test_valid_entry_round_trip(cache):
 
 def test_cache_closes_every_connection(tmp_path, monkeypatch):
     original_connect = sqlite3.connect
+    inject_locked_wal = True
 
     class TrackingConnection(sqlite3.Connection):
         closed = False
+
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            super().__init__(*args, **kwargs)
+            self.statements: list[str] = []
+
+        def execute(self, sql: str, parameters: Any = (), /):
+            nonlocal inject_locked_wal
+            self.statements.append(sql)
+            if sql == "PRAGMA journal_mode=WAL" and inject_locked_wal:
+                inject_locked_wal = False
+                raise sqlite3.OperationalError("database is locked")
+            return super().execute(sql, parameters)
 
         def close(self) -> None:
             self.closed = True
@@ -75,6 +88,7 @@ def test_cache_closes_every_connection(tmp_path, monkeypatch):
         return connection
 
     monkeypatch.setattr("sea_mile.route_cache.sqlite3.connect", tracked_connect)
+    monkeypatch.setattr("sea_mile.route_cache.sleep", lambda _: None)
 
     cache = RouteCache(tmp_path / "tracked.db")
     key = _cache_key(cache)
@@ -88,6 +102,11 @@ def test_cache_closes_every_connection(tmp_path, monkeypatch):
 
     assert len(connections) == 4
     assert all(connection.closed for connection in connections)
+    assert connections[0].statements.count("PRAGMA journal_mode=WAL") == 2
+    for connection in connections:
+        assert connection.statements.index("PRAGMA busy_timeout=30000") < (
+            connection.statements.index("PRAGMA journal_mode=WAL")
+        )
 
 
 def test_corrupt_json_eviction(cache):
