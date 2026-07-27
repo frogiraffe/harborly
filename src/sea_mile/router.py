@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import multiprocessing
 import os
-import random
+import secrets
 import time
 from collections.abc import Iterable, Sequence
 from concurrent.futures import ProcessPoolExecutor
@@ -14,13 +14,17 @@ from math import isfinite
 from pathlib import Path
 from typing import Any
 
-import httpx
-
+from sea_mile._circuit_breaker import (
+    CircuitBreaker,
+    CircuitBreakerPolicy,
+    _CircuitState,
+)
 from sea_mile._routing_backend import (
     BackendRoute,
     RoutingConfig,
     SeaRouteBackend,
     _RoutingBackend,
+    classify_backend_error,
 )
 from sea_mile.coordinates import LatLon
 from sea_mile.exceptions import (
@@ -32,12 +36,12 @@ from sea_mile.exceptions import (
 from sea_mile.geo import great_circle_nmi, validate_coordinate
 from sea_mile.ports import Port, PortRegistry
 from sea_mile.route_cache import RouteCache
-from sea_mile.routing import RouteQualityFlag, RouteQualityPolicy, assess_route_length
-
-_DEFAULT_RETRY_ATTEMPTS = 4
-_DEFAULT_BACKOFF_SECONDS = 0.25
-_MAX_RETRY_ATTEMPTS = 8
-_MAX_BACKOFF_SECONDS = 8.0
+from sea_mile.routing import (
+    RetryPolicy,
+    RouteQualityFlag,
+    RouteQualityPolicy,
+    assess_route_length,
+)
 
 
 def _coordinate_port(label: str, latitude: float, longitude: float) -> Port:
@@ -100,82 +104,54 @@ class SeaRoute:
         }
 
 
-def _matrix_route(
-    task: tuple[
-        int,
-        int,
-        Port,
-        Port,
-        str,
-        str,
-        tuple[str, ...],
-        str | None,
-        _RoutingBackend,
-        int,
-        float,
-        RouteQualityPolicy | None,
-    ],
-) -> tuple[int, int, float]:
-    """Calculate one matrix edge in an isolated worker process."""
+_worker_router: SeaRouter | None = None
 
-    (
-        row,
-        column,
-        origin,
-        destination,
-        algorithm,
-        backend,
-        restrictions,
-        cache_path,
-        routing_backend,
-        retry_attempts,
-        backoff_seconds,
-        quality_policy,
-    ) = task
-    router = SeaRouter(
+
+def _worker_initializer(
+    algorithm: str,
+    backend: str,
+    restrictions: tuple[str, ...],
+    cache_path: str | None,
+    retry_policy: RetryPolicy,
+    quality_policy: RouteQualityPolicy | None,
+    circuit_breaker_policy: CircuitBreakerPolicy | None,
+    routing_backend: _RoutingBackend | None,
+) -> None:
+    """Pre-import dependencies and initialize a worker-local router instance.
+
+    Called once per worker process before any tasks execute.
+    """
+    global _worker_router
+    import sea_mile._routing_backend  # noqa: F401, PLC0415
+
+    _worker_router = SeaRouter(
         algorithm=algorithm,
         backend=backend,
         restrictions=restrictions,
         cache_path=cache_path,
-        retry_attempts=retry_attempts,
-        backoff_seconds=backoff_seconds,
+        retry_policy=retry_policy,
         quality_policy=quality_policy,
+        circuit_breaker_policy=circuit_breaker_policy,
         _routing_backend=routing_backend,
     )
-    return row, column, router.route(origin, destination).distance_nmi
 
 
-def _worker_initializer() -> None:
-    """Pre-import heavy dependencies in each worker process.
+def _matrix_route(
+    task: tuple[int, int, Port, Port],
+) -> tuple[int, int, float]:
+    """Calculate one matrix edge using the worker-local router instance."""
 
-    Called once per worker before any tasks execute.  This avoids repeated
-    module-level imports inside ``SeaRouter`` construction across many tasks.
-    """
-    import sea_mile._routing_backend  # noqa: F401, PLC0415
+    row, column, origin, destination = task
+    if _worker_router is None:
+        raise RuntimeError("worker router instance was not initialized")
+    return row, column, _worker_router.route(origin, destination).distance_nmi
 
 
 def _is_transient_backend_error(error: BaseException) -> bool:
     """Recognize timeout, transport, and rate-limit failures through wrappers."""
 
-    current: BaseException | None = error
-    while current is not None:
-        if isinstance(
-            current,
-            (
-                TimeoutError,
-                ConnectionError,
-                httpx.TimeoutException,
-                httpx.TransportError,
-            ),
-        ):
-            return True
-        response = getattr(current, "response", None)
-        status_code = getattr(response, "status_code", None)
-        if status_code == 429 or (
-            isinstance(status_code, int) and 500 <= status_code < 600
-        ):
-            return True
-        current = current.__cause__ or current.__context__
+    if isinstance(error, Exception):
+        return classify_backend_error(error).transient
     return False
 
 
@@ -189,27 +165,29 @@ class SeaRouter:
         backend: str = "networkx",
         restrictions: tuple[str, ...] = ("northwest",),
         cache_path: str | Path | None = None,
-        retry_attempts: int = _DEFAULT_RETRY_ATTEMPTS,
-        backoff_seconds: float = _DEFAULT_BACKOFF_SECONDS,
+        retry_policy: RetryPolicy | None = None,
+        retry_attempts: int | None = None,
+        backoff_seconds: float | None = None,
         quality_policy: RouteQualityPolicy | None = None,
+        circuit_breaker_policy: CircuitBreakerPolicy | None = None,
         _routing_backend: _RoutingBackend | None = None,
     ) -> None:
-        if retry_attempts < 1:
-            raise ValueError("retry_attempts must be at least 1")
-        if retry_attempts > _MAX_RETRY_ATTEMPTS:
-            raise ValueError(f"retry_attempts cannot exceed {_MAX_RETRY_ATTEMPTS}")
-        if not isfinite(backoff_seconds) or not 0 <= backoff_seconds <= (
-            _MAX_BACKOFF_SECONDS
-        ):
-            raise ValueError(
-                "backoff_seconds must be finite and between 0 and "
-                f"{_MAX_BACKOFF_SECONDS:g}"
+        if retry_policy is not None:
+            self._retry_policy = retry_policy
+        else:
+            attempts = 4 if retry_attempts is None else retry_attempts
+            backoff = 0.25 if backoff_seconds is None else backoff_seconds
+            self._retry_policy = RetryPolicy(
+                attempts=attempts, base_backoff_seconds=backoff
             )
         self.algorithm = algorithm
         self.backend = backend
         self.restrictions = restrictions
-        self.retry_attempts = retry_attempts
-        self.backoff_seconds = backoff_seconds
+        self._circuit_breaker = (
+            CircuitBreaker(circuit_breaker_policy)
+            if circuit_breaker_policy is not None
+            else None
+        )
         self._backend: _RoutingBackend = (
             _routing_backend if _routing_backend is not None else SeaRouteBackend()
         )
@@ -218,6 +196,18 @@ class SeaRouter:
         # Memoized per instance, keyed on the ports and the config, so a
         # repeated pair in a batch skips recomputation.
         self._route_cached = lru_cache(maxsize=4096)(self._route_uncached)
+
+    @property
+    def retry_attempts(self) -> int:
+        return self._retry_policy.attempts
+
+    @property
+    def backoff_seconds(self) -> float:
+        return self._retry_policy.base_backoff_seconds
+
+    @property
+    def retry_policy(self) -> RetryPolicy:
+        return self._retry_policy
 
     def route(self, origin: Port, destination: Port) -> SeaRoute:
         return self._route_cached(
@@ -267,14 +257,16 @@ class SeaRouter:
                 )
         except Exception:
             if from_cache and cache_key is not None:
-                assert self._persistent_cache is not None
+                if self._persistent_cache is None:
+                    raise RuntimeError("persistent cache not initialized") from None
                 try:
                     self._persistent_cache.delete(cache_key)
                 except Exception as error:
                     raise self._cache_access_error("delete", error) from error
             raise
         if cache_key is not None and not from_cache:
-            assert self._persistent_cache is not None
+            if self._persistent_cache is None:
+                raise RuntimeError("persistent cache not initialized")
             try:
                 self._persistent_cache.put(cache_key, result)
             except Exception as error:
@@ -367,20 +359,37 @@ class SeaRouter:
         destination: LatLon,
         config: RoutingConfig,
     ) -> BackendRoute:
-        for attempt in range(self.retry_attempts):
+        policy = self._retry_policy
+        for attempt in range(policy.attempts):
+            if self._circuit_breaker is not None:
+                self._circuit_breaker.check()
             try:
-                return self._backend.route(origin, destination, config)
+                res = self._backend.route(origin, destination, config)
+                if self._circuit_breaker is not None:
+                    self._circuit_breaker.record_success()
+                return res
             except Exception as error:
-                final_attempt = attempt + 1 == self.retry_attempts
-                if final_attempt or not _is_transient_backend_error(error):
+                classified = classify_backend_error(error)
+                if self._circuit_breaker is not None:
+                    self._circuit_breaker.record_failure(classified.transient)
+                    if self._circuit_breaker.state == _CircuitState.OPEN:
+                        raise RoutingError(
+                            f"circuit breaker open during retry loop: {error}",
+                            reason=RoutingErrorReason.CIRCUIT_BREAKER_OPEN,
+                        ) from error
+                final_attempt = attempt + 1 == policy.attempts
+                if final_attempt or not classified.transient:
                     raise
                 base_wait = min(
-                    self.backoff_seconds * (2**attempt),
-                    _MAX_BACKOFF_SECONDS,
+                    policy.base_backoff_seconds * (2**attempt),
+                    policy.max_backoff_seconds,
                 )
-                jittered = base_wait * (0.5 + random.random())
+                jittered = base_wait * (
+                    (1.0 - policy.jitter_ratio)
+                    + 2.0 * policy.jitter_ratio * secrets.SystemRandom().random()
+                )
                 time.sleep(jittered)
-        raise AssertionError("retry loop exhausted without returning or raising")
+        raise RuntimeError("retry loop exhausted without returning or raising")
 
     def route_ids(
         self,
@@ -419,9 +428,11 @@ class SeaRouter:
     ) -> list[list[float]]:
         """Return a process-parallel pairwise sea-distance matrix.
 
-        ``max_workers=1`` is available for debuggers and constrained runtimes.
-        Every worker opens its own WAL-enabled SQLite connection when a
-        persistent cache is configured.
+        ``max_workers=1`` is available for debuggers, constrained runtimes, and
+        custom routing backends that cannot be serialized across processes.
+        Raises :exc:`ValueError` if ``max_workers > 1`` and the configured routing
+        backend cannot be serialized. Every worker opens its own WAL-enabled SQLite
+        connection when a persistent cache is configured.
         """
 
         size = len(ports)
@@ -452,32 +463,34 @@ class SeaRouter:
                 for row, column in pairs
             )
         else:
+            try:
+                multiprocessing.reduction.ForkingPickler.dumps(self._backend)
+            except Exception:
+                raise ValueError(
+                    "routing backend must be serializable when max_workers is "
+                    "greater than one"
+                ) from None
             cache_path = (
                 str(self._persistent_cache.path)
                 if self._persistent_cache is not None
                 else None
             )
-            tasks = (
-                (
-                    row,
-                    column,
-                    ports[row],
-                    ports[column],
-                    self.algorithm,
-                    self.backend,
-                    self.restrictions,
-                    cache_path,
-                    self._backend,
-                    self.retry_attempts,
-                    self.backoff_seconds,
-                    self._quality_policy,
-                )
-                for row, column in pairs
+            initargs = (
+                self.algorithm,
+                self.backend,
+                self.restrictions,
+                cache_path,
+                self.retry_policy,
+                self._quality_policy,
+                self._circuit_breaker.policy if self._circuit_breaker else None,
+                self._backend,
             )
+            tasks = ((row, column, ports[row], ports[column]) for row, column in pairs)
             with ProcessPoolExecutor(
                 max_workers=workers,
                 mp_context=multiprocessing.get_context("spawn"),
                 initializer=_worker_initializer,
+                initargs=initargs,
             ) as executor:
                 results = list(executor.map(_matrix_route, tasks))
         for row, column, distance in results:

@@ -4,6 +4,7 @@ import importlib.util
 
 import pytest
 
+from sea_mile.ports import Port
 from sea_mile.router import SeaRouter
 from sea_mile.routing import RouteQualityFlag
 
@@ -47,3 +48,39 @@ def test_routing_is_deterministic() -> None:
 
     assert first.distance_nmi == second.distance_nmi
     assert first.geometry == second.geometry
+
+
+def test_default_backend_matrix_matches_single_and_spawn_workers() -> None:
+    ports = [
+        Port(
+            registry_id="TEST:PIRAEUS",
+            provider="TEST",
+            provider_id="PIRAEUS",
+            country_code="GR",
+            name="Piraeus",
+            latitude=37.94,
+            longitude=23.63,
+            unlocode="GRPIR",
+            function_code="port",
+            source_version="test",
+            coordinate_resolution="test",
+        ),
+        Port(
+            registry_id="TEST:MERSIN",
+            provider="TEST",
+            provider_id="MERSIN",
+            country_code="TR",
+            name="Mersin",
+            latitude=36.80,
+            longitude=34.65,
+            unlocode="TRMER",
+            function_code="port",
+            source_version="test",
+            coordinate_resolution="test",
+        ),
+    ]
+
+    single_worker = SeaRouter().distance_matrix(ports, max_workers=1)
+    spawn_workers = SeaRouter().distance_matrix(ports, max_workers=2)
+
+    assert spawn_workers == single_worker

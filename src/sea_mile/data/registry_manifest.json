@@ -1,13 +1,13 @@
 {
   "registry_schema_version": 1,
-  "registry_content_hash": "e009126df9014992542012cd8983d4455f1f2790ef8c948d31048a3e5b1e78b4",
+  "registry_content_hash": "70ba229c9bb85df0850cb4cd2be8b901eb85c122069e7cb4ceedb7c6a4d6cb8a",
   "registry_rows": 20070,
-  "alias_rows": 34230,
+  "alias_rows": 34216,
   "providers": {
     "NGA_WPI": {
       "records": 2951,
       "records_with_coordinates": 2951,
-      "aliases": 3749
+      "aliases": 3735
     },
     "GEONAMES": {
       "records": 17119,

@@ -15,10 +15,11 @@ API while its internals evolve.
 
 ### Stable API, modular core
 
-`PortRegistry` remains the public facade. Alias indexing is implemented in
-`search.py`. Coordinate indexing is implemented in `spatial.py`. Registry
-loading, grouping, and resolution remain in `ports.py`. Lazy top-level imports
-allow the package to load without the optional routing dependency.
+`PortRegistry` remains the public facade in `ports.py`. Internal loading,
+search, grouping, and resolution services live in `_registry_data.py`,
+`_registry_search.py`, and `_registry_services.py`. Alias and coordinate indexes
+remain isolated in `search.py` and `spatial.py`. Lazy top-level imports allow the
+package to load without the optional routing dependency.
 
 ### Spatial correctness
 
@@ -58,8 +59,10 @@ engine, and engine version.
 
 Transient backend failures—timeouts, transport errors, HTTP 429, and HTTP
 5xx—receive exponential backoff. The implementation permits at most eight
-attempts and caps each delay at eight seconds. Malformed geometry and other
-permanent failures fail immediately. The default `searoute` engine is local.
+attempts. The default policy caps each delay at eight seconds; callers can
+provide a validated `RetryPolicy` with a different finite, non-negative cap.
+Malformed geometry and other permanent failures fail immediately. The default
+`searoute` engine is local.
 
 ### Data contracts and quality
 
@@ -237,13 +240,19 @@ can add UN/LOCODE and user-supplied OpenStreetMap data. See
 ## Development and release gate
 
 ```bash
+uv sync --all-extras --group audit --python 3.14
 uv run ruff format --check src tests scripts
 uv run ruff check src tests scripts
 uv run mypy src
 uv run pytest -q
+uv run bandit -r src
+uv run pip-audit
 uv build
+uv run twine check dist/*
 ```
 
-Python 3.11–3.13 are tested on Linux; the latest supported version is also
-tested on macOS and Windows. Security reports follow [SECURITY.md](SECURITY.md);
-contributions follow [CONTRIBUTING.md](CONTRIBUTING.md).
+Python 3.11–3.14 are tested on Linux; Python 3.14 is also tested on macOS and
+Windows. The release workflow reruns the complete reusable CI gate before
+publishing, and CI installs the core-only wheel in an isolated environment.
+Security reports follow [SECURITY.md](SECURITY.md); contributions follow
+[CONTRIBUTING.md](CONTRIBUTING.md).

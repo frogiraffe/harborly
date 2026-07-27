@@ -50,18 +50,15 @@ async def test_typing_populates_results_and_map() -> None:
 async def test_map_rerenders_after_resize(monkeypatch) -> None:
     render_calls: list[tuple[int, int]] = []
 
-    try:
-        from sea_mile.tui import map_canvas as mc
+    from sea_mile.tui import map_canvas as mc
 
-        original_render = mc.BrailleWorldMap.render
+    original_render = mc.BrailleWorldMap.render
 
-        def tracking_render(self, groups, *, selected=None):
-            render_calls.append((self.char_width, self.char_height))
-            return original_render(self, groups, selected=selected)
+    def tracking_render(self, groups, *, selected=None):
+        render_calls.append((self.char_width, self.char_height))
+        return original_render(self, groups, selected=selected)
 
-        monkeypatch.setattr(mc.BrailleWorldMap, "render", tracking_render)
-    except ImportError:
-        pytest.skip("tui extra not installed")
+    monkeypatch.setattr(mc.BrailleWorldMap, "render", tracking_render)
 
     registry = PortRegistry(registry_frame(), alias_frame())
     app = SeaMileTUI(registry)
@@ -97,15 +94,14 @@ async def test_arrow_down_updates_map() -> None:
     registry = PortRegistry(registry_frame(), alias_frame())
     app = SeaMileTUI(registry)
     async with app.run_test() as pilot:
-        await _type(pilot, "Mersin")
+        await _type(pilot, "Piraeus")
 
         table = app.query_one("#results", DataTable)
-        if table.row_count < 2:
-            pytest.skip("Need at least 2 results for comparison")
+        assert table.row_count == 2
 
         app._zoom = 8.0
-        app._center_lat = 36.8
-        app._center_lon = 34.6
+        app._center_lat = 37.94
+        app._center_lon = 23.63
 
         before = _map_text(app)
         app.action_browse_down()

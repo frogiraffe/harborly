@@ -15,7 +15,65 @@ class BackendErrorKind(StrEnum):
     TIMEOUT = "timeout"
     RATE_LIMIT = "rate_limit"
     SERVER = "server"
+    INVALID_RESPONSE = "invalid_response"
     UNKNOWN = "unknown"
+
+
+class BackendError(Exception):
+    """Typed classification wrapper for routing backend errors."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        kind: BackendErrorKind,
+        transient: bool,
+    ) -> None:
+        super().__init__(message)
+        self.kind = kind
+        self.transient = transient
+
+
+def classify_backend_error(error: Exception) -> BackendError:
+    """Classify an arbitrary backend exception into a typed BackendError."""
+    if isinstance(error, BackendError):
+        return error
+
+    import httpx
+
+    # First pass: check if any exception in cause chain is transient
+    current: BaseException | None = error
+    while current is not None:
+        if isinstance(current, (TimeoutError, httpx.TimeoutException)):
+            return BackendError(
+                str(error), kind=BackendErrorKind.TIMEOUT, transient=True
+            )
+        if isinstance(current, (ConnectionError, httpx.TransportError)):
+            return BackendError(
+                str(error), kind=BackendErrorKind.NETWORK, transient=True
+            )
+        response = getattr(current, "response", None)
+        status_code = getattr(response, "status_code", None)
+        if status_code == 429:
+            return BackendError(
+                str(error), kind=BackendErrorKind.RATE_LIMIT, transient=True
+            )
+        if isinstance(status_code, int) and 500 <= status_code < 600:
+            return BackendError(
+                str(error), kind=BackendErrorKind.SERVER, transient=True
+            )
+        current = current.__cause__ or current.__context__
+
+    # Second pass: check for invalid response formatting errors
+    current = error
+    while current is not None:
+        if isinstance(current, (AttributeError, KeyError, TypeError, ValueError)):
+            return BackendError(
+                str(error), kind=BackendErrorKind.INVALID_RESPONSE, transient=False
+            )
+        current = current.__cause__ or current.__context__
+
+    return BackendError(str(error), kind=BackendErrorKind.UNKNOWN, transient=False)
 
 
 @dataclass(frozen=True, slots=True)

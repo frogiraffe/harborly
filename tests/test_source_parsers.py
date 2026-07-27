@@ -20,15 +20,15 @@ def test_load_wpi_parses_the_real_column_layout(tmp_path) -> None:
                 "latitude": "12°30'00\"N",
                 "longitude": "34°15'30\"E",
                 "unloCode": "TXTHR",
-                "alternateName": "Testville;Old Test Harbour",
+                "alternateName": "Test Harbour;Testville;Old Test Harbour",
             },
             {
                 "portNumber": 10002,
                 "portName": "North Point",
-                "countryCode": "TX",
+                "countryCode": "",
                 "latitude": "45°00'00\"N",
                 "longitude": "70°45'00\"W",
-                "unloCode": "",
+                "unloCode": "TXNPT",
                 "alternateName": "",
             },
             {
@@ -37,7 +37,7 @@ def test_load_wpi_parses_the_real_column_layout(tmp_path) -> None:
                 "countryCode": "TX",
                 "latitude": "unknown",
                 "longitude": "unknown",
-                "unloCode": "TXBRK",
+                "unloCode": 'TXBRK"',
                 "alternateName": "",
             },
         ]
@@ -52,7 +52,9 @@ def test_load_wpi_parses_the_real_column_layout(tmp_path) -> None:
     assert round(by_id.loc["WPI:10001", "longitude"], 4) == 34.2583
     assert by_id.loc["WPI:10001", "unlocode"] == "TXTHR"
     assert by_id.loc["WPI:10002", "longitude"] == -70.75
-    assert pd.isna(by_id.loc["WPI:10002", "unlocode"])
+    assert by_id.loc["WPI:10002", "country_code"] == "TX"
+    assert by_id.loc["WPI:10002", "unlocode"] == "TXNPT"
+    assert pd.isna(by_id.loc["WPI:10003", "unlocode"])
     # A pair with one unparsable coordinate nulls both, staying a complete pair.
     assert pd.isna(by_id.loc["WPI:10003", "latitude"])
     assert pd.isna(by_id.loc["WPI:10003", "longitude"])
@@ -61,6 +63,10 @@ def test_load_wpi_parses_the_real_column_layout(tmp_path) -> None:
         "Testville",
         "Old Test Harbour",
     }
+    primary = aliases[
+        (aliases["registry_id"] == "WPI:10001") & (aliases["alias"] == "Test Harbour")
+    ]
+    assert primary["alias_type"].tolist() == ["primary"]
 
 
 def test_load_wpi_preserves_leading_zero_provider_ids(tmp_path) -> None:

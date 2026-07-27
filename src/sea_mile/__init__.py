@@ -2,7 +2,7 @@
 
 from typing import TYPE_CHECKING
 
-from ._routing_backend import BackendErrorKind
+from ._routing_backend import BackendError, BackendErrorKind
 from .canonical import CanonicalEvidence
 from .exceptions import (
     AmbiguousPortError,
@@ -21,7 +21,7 @@ from .matching import (
     MatchStatus,
 )
 from .ports import Port, PortGroup, PortRegistry
-from .routing import RouteQualityFlag, RouteQualityPolicy
+from .routing import RetryPolicy, RouteQualityFlag, RouteQualityPolicy
 
 if TYPE_CHECKING:
     from .router import SeaRoute, SeaRouter
@@ -45,11 +45,12 @@ def __getattr__(name: str) -> object:
 
 
 def __dir__() -> list[str]:
-    return sorted([*__all__, *_LAZY_EXPORTS])
+    return sorted(set(__all__) | set(_LAZY_EXPORTS))
 
 
 __all__ = [
     "AmbiguousPortError",
+    "BackendError",
     "BackendErrorKind",
     "BatchMatchResult",
     "CanonicalEvidence",
@@ -63,6 +64,7 @@ __all__ = [
     "PortNotFoundError",
     "PortRegistry",
     "RegistryDataError",
+    "RetryPolicy",
     "RouteQualityFlag",
     "RouteQualityPolicy",
     "RoutingError",

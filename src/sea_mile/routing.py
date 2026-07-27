@@ -6,6 +6,35 @@ from dataclasses import dataclass
 from enum import StrEnum
 from math import isfinite
 
+MAX_RETRY_ATTEMPTS = 8
+_MAX_BACKOFF_SECONDS = 8.0
+
+
+@dataclass(frozen=True, slots=True)
+class RetryPolicy:
+    """Canonical configuration for backend retry attempts and backoff."""
+
+    attempts: int = 4
+    base_backoff_seconds: float = 0.25
+    max_backoff_seconds: float = 8.0
+    jitter_ratio: float = 0.5
+
+    def __post_init__(self) -> None:
+        if self.attempts < 1:
+            raise ValueError("retry_attempts must be at least 1")
+        if self.attempts > MAX_RETRY_ATTEMPTS:
+            raise ValueError(f"retry_attempts cannot exceed {MAX_RETRY_ATTEMPTS}")
+        if not isfinite(self.base_backoff_seconds) or self.base_backoff_seconds < 0:
+            raise ValueError("backoff_seconds must be finite and non-negative")
+        if not isfinite(self.max_backoff_seconds) or self.max_backoff_seconds < 0:
+            raise ValueError("max_backoff_seconds must be finite and non-negative")
+        if self.base_backoff_seconds > self.max_backoff_seconds:
+            raise ValueError(
+                "base_backoff_seconds cannot be greater than max_backoff_seconds"
+            )
+        if not isfinite(self.jitter_ratio) or not 0.0 <= self.jitter_ratio <= 1.0:
+            raise ValueError("jitter_ratio must be finite and between 0.0 and 1.0")
+
 
 @dataclass(frozen=True, slots=True)
 class RouteQualityPolicy:
@@ -13,8 +42,6 @@ class RouteQualityPolicy:
 
     lower_bound_tolerance_nmi: float = 0.5
     high_detour_ratio: float = 3.0
-    max_retry_attempts: int = 4
-    backoff_seconds: float = 0.25
 
 
 class RouteQualityFlag(StrEnum):

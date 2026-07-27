@@ -12,7 +12,7 @@ Measurements were collected on:
 - Memory: 13.5 GiB
 - OS: Linux, kernel 7.1.3 (CachyOS)
 - Python: 3.14.6
-- sea-mile: 1.0
+- sea-mile: 1.1.1 (`966a636`)
 - pandas 3.0.3, rapidfuzz 3.14.5, scipy 1.18.0
 
 ## How to reproduce

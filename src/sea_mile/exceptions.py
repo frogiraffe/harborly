@@ -46,6 +46,7 @@ class RoutingErrorReason(StrEnum):
     CACHE_ACCESS_FAILED = "cache_access_failed"
     MALFORMED_BACKEND_RESULT = "malformed_backend_result"
     IMPLAUSIBLE_ROUTE = "implausible_route"
+    CIRCUIT_BREAKER_OPEN = "circuit_breaker_open"
 
 
 class RoutingError(SeaMileError):

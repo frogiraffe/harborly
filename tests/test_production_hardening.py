@@ -70,6 +70,11 @@ class AsymmetricBackend(DeterministicBackend):
         )
 
 
+class UnpicklableBackend(DeterministicBackend):
+    def __getstate__(self) -> dict[str, object]:
+        raise TypeError("test backend cannot be serialized")
+
+
 def _port(identifier: str, latitude: float, longitude: float) -> Port:
     return Port(
         registry_id=identifier,
@@ -103,7 +108,13 @@ def _cache_writer(payload: tuple[str, int]) -> None:
         key,
         BackendRoute(
             distance_nmi=float(value),
-            geometry={"type": "LineString", "coordinates": []},
+            geometry={
+                "type": "LineString",
+                "coordinates": [
+                    origin.to_lon_lat().as_list(),
+                    destination.to_lon_lat().as_list(),
+                ],
+            },
         ),
     )
 
@@ -284,3 +295,41 @@ def test_review_contract_allows_an_unresolved_row_without_candidates() -> None:
     )
 
     assert validate_review_frame(frame).iloc[0]["row_id"] == "1"
+
+
+def test_distance_matrix_custom_backend_multiprocessing_regression() -> None:
+    ports = [
+        _port("A", 36.8, 34.65),
+        _port("B", 37.94, 23.63),
+    ]
+    router_sym = SeaRouter(_routing_backend=DeterministicBackend())
+    matrix_sym_w1 = router_sym.distance_matrix(ports, max_workers=1)
+    matrix_sym_w2 = router_sym.distance_matrix(ports, max_workers=2)
+    assert matrix_sym_w1 == matrix_sym_w2
+    assert matrix_sym_w2[0][1] < 585.0
+
+    router_asym = SeaRouter(_routing_backend=AsymmetricBackend())
+    matrix_asym_w1 = router_asym.distance_matrix(ports, max_workers=1)
+    matrix_asym_w2 = router_asym.distance_matrix(ports, max_workers=2)
+    assert matrix_asym_w1 == matrix_asym_w2
+    assert matrix_asym_w2[0][1] != matrix_asym_w2[1][0]
+
+
+def test_distance_matrix_unpicklable_backend() -> None:
+    ports = [
+        _port("A", 36.8, 34.65),
+        _port("B", 37.94, 23.63),
+    ]
+    router = SeaRouter(_routing_backend=UnpicklableBackend())
+    matrix_w1 = router.distance_matrix(ports, max_workers=1)
+    assert matrix_w1[0][1] > 0.0
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "routing backend must be serializable when max_workers is greater than one"
+        ),
+    ) as caught:
+        router.distance_matrix(ports, max_workers=2)
+
+    assert caught.value.__cause__ is None

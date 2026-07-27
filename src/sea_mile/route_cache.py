@@ -5,12 +5,46 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
+from math import isfinite
 from pathlib import Path
+from typing import TypeGuard
 
 from sea_mile._routing_backend import BackendRoute, RoutingConfig
 from sea_mile.coordinates import LatLon
 
 _SCHEMA_VERSION = 1
+
+
+def _is_finite_number(value: object) -> TypeGuard[int | float]:
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and isfinite(float(value))
+    )
+
+
+def _is_valid_cache_distance(distance: object) -> bool:
+    if not _is_finite_number(distance):
+        return False
+    return distance >= 0.0
+
+
+def _is_valid_cache_geometry(geometry: object) -> bool:
+    if not isinstance(geometry, dict):
+        return False
+    if geometry.get("type") != "LineString":
+        return False
+    coords = geometry.get("coordinates")
+    if not isinstance(coords, (list, tuple)) or len(coords) < 2:
+        return False
+    for pt in coords:
+        if not isinstance(pt, (list, tuple)) or len(pt) != 2:
+            return False
+        if not (_is_finite_number(pt[0]) and _is_finite_number(pt[1])):
+            return False
+    return True
 
 
 class RouteCache:
@@ -70,17 +104,29 @@ class RouteCache:
         except (json.JSONDecodeError, TypeError):
             self.delete(cache_key)
             return None
-        if not isinstance(geometry, dict):
-            self.delete(cache_key)
-            return None
         try:
             distance = float(row[0])
         except (TypeError, ValueError):
             self.delete(cache_key)
             return None
+
+        if not _is_valid_cache_distance(distance) or not _is_valid_cache_geometry(
+            geometry
+        ):
+            self.delete(cache_key)
+            return None
+
         return BackendRoute(distance_nmi=distance, geometry=geometry)
 
     def put(self, cache_key: str, result: BackendRoute) -> None:
+        if not _is_valid_cache_distance(result.distance_nmi):
+            raise ValueError("cached route distance must be finite and non-negative")
+        if not _is_valid_cache_geometry(result.geometry):
+            raise ValueError(
+                "cached route geometry must be a LineString with at least two "
+                "finite coordinate pairs"
+            )
+
         geometry_json = json.dumps(
             result.geometry, sort_keys=True, separators=(",", ":"), ensure_ascii=True
         )
@@ -113,16 +159,20 @@ class RouteCache:
                 (cache_key,),
             )
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
         connection = sqlite3.connect(
             self.path,
             timeout=30.0,
             isolation_level=None,
         )
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute("PRAGMA busy_timeout=30000")
-        connection.execute("PRAGMA synchronous=NORMAL")
-        return connection
+        try:
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("PRAGMA busy_timeout=30000")
+            connection.execute("PRAGMA synchronous=NORMAL")
+            yield connection
+        finally:
+            connection.close()
 
     def __enter__(self) -> RouteCache:
         return self

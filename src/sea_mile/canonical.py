@@ -101,13 +101,18 @@ def assign_canonical_ids_with_evidence(
     longitudes = list(registry["longitude"])
     registry_ids = list(registry["registry_id"])
 
-    coded_blocks: dict[tuple[str, str], list[tuple[float, float, str]]] = {}
+    coded_blocks: dict[tuple[str, str], list[tuple[float, float, str, str]]] = {}
     for index, code in enumerate(unlocodes):
         if pd.isna(code) or pd.isna(latitudes[index]) or pd.isna(longitudes[index]):
             continue
         block = (countries[index], name_keys[index])
         coded_blocks.setdefault(block, []).append(
-            (float(latitudes[index]), float(longitudes[index]), str(code))
+            (
+                float(latitudes[index]),
+                float(longitudes[index]),
+                str(code),
+                str(registry_ids[index]),
+            )
         )
 
     canonical: list[str] = []
@@ -127,15 +132,15 @@ def assign_canonical_ids_with_evidence(
             continue
         country, name_key = countries[index], name_keys[index]
         latitude, longitude = latitudes[index], longitudes[index]
-        chosen: tuple[float, str] | None = None
+        chosen: tuple[float, str, str] | None = None
         if pd.notna(latitude) and pd.notna(longitude):
-            for coded_lat, coded_lon, coded in coded_blocks.get(
+            for coded_lat, coded_lon, coded, coded_reg_id in coded_blocks.get(
                 (country, name_key), []
             ):
                 distance = great_circle_nmi(
                     float(latitude), float(longitude), coded_lat, coded_lon
                 )
-                candidate = (distance, coded)
+                candidate = (distance, coded, coded_reg_id)
                 if distance <= coordinate_agreement_nmi and (
                     chosen is None or candidate < chosen
                 ):
@@ -147,7 +152,7 @@ def assign_canonical_ids_with_evidence(
                     registry_id=reg_id,
                     canonical_id=chosen[1],
                     method="coordinate_match",
-                    source_registry_id=chosen[1],
+                    source_registry_id=chosen[2],
                     distance_nmi=chosen[0],
                     matched_by="name+country+coordinate",
                 )

@@ -7,9 +7,12 @@ throughout the 1.x series.
 
 The names in `sea_mile.__all__` are stable:
 
-`Port`, `PortGroup`, `PortRegistry`, `SeaRoute`, `SeaRouter`,
-`BatchMatchResult`, `MatchStatus`, `ConfidenceTier`, `MatchReason`,
-`RouteQualityFlag`, and the `SeaMileError` exception hierarchy.
+`AmbiguousPortError`, `BackendError`, `BackendErrorKind`, `BatchMatchResult`,
+`CanonicalEvidence`, `ConfidenceTier`, `MatchPolicy`, `MatchReason`,
+`MatchStatus`, `Port`, `PortCoordinateError`, `PortGroup`,
+`PortNotFoundError`, `PortRegistry`, `RegistryDataError`, `RetryPolicy`,
+`RouteQualityFlag`, `RouteQualityPolicy`, `RoutingError`, `SeaMileError`,
+`SeaRoute`, `SeaRouter`, and `SourceDataError`.
 
 Breaking signature changes, removals, and incompatible semantic changes require
 a major version.
@@ -41,8 +44,8 @@ snapshots and are not API constants.
 
 ## Supported environments
 
-CI validates Python 3.11, 3.12, and 3.13 on Linux. Python 3.13 is also validated
-on macOS and Windows. Dependency version constraints are defined in
+CI validates Python 3.11, 3.12, 3.13, and 3.14 on Linux. Python 3.14 is also
+validated on macOS and Windows. Dependency version constraints are defined in
 `pyproject.toml`.
 
 Security reports follow [SECURITY.md](../SECURITY.md).

@@ -15,8 +15,14 @@ uv run ruff format --check src tests scripts
 uv run ruff check src tests scripts
 uv run mypy src
 uv run pytest -q
+uv run bandit -r src
+uv run pip-audit
 uv build
+uv run twine check dist/*
 ```
+
+The security and metadata commands require the audit dependency group:
+`uv sync --all-extras --group audit`.
 
 Behavior changes require tests. Public commands, exports, schemas, and serialized
 fields require corresponding documentation updates.

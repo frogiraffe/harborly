@@ -6,12 +6,13 @@ searoute package.
 
 ## Public API surface
 
-The stable top-level exports are the core types: `Port`, `PortGroup`, `PortRegistry`,
-`SeaRoute`, `SeaRouter`, `BatchMatchResult`, `MatchStatus`, `ConfidenceTier`,
-`MatchReason`, `MatchPolicy`, `RouteQualityFlag`, `RouteQualityPolicy`,
-`CanonicalEvidence`, `BackendErrorKind`, and the `SeaMileError` family (`RegistryDataError`,
-`SourceDataError`, `PortNotFoundError`, `AmbiguousPortError`, `PortCoordinateError`,
-`RoutingError`).
+The stable top-level exports are the core types: `Port`, `PortGroup`,
+`PortRegistry`, `SeaRoute`, `SeaRouter`, `BatchMatchResult`, `MatchStatus`,
+`ConfidenceTier`, `MatchReason`, `MatchPolicy`, `RetryPolicy`,
+`RouteQualityFlag`, `RouteQualityPolicy`, `CanonicalEvidence`, `BackendError`,
+`BackendErrorKind`, and the `SeaMileError` family (`RegistryDataError`,
+`SourceDataError`, `PortNotFoundError`, `AmbiguousPortError`,
+`PortCoordinateError`, `RoutingError`).
 
 Lower-level APIs are imported from their defining modules:
 
@@ -272,11 +273,33 @@ The default settings use the searoute A* algorithm, the NetworkX backend, the
 `RouteQualityPolicy` to customise the plausibility thresholds:
 
 ```python
-from sea_mile import SeaRouter, RouteQualityPolicy
+from sea_mile import SeaRouter, RouteQualityPolicy, RetryPolicy
 
-policy = RouteQualityPolicy(high_detour_ratio=2.5, lower_bound_tolerance_nmi=1.0)
-router = SeaRouter(quality_policy=policy)
+quality_policy = RouteQualityPolicy(
+    high_detour_ratio=2.5,
+    lower_bound_tolerance_nmi=1.0,
+)
+retry_policy = RetryPolicy(
+    attempts=4,
+    base_backoff_seconds=0.25,
+    max_backoff_seconds=8.0,
+    jitter_ratio=0.5,
+)
+router = SeaRouter(quality_policy=quality_policy, retry_policy=retry_policy)
 ```
+
+Backend retries are configured via `RetryPolicy`, which accepts 1–8 attempts,
+finite non-negative backoff times, and a `jitter_ratio` from 0.0 to 1.0.
+Timeouts, connection errors, HTTP 429, and HTTP 5xx responses are internally
+classified as transient. `BackendError` exposes the resulting
+`BackendErrorKind` (`NETWORK`, `TIMEOUT`, `RATE_LIMIT`, `SERVER`,
+`INVALID_RESPONSE`, or `UNKNOWN`) and a `transient` boolean.
+
+Advanced callers can import `CircuitBreakerPolicy` from `sea_mile.router` and
+pass it to `SeaRouter` to set `failure_threshold` and `recovery_seconds`. This
+documented lower-level policy protects against repeated calls while a backend
+is unavailable. When tripped, calls raise `RoutingError` with the stable reason
+`circuit_breaker_open`.
 
 A `SeaRoute` holds:
 
@@ -394,7 +417,8 @@ Every recoverable public error is a subclass of `SeaMileError`:
 - `RoutingError`, the routing backend or persistent cache failed, the backend
   returned an unusable result, or the route failed the plausibility check. Its
   `reason` attribute carries a stable token: `backend_call_failed`,
-  `cache_access_failed`, `malformed_backend_result`, or `implausible_route`.
-  Programmatic error handling must use this token rather than the message.
+  `cache_access_failed`, `malformed_backend_result`, `implausible_route`, or
+  `circuit_breaker_open`. Programmatic error handling must use this token rather
+  than the message.
 
 The CLI prints each error to `stderr` and exits with status code 2.

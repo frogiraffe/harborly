@@ -31,9 +31,11 @@ def registry_content_hash(registry: pd.DataFrame, aliases: pd.DataFrame) -> str:
     order, so it identifies a build and lets a rebuild be checked for drift.
     """
 
-    registry_csv = registry.sort_values("registry_id").to_csv(index=False)
+    registry_csv = registry.sort_values("registry_id").to_csv(
+        index=False, lineterminator="\n"
+    )
     aliases_csv = aliases.sort_values(["registry_id", "alias_key", "alias"]).to_csv(
-        index=False
+        index=False, lineterminator="\n"
     )
     digest = hashlib.sha256()
     digest.update(registry_csv.encode())
@@ -103,7 +105,7 @@ def _clean_unlocode(value: object) -> str | None:
     if pd.isna(value):
         return None
     cleaned = "".join(str(value).split()).upper()
-    return cleaned or None
+    return cleaned if cleaned.isalnum() and len(cleaned) == 5 else None
 
 
 def _clean_country_code(value: object) -> str:
@@ -132,6 +134,10 @@ def _load_wpi(path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
         registry_id = f"WPI:{provider_id}"
         latitude = parse_wpi_dms(row.latitude)
         longitude = parse_wpi_dms(row.longitude)
+        unlocode = _clean_unlocode(row.unloCode)
+        country_code = _clean_country_code(row.countryCode)
+        if not country_code and unlocode is not None:
+            country_code = unlocode[:2]
         if latitude is None or longitude is None:
             latitude = longitude = None
         records.append(
@@ -139,11 +145,11 @@ def _load_wpi(path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
                 "registry_id": registry_id,
                 "provider": "NGA_WPI",
                 "provider_id": provider_id,
-                "country_code": _clean_country_code(row.countryCode),
+                "country_code": country_code,
                 "canonical_name": normalize_display_text(row.portName),
                 "latitude": latitude,
                 "longitude": longitude,
-                "unlocode": _clean_unlocode(row.unloCode),
+                "unlocode": unlocode,
                 "function_code": "port",
                 "source_version": f"snapshot-{path.parent.name}",
                 "coordinate_resolution": "arc_second",
@@ -165,7 +171,20 @@ def _load_wpi(path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
                         "alias_type": alias_type,
                     }
                 )
-    return pd.DataFrame(records), pd.DataFrame(aliases).drop_duplicates()
+    alias_frame = pd.DataFrame(aliases).drop_duplicates()
+    alias_frame["_type_priority"] = alias_frame["alias_type"].map(
+        {"primary": 0, "alternate": 1}
+    )
+    alias_frame = (
+        alias_frame.sort_values(
+            ["registry_id", "alias_key", "_type_priority", "alias"],
+            kind="stable",
+        )
+        .drop_duplicates(["registry_id", "alias"], keep="first")
+        .sort_index()
+        .drop(columns="_type_priority")
+    )
+    return pd.DataFrame(records), alias_frame
 
 
 def _load_unlocode(path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:

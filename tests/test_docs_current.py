@@ -3,17 +3,26 @@ from __future__ import annotations
 import argparse
 import re
 import shlex
+import tomllib
 from pathlib import Path
 
 from markdown_it import MarkdownIt
 
 import sea_mile
 from sea_mile.cli import _parser
+from sea_mile.exceptions import RoutingErrorReason
 
 ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
 LIBRARY_API = ROOT / "docs" / "LIBRARY_API.md"
-MARKDOWN_FILES = [README, *sorted((ROOT / "docs").glob("*.md"))]
+API_COMPATIBILITY = ROOT / "docs" / "API_COMPATIBILITY.md"
+OUTPUT_SCHEMAS = ROOT / "docs" / "OUTPUT_SCHEMAS.md"
+MARKDOWN_FILES = [
+    *sorted(ROOT.glob("*.md")),
+    *sorted((ROOT / "docs").rglob("*.md")),
+    *sorted((ROOT / "examples").rglob("*.md")),
+    ROOT / "src" / "sea_mile" / "data" / "ATTRIBUTION.md",
+]
 
 
 def _command_names(parser: argparse.ArgumentParser) -> list[str]:
@@ -38,6 +47,20 @@ def test_every_public_export_is_documented() -> None:
     docs = LIBRARY_API.read_text().lower()
     missing = [name for name in sea_mile.__all__ if name.lower() not in docs]
     assert not missing, f"undocumented public exports: {missing}"
+
+
+def test_every_stable_export_is_in_compatibility_policy() -> None:
+    policy = API_COMPATIBILITY.read_text().lower()
+    missing = [name for name in sea_mile.__all__ if name.lower() not in policy]
+    assert not missing, f"exports missing from compatibility policy: {missing}"
+
+
+def test_every_routing_error_reason_is_documented() -> None:
+    schemas = OUTPUT_SCHEMAS.read_text()
+    missing = [
+        reason.value for reason in RoutingErrorReason if reason.value not in schemas
+    ]
+    assert not missing, f"undocumented routing error reasons: {missing}"
 
 
 def _example_commands() -> list[list[str]]:
@@ -134,3 +157,22 @@ def test_documentation_uses_neutral_technical_language() -> None:
     )
     for phrase in prohibited:
         assert phrase not in documentation
+
+
+def test_release_metadata_versions_match() -> None:
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    lock = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
+    citation = (ROOT / "CITATION.cff").read_text(encoding="utf-8")
+
+    citation_match = re.search(r"^version:\s*([^\s]+)\s*$", citation, re.MULTILINE)
+    assert citation_match is not None
+    locked_package = next(
+        package for package in lock["package"] if package["name"] == "sea-mile"
+    )
+
+    versions = {
+        project["project"]["version"],
+        locked_package["version"],
+        citation_match.group(1),
+    }
+    assert len(versions) == 1, f"inconsistent release metadata: {sorted(versions)}"

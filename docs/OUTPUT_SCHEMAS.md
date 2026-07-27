@@ -94,8 +94,10 @@ handling must use this value rather than `message`.
 | `details.reason` | Raised when |
 | --- | --- |
 | `backend_call_failed` | The routing backend raised while computing the route. |
+| `cache_access_failed` | The persistent SQLite cache could not be read or updated. |
 | `malformed_backend_result` | The backend returned a result sea-mile cannot use, such as a missing length or geometry. |
 | `implausible_route` | The route failed the physical plausibility check. |
+| `circuit_breaker_open` | Repeated transient failures opened the circuit breaker, or a half-open probe is already running. |
 
 A missing routing extra is not a `routing_error`. A route call without the extra raises
 `ImportError`, which the CLI prints to `stderr` with exit code 2.

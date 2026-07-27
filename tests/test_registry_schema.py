@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 
 import pandas as pd
@@ -73,6 +74,30 @@ def test_content_hash_changes_with_content() -> None:
     )
 
 
+def test_content_hash_uses_platform_independent_lf_line_endings() -> None:
+    registry = _registry_frame()
+    aliases = _alias_frame()
+
+    def hash_with_line_ending(line_ending: str) -> str:
+        digest = hashlib.sha256()
+        digest.update(
+            registry.sort_values("registry_id")
+            .to_csv(index=False, lineterminator=line_ending)
+            .encode()
+        )
+        digest.update(
+            aliases.sort_values(["registry_id", "alias_key", "alias"])
+            .to_csv(index=False, lineterminator=line_ending)
+            .encode()
+        )
+        return digest.hexdigest()
+
+    content_hash = registry_content_hash(registry, aliases)
+
+    assert content_hash == hash_with_line_ending("\n")
+    assert content_hash != hash_with_line_ending("\r\n")
+
+
 def test_from_directory_rejects_an_unsupported_schema(tmp_path) -> None:
     directory = tmp_path / "registry"
     _write_registry(directory)
@@ -107,3 +132,50 @@ def test_bundled_registry_is_loadable() -> None:
     assert len(registry) > 0
     assert set(registry.providers) == {"NGA_WPI", "GEONAMES"}
     assert bundled_data_directory().is_dir()
+
+
+def test_bundled_registry_manifest_and_data_quality() -> None:
+    directory = bundled_data_directory()
+    registry = pd.read_parquet(directory / "port_registry.parquet")
+    aliases = pd.read_parquet(directory / "port_aliases.parquet")
+    manifest = json.loads((directory / "registry_manifest.json").read_text())
+
+    assert manifest["registry_rows"] == len(registry)
+    assert manifest["alias_rows"] == len(aliases)
+    assert manifest["registry_content_hash"] == registry_content_hash(registry, aliases)
+    assert not registry["registry_id"].duplicated().any()
+    assert not registry.duplicated(["provider", "provider_id"]).any()
+    assert not aliases.duplicated(["registry_id", "alias"]).any()
+    assert registry[["latitude", "longitude"]].notna().all(axis=1).all()
+    assert pd.to_numeric(registry["latitude"], errors="coerce").between(-90, 90).all()
+    assert (
+        pd.to_numeric(registry["longitude"], errors="coerce").between(-180, 180).all()
+    )
+    assert registry["country_code"].str.fullmatch(r"[A-Z]{2}|", na=False).all()
+    missing_country = registry[registry["country_code"] == ""]
+    assert len(missing_country) == 8
+    assert set(missing_country["provider"]) == {"GEONAMES"}
+    assert (
+        registry["unlocode"].isna()
+        | registry["unlocode"].str.fullmatch(r"[A-Z]{2}[A-Z0-9]{3}", na=False)
+    ).all()
+    assert registry["source_version"].str.strip().ne("").all()
+
+
+def test_bundled_wpi_normalization_preserves_verified_search_behavior() -> None:
+    registry = PortRegistry.bundled()
+
+    luderitz = registry.get("WPI:46650")
+    portsmouth = registry.get("WPI:35600")
+
+    assert luderitz.country_code == "NA"
+    assert luderitz.unlocode == "NALUD"
+    assert any(
+        result.port.registry_id == luderitz.registry_id
+        for result in registry.search("Luderitz Bay", country_code="NA")
+    )
+    assert portsmouth.unlocode is None
+    assert any(
+        result.port.registry_id == portsmouth.registry_id
+        for result in registry.search("Portsmouth Harbour", country_code="GB")
+    )

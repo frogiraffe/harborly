@@ -173,7 +173,8 @@ def _send_with_deadline(client: httpx.Client, url: str) -> httpx.Response:
         )
     if error is not None:
         raise error
-    assert response is not None
+    if response is None:
+        raise SourceDataError("connection attempt completed without a response")
     return response
 
 
@@ -358,13 +359,12 @@ def _download(
                     f"{destination.name} exceeds the {max_bytes}-byte download limit"
                 )
 
-            parallel_eligible = (
+            if (
                 total is not None
                 and total >= _PARALLEL_THRESHOLD_BYTES
                 and response.headers.get("Accept-Ranges", "").lower() == "bytes"
-            )
-            if parallel_eligible:
-                assert total is not None
+            ):
+                parallel_eligible = True
                 response.close()
                 _download_parallel(
                     client,

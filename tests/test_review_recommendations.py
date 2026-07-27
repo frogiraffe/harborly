@@ -8,9 +8,9 @@ cache corruption, HTML injection, and download safety.
 from __future__ import annotations
 
 import json
-import math
 import sqlite3
 import zipfile
+from contextlib import closing
 from io import BytesIO
 from pathlib import Path
 
@@ -461,100 +461,67 @@ class TestRoutingEdgeCases:
 
 
 class TestCacheEdgeCases:
-    def test_corrupt_json_in_cache_is_evicted(self) -> None:
+    def test_corrupt_json_in_cache_is_evicted(self, tmp_path: Path) -> None:
         """A corrupt JSON blob in the cache row is silently evicted."""
         from sea_mile.route_cache import RouteCache
 
-        cache_path = Path(__file__).parent / "_test_cache_corrupt.db"
-        try:
-            cache = RouteCache(cache_path)
-            # Manually insert a corrupt row
-            with sqlite3.connect(cache_path) as conn:
-                conn.execute(
-                    "INSERT INTO routes (cache_key, distance_nmi, geometry_json) "
-                    "VALUES (?, ?, ?)",
-                    ("badkey", 100.0, "NOT VALID JSON {{{"),
-                )
-            result = cache.get("badkey")
-            assert result is None
-            # Verify the row was evicted
-            with sqlite3.connect(cache_path) as conn:
-                row = conn.execute(
-                    "SELECT 1 FROM routes WHERE cache_key = ?", ("badkey",)
-                ).fetchone()
-                assert row is None
-        finally:
-            import shutil
+        cache_path = tmp_path / "cache-corrupt.db"
+        cache = RouteCache(cache_path)
+        # Manually insert a corrupt row
+        with closing(sqlite3.connect(cache_path)) as conn, conn:
+            conn.execute(
+                "INSERT INTO routes (cache_key, distance_nmi, geometry_json) "
+                "VALUES (?, ?, ?)",
+                ("badkey", 100.0, "NOT VALID JSON {{{"),
+            )
+        result = cache.get("badkey")
+        assert result is None
+        # Verify the row was evicted
+        with closing(sqlite3.connect(cache_path)) as conn, conn:
+            row = conn.execute(
+                "SELECT 1 FROM routes WHERE cache_key = ?", ("badkey",)
+            ).fetchone()
+        assert row is None
 
-            shutil.rmtree(cache_path.parent / cache_path.name, ignore_errors=True)
-            if cache_path.exists():
-                cache_path.unlink()
-            # Also remove WAL/SHM files
-            for suffix in ("-wal", "-shm"):
-                p = cache_path.parent / (cache_path.name + suffix)
-                if p.exists():
-                    p.unlink()
-
-    def test_non_dict_geometry_in_cache_is_evicted(self) -> None:
+    def test_non_dict_geometry_in_cache_is_evicted(self, tmp_path: Path) -> None:
         """A geometry_json that parses to a non-dict is evicted."""
         from sea_mile.route_cache import RouteCache
 
-        cache_path = Path(__file__).parent / "_test_cache_nondict.db"
-        try:
-            cache = RouteCache(cache_path)
-            with sqlite3.connect(cache_path) as conn:
-                conn.execute(
-                    "INSERT INTO routes (cache_key, distance_nmi, geometry_json) "
-                    "VALUES (?, ?, ?)",
-                    ("nondict", 100.0, json.dumps([1, 2, 3])),
-                )
-            result = cache.get("nondict")
-            assert result is None
-        finally:
-            import shutil
+        cache_path = tmp_path / "cache-nondict.db"
+        cache = RouteCache(cache_path)
+        with closing(sqlite3.connect(cache_path)) as conn, conn:
+            conn.execute(
+                "INSERT INTO routes (cache_key, distance_nmi, geometry_json) "
+                "VALUES (?, ?, ?)",
+                ("nondict", 100.0, json.dumps([1, 2, 3])),
+            )
+        result = cache.get("nondict")
+        assert result is None
 
-            shutil.rmtree(cache_path.parent / cache_path.name, ignore_errors=True)
-            if cache_path.exists():
-                cache_path.unlink()
-            for suffix in ("-wal", "-shm"):
-                p = cache_path.parent / (cache_path.name + suffix)
-                if p.exists():
-                    p.unlink()
-
-    def test_infinite_distance_is_stored_and_retrieved(self) -> None:
-        """Inf is stored as-is; the cache is a dumb key-value store.
-
-        Plausibility checks happen in assess_route_length, not here.
-        """
+    def test_infinite_distance_is_evicted_on_read(self, tmp_path: Path) -> None:
+        """Self-healing cache evicts infinite distance entries on read."""
         from sea_mile.route_cache import RouteCache
 
-        cache_path = Path(__file__).parent / "_test_cache_inf.db"
-        try:
-            cache = RouteCache(cache_path)
-            with sqlite3.connect(cache_path) as conn:
-                conn.execute(
-                    "INSERT INTO routes (cache_key, distance_nmi, geometry_json) "
-                    "VALUES (?, ?, ?)",
-                    (
-                        "infkey",
-                        float("inf"),
-                        json.dumps({"type": "LineString", "coordinates": []}),
+        cache_path = tmp_path / "cache-inf.db"
+        cache = RouteCache(cache_path)
+        with closing(sqlite3.connect(cache_path)) as conn, conn:
+            conn.execute(
+                "INSERT INTO routes (cache_key, distance_nmi, geometry_json) "
+                "VALUES (?, ?, ?)",
+                (
+                    "infkey",
+                    float("inf"),
+                    json.dumps(
+                        {
+                            "type": "LineString",
+                            "coordinates": [[1.0, 2.0], [3.0, 4.0]],
+                        }
                     ),
-                )
-            result = cache.get("infkey")
-            # Cache stores and returns it — validation is upstream
-            assert result is not None
-            assert math.isinf(result.distance_nmi)
-        finally:
-            import shutil
-
-            shutil.rmtree(cache_path.parent / cache_path.name, ignore_errors=True)
-            if cache_path.exists():
-                cache_path.unlink()
-            for suffix in ("-wal", "-shm"):
-                p = cache_path.parent / (cache_path.name + suffix)
-                if p.exists():
-                    p.unlink()
+                ),
+            )
+        result = cache.get("infkey")
+        # Self-healing cache evicts non-finite entries on read
+        assert result is None
 
 
 # ---------------------------------------------------------------------------

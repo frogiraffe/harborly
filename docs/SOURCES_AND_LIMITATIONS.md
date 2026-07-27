@@ -51,6 +51,9 @@ release in its manifest. It does not include derived UN/LOCODE records in the wh
 The bundled registry includes the `ANCH`, `DCK`, `DCKB`, `DCKY`, `FYT`, `HBR`,
 `LDNG`, `MAR`, and `PRT` feature codes. GeoNames coordinates remain
 provider-specific candidates and do not overwrite another provider's record.
+Some upstream GeoNames rows do not provide a country code. sea-mile preserves
+that missing value rather than inferring a country from coordinates, so those
+records are excluded when a country filter is used.
 
 ### OpenStreetMap (optional)
 
@@ -113,6 +116,12 @@ record. `sea-mile info` reports record counts for the active build.
 Grouped search collapses records that describe the same physical port. Use it to read
 one row per port. Use `resolve` to select one record for routing. sea-mile does not
 claim to hold a record for every port in the world.
+
+Coordinates from different providers can disagree because their records may
+refer to different terminals, use different precision, or contain upstream
+errors. `sea-mile data verify --json` reports cross-provider agreement metrics;
+large differences are retained as provenance evidence and are not silently
+averaged or overwritten.
 
 ## A single exact match is not always the same port
 

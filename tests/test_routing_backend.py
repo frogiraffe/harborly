@@ -208,15 +208,26 @@ def test_invalid_existing_cache_entry_is_evicted(tmp_path):
         engine=backend.name,
         engine_version=backend.version,
     )
-    cache.put(key, BackendRoute(distance_nmi=600.0, geometry={}))
-    router = SeaRouter(cache_path=cache_path, _routing_backend=backend)
+    with sqlite3.connect(cache_path) as connection:
+        connection.execute(
+            "INSERT INTO routes (cache_key, distance_nmi, geometry_json) "
+            "VALUES (?, ?, ?)",
+            (key, 600.0, "{}"),
+        )
+    first_router = SeaRouter(cache_path=cache_path, _routing_backend=backend)
 
-    with pytest.raises(RoutingError):
-        router.route_coordinates(*ORIGIN, *DESTINATION)
-    route = router.route_coordinates(*ORIGIN, *DESTINATION)
+    route = first_router.route_coordinates(*ORIGIN, *DESTINATION)
 
     assert route.distance_nmi == 600.0
     assert len(backend.calls) == 1
+
+    second_backend = FakeBackend(distance_nmi=700.0)
+    second_route = SeaRouter(
+        cache_path=cache_path, _routing_backend=second_backend
+    ).route_coordinates(*ORIGIN, *DESTINATION)
+
+    assert second_route.distance_nmi == 600.0
+    assert second_backend.calls == []
 
 
 def test_persistent_cache_failures_do_not_leak_sqlite_exceptions(tmp_path, monkeypatch):
