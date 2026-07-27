@@ -343,7 +343,11 @@ but a route call raises `ImportError` when it is missing.
 
 ## Optional service and visualizations
 
-`sea-mile serve` starts the FastAPI application from `sea_mile.api` with Uvicorn.
+`sea-mile serve` starts the FastAPI application from `sea_mile.api` with Uvicorn
+after checking that both the `api` and `routing` extras are installed. The base
+URL redirects to `/docs`, and `GET /healthz` returns the service name, liveness
+status, and installed package version.
+
 The `GET /route` endpoint accepts `origin`, `destination`, and optional
 `origin_country` and `destination_country` query parameters. It resolves both
 ports through `PortRegistry.bundled()`, routes them with `SeaRouter`, and returns:
@@ -362,7 +366,12 @@ ports through `PortRegistry.bundled()`, routes them with `SeaRouter`, and return
 }
 ```
 
-Install the `api` and `routing` extras for this command. `create_app` accepts
+The OpenAPI document defines the route, GeoJSON, port-provenance, health, and
+error response models. HTTP 404 indicates an unknown port, 409 an ambiguous
+identity, 422 invalid input, 502 a routing-backend failure, and 503 an
+unavailable routing dependency.
+
+Install the `api` and `routing` extras together for this command. `create_app` accepts
 injected registry and router objects for isolated application tests; the default
 application uses the bundled registry.
 

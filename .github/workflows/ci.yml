@@ -102,6 +102,16 @@ jobs:
           sea-mile info --json
           python3 -c "from sea_mile import PortRegistry, SeaRouter; assert len(PortRegistry.bundled()) > 0"
 
+      - name: Smoke-test the API, routing, and map workflow
+        run: |
+          python3 -m venv /tmp/sea-mile-optional-smoke
+          source /tmp/sea-mile-optional-smoke/bin/activate
+          wheels=(dist/*.whl)
+          pip install --quiet "${wheels[0]}[api,routing,map]"
+          sea-mile route TRMER GRPIR --html-map /tmp/sea-mile-route.html
+          test -s /tmp/sea-mile-route.html
+          python3 -c "from fastapi.testclient import TestClient; from sea_mile.api import app; client = TestClient(app); assert client.get('/').status_code == 200; assert client.get('/healthz').json()['status'] == 'ok'"
+
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: dist

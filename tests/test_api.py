@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from importlib.metadata import version
 from typing import NoReturn
 
 import httpx
@@ -116,3 +117,53 @@ async def test_route_endpoint_reports_missing_routing_extra(
 
     assert response.status_code == 503
     assert "routing" in response.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_root_redirects_to_interactive_docs(registry: PortRegistry) -> None:
+    transport = httpx.ASGITransport(
+        app=create_app(registry=registry, router=FakeRouter())
+    )
+
+    async with httpx.AsyncClient(
+        transport=transport, base_url="http://test", follow_redirects=False
+    ) as client:
+        response = await client.get("/")
+
+    assert response.status_code == 307
+    assert response.headers["location"] == "/docs"
+
+
+@pytest.mark.anyio
+async def test_health_endpoint_reports_package_version(registry: PortRegistry) -> None:
+    transport = httpx.ASGITransport(
+        app=create_app(registry=registry, router=FakeRouter())
+    )
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/healthz")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "service": "sea-mile",
+        "status": "ok",
+        "version": version("sea-mile"),
+    }
+
+
+def test_openapi_documents_route_contract_and_errors(registry: PortRegistry) -> None:
+    schema = create_app(registry=registry, router=FakeRouter()).openapi()
+
+    assert schema["info"]["title"] == "sea-mile API"
+    assert schema["info"]["version"] == version("sea-mile")
+    assert set(schema["paths"]) == {"/healthz", "/route"}
+
+    route = schema["paths"]["/route"]["get"]
+    assert route["tags"] == ["routing"]
+    assert route["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/RouteResponse"
+    }
+    assert {"404", "409", "422", "502", "503"} <= set(route["responses"])
+    assert {"RouteResponse", "RouteFeatureResponse", "ErrorResponse"} <= set(
+        schema["components"]["schemas"]
+    )

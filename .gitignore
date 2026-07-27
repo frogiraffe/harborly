@@ -4,6 +4,8 @@ data/reference/
 # Local example output
 examples/synthetic/synthetic_routes.geojson
 examples/synthetic/synthetic_routes.geojson.js
+/route.geojson
+/route.html
 
 # Python
 __pycache__/

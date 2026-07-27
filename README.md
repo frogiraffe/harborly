@@ -83,8 +83,13 @@ uv tool install 'sea-mile[routing]'
 Add `api`, `map`, or `tui` to install the optional server and visualizations:
 
 ```bash
-uv tool install 'sea-mile[routing,api,map,tui]'
+uv tool install --force 'sea-mile[routing,api,map,tui]'
 ```
+
+When changing an existing uv tool installation, always list every capability
+that installation must keep. `uv tool install` reconciles the isolated tool
+environment with the new requirement, so extras omitted from a later command
+can be removed. Quote the requirement to prevent shell glob expansion.
 
 For a source checkout:
 
@@ -92,6 +97,10 @@ For a source checkout:
 uv sync --dev --extra analysis --extra api --extra fast --extra map --extra routing --extra tui
 uv run sea-mile info
 ```
+
+Commands from a source checkout must use `uv run sea-mile`. A bare `sea-mile`
+can resolve to a separate installation under `~/.local/bin` and will not see
+packages added to the checkout's `.venv`.
 
 The wheel contains the compact bundled registry. Search, resolution, and nearest
 queries need no download; routing requires the `routing` extra.
@@ -159,9 +168,17 @@ sea-mile match ports.csv --country-column country
 sea-mile serve --host 127.0.0.1 --port 8000
 ```
 
-The server exposes
-`GET /route?origin=TRMER&destination=GRPIR`. It uses the bundled registry and
+`route --html-map` requires both the `routing` and `map` extras. The server
+requires both the `api` and `routing` extras and checks them before it starts.
+Its base URL redirects to the interactive API documentation at `/docs`;
+`GET /healthz` reports liveness. The server exposes
+`GET /route?origin=TRMER&destination=GRPIR`, which uses the bundled registry and
 returns `distance_nmi` together with a GeoJSON route feature.
+
+`sea-mile serve` defaults to the loopback interface for local use. It does not
+provide authentication, TLS termination, or rate limiting; do not expose it
+directly to the public internet without an appropriate production ASGI
+deployment and reverse proxy.
 
 The registry lookup order is `--data-dir`, `SEA_MILE_DATA_DIR`, the checkout's
 `data/reference/processed`, then the bundled artifact.

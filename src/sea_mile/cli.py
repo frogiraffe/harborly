@@ -13,6 +13,7 @@ import sys
 from collections import Counter
 from collections.abc import Callable, Iterator, Sequence
 from importlib.metadata import PackageNotFoundError, version
+from importlib.util import find_spec
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -41,6 +42,38 @@ def _version() -> str:
         return version("sea-mile")
     except PackageNotFoundError:
         return "0.0.0"
+
+
+def _module_available(module: str) -> bool:
+    try:
+        return find_spec(module) is not None
+    except (AttributeError, ImportError, ValueError):
+        return False
+
+
+def _print_optional_extras_error(feature: str, extras: Sequence[str]) -> None:
+    unique_extras = list(dict.fromkeys(extras))
+    extras_spec = ",".join(unique_extras)
+    sync_flags = " ".join(f"--extra {extra}" for extra in unique_extras)
+    labels = " and ".join(f"'{extra}'" for extra in unique_extras)
+    print(
+        f"sea-mile: error: {feature} needs the {labels} extras\n"
+        "install every required extra in the same environment:\n"
+        f"  uv tool:        uv tool install --force 'sea-mile[{extras_spec}]'\n"
+        f"  virtualenv:     python -m pip install 'sea-mile[{extras_spec}]'\n"
+        f"  source checkout: uv sync {sync_flags}\n"
+        "                   then run the command with 'uv run sea-mile'",
+        file=sys.stderr,
+    )
+
+
+def _require_optional_extras(
+    feature: str, requirements: Sequence[tuple[str, str]]
+) -> bool:
+    if all(_module_available(module) for _, module in requirements):
+        return True
+    _print_optional_extras_error(feature, [extra for extra, _ in requirements])
+    return False
 
 
 def _parse_coordinate(value: str) -> tuple[float, float] | None:
@@ -355,15 +388,21 @@ def _cmd_near(args: argparse.Namespace) -> int:
 def _cmd_route(args: argparse.Namespace) -> int:
     from sea_mile.router import SeaRouter
 
+    requirements = [("routing", "searoute")]
+    if args.html_map:
+        requirements.append(("map", "folium"))
+    if not _require_optional_extras(
+        "route --html-map" if args.html_map else "route", requirements
+    ):
+        return 2
+
     html_map_writer: Callable[[SeaRoute, Path], None] | None = None
     if args.html_map:
         try:
             from sea_mile.html_map import write_route_html
         except ImportError:
-            print(
-                "sea-mile: error: --html-map needs the 'map' extra "
-                "(pip install 'sea-mile[map]' or uv sync --extra map)",
-                file=sys.stderr,
+            _print_optional_extras_error(
+                "route --html-map", [extra for extra, _ in requirements]
             )
             return 2
         html_map_writer = write_route_html
@@ -373,8 +412,11 @@ def _cmd_route(args: argparse.Namespace) -> int:
     destination = _endpoint_port(registry, args.destination, args.destination_country)
     try:
         result = SeaRouter(cache_path=args.cache).route(origin, destination)
-    except ImportError as error:
-        print(f"sea-mile: error: {error}", file=sys.stderr)
+    except ImportError:
+        _print_optional_extras_error(
+            "route --html-map" if args.html_map else "route",
+            [extra for extra, _ in requirements],
+        )
         return 2
     if args.geojson:
         args.geojson.parent.mkdir(parents=True, exist_ok=True)
@@ -765,29 +807,31 @@ def _cmd_match(args: argparse.Namespace) -> int:
 
 
 def _cmd_tui(args: argparse.Namespace) -> int:
+    requirements = [("tui", "textual")]
+    if not _require_optional_extras("tui", requirements):
+        return 2
     registry = _load_registry(args)
     try:
         from sea_mile import tui
     except ImportError:
-        print(
-            "sea-mile: error: the tui command needs the 'tui' extra "
-            "(pip install 'sea-mile[tui]' or uv sync --extra tui)",
-            file=sys.stderr,
-        )
+        _print_optional_extras_error("tui", ["tui"])
         return 2
     tui.run(registry)
     return 0
 
 
 def _cmd_serve(args: argparse.Namespace) -> int:
+    requirements = [
+        ("api", "fastapi"),
+        ("api", "uvicorn"),
+        ("routing", "searoute"),
+    ]
+    if not _require_optional_extras("serve", requirements):
+        return 2
     try:
         from sea_mile.api import run_server
     except ImportError:
-        print(
-            "sea-mile: error: the serve command needs the 'api' extra "
-            "(pip install 'sea-mile[api]' or uv sync --extra api)",
-            file=sys.stderr,
-        )
+        _print_optional_extras_error("serve", ["api", "routing"])
         return 2
     run_server(host=args.host, port=args.port)
     return 0

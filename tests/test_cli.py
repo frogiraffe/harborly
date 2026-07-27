@@ -318,8 +318,38 @@ def test_route_html_map_reports_missing_extra(tmp_path, capsys, monkeypatch) -> 
     assert status == 2
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert "sea-mile[map]" in captured.err
+    assert "sea-mile[routing,map]" in captured.err
+    assert "uv tool install --force" in captured.err
+    assert "uv run sea-mile" in captured.err
     assert not geojson.exists()
+
+
+def test_route_html_map_preflight_keeps_required_extras_together(
+    tmp_path, capsys, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        "sea_mile.cli._module_available",
+        lambda module: module == "searoute",
+    )
+    monkeypatch.setattr(
+        "sea_mile.cli._load_registry",
+        lambda args: pytest.fail(f"registry should not load: {args}"),
+    )
+
+    status = main(
+        [
+            "route",
+            "TRMER",
+            "GRPIR",
+            "--html-map",
+            str(tmp_path / "route.html"),
+        ]
+    )
+
+    assert status == 2
+    captured = capsys.readouterr()
+    assert "sea-mile[routing,map]" in captured.err
+    assert "--extra routing --extra map" in captured.err
 
 
 def test_route_html_map_write_failure_does_not_emit_success(
@@ -373,7 +403,27 @@ def test_serve_reports_missing_extra(capsys, monkeypatch) -> None:
     status = main(["serve"])
 
     assert status == 2
-    assert "sea-mile[api]" in capsys.readouterr().err
+    captured = capsys.readouterr()
+    assert "sea-mile[api,routing]" in captured.err
+    assert "uv tool install --force" in captured.err
+
+
+def test_serve_checks_routing_before_starting_server(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "sea_mile.cli._module_available",
+        lambda module: module != "searoute",
+    )
+    monkeypatch.setattr(
+        "sea_mile.api.run_server",
+        lambda **kwargs: pytest.fail(f"server should not start: {kwargs}"),
+    )
+
+    status = main(["serve"])
+
+    assert status == 2
+    captured = capsys.readouterr()
+    assert "sea-mile[api,routing]" in captured.err
+    assert "--extra api --extra routing" in captured.err
 
 
 def test_serve_rejects_out_of_range_port(capsys) -> None:
