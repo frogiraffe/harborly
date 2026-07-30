@@ -23,14 +23,17 @@
 
 ## Internals and operations
 
-- [Architecture](ARCHITECTURE.md) — module layout and data flow.
 - [Routing and cache operations](ROUTING_AND_CACHE.md).
 - [Terminal UI](TUI.md) — installation and keybindings.
-- [Performance](PERFORMANCE.md) — `match_names` and search benchmarks.
 
 ## Maintainers
 
-- [Dependency policy](DEPENDENCY_POLICY.md).
-- [Release procedure](RELEASING.md).
+Not needed to install or use sea-mile — for people changing the code or
+cutting a release.
+
+- [Architecture](maintainers/ARCHITECTURE.md) — module layout and data flow.
+- [Performance](maintainers/PERFORMANCE.md) — `match_names` and search benchmarks.
+- [Dependency policy](maintainers/DEPENDENCY_POLICY.md).
+- [Release procedure](maintainers/RELEASING.md).
 - [Contributing](https://github.com/frogiraffe/sea-mile/blob/main/CONTRIBUTING.md).
 - [Security](https://github.com/frogiraffe/sea-mile/blob/main/SECURITY.md).

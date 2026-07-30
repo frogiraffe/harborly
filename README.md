@@ -305,19 +305,18 @@ reproducible CycloneDX SBOM, SHA-256 checksum file, GitHub build-provenance
 attestation, and GitHub Release. CI installs both the core-only wheel and the
 optional API/routing/map workflow in isolated environments.
 
-Design and maintenance details live outside this user guide:
+More detail than this user guide covers lives in the
+[documentation index](https://github.com/frogiraffe/sea-mile/blob/main/docs/README.md):
 
-- [Documentation index](https://github.com/frogiraffe/sea-mile/blob/main/docs/README.md)
-- [Architecture](https://github.com/frogiraffe/sea-mile/blob/main/docs/ARCHITECTURE.md)
 - [Routing and cache operations](https://github.com/frogiraffe/sea-mile/blob/main/docs/ROUTING_AND_CACHE.md)
 - [HTTP service](https://github.com/frogiraffe/sea-mile/blob/main/docs/API_SERVICE.md)
 - [TUI guide](https://github.com/frogiraffe/sea-mile/blob/main/docs/TUI.md)
 - [Cookbook](https://github.com/frogiraffe/sea-mile/blob/main/docs/COOKBOOK.md)
-- [Performance](https://github.com/frogiraffe/sea-mile/blob/main/docs/PERFORMANCE.md)
-- [Dependency policy](https://github.com/frogiraffe/sea-mile/blob/main/docs/DEPENDENCY_POLICY.md)
 - [API compatibility](https://github.com/frogiraffe/sea-mile/blob/main/docs/API_COMPATIBILITY.md)
-- [Release procedure](https://github.com/frogiraffe/sea-mile/blob/main/docs/RELEASING.md)
 - [Changelog](https://github.com/frogiraffe/sea-mile/blob/main/CHANGELOG.md)
+
+Architecture, performance, dependency policy, and the release procedure are
+maintainer documentation; the documentation index links them separately.
 
 Security reports follow
 [SECURITY.md](https://github.com/frogiraffe/sea-mile/blob/main/SECURITY.md);

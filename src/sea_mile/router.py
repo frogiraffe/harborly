@@ -7,6 +7,7 @@ import multiprocessing
 import os
 import secrets
 import time
+import warnings
 from collections import deque
 from collections.abc import Iterable, Sequence
 from concurrent.futures import Future, ProcessPoolExecutor
@@ -213,12 +214,30 @@ class SeaRouter:
         restrictions: tuple[str, ...] = ("northwest",),
         cache_path: str | Path | None = None,
         retry_policy: RetryPolicy | None = None,
+        retry_attempts: int | None = None,
+        backoff_seconds: float | None = None,
         quality_policy: RouteQualityPolicy | None = None,
         circuit_breaker_policy: CircuitBreakerPolicy | None = None,
         cache_failure_policy: CacheFailurePolicy = CacheFailurePolicy.STRICT,
         _routing_backend: _RoutingBackend | None = None,
     ) -> None:
-        self._retry_policy = retry_policy if retry_policy is not None else RetryPolicy()
+        if retry_attempts is not None or backoff_seconds is not None:
+            warnings.warn(
+                "SeaRouter(retry_attempts=..., backoff_seconds=...) is deprecated"
+                " and will be removed in the next major version; pass"
+                " retry_policy=RetryPolicy(attempts=..., base_backoff_seconds=...)"
+                " instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        if retry_policy is not None:
+            self._retry_policy = retry_policy
+        else:
+            attempts = 4 if retry_attempts is None else retry_attempts
+            backoff = 0.25 if backoff_seconds is None else backoff_seconds
+            self._retry_policy = RetryPolicy(
+                attempts=attempts, base_backoff_seconds=backoff
+            )
         self.algorithm = algorithm
         self.backend = backend
         self.restrictions = restrictions
@@ -240,6 +259,27 @@ class SeaRouter:
     @property
     def retry_policy(self) -> RetryPolicy:
         return self._retry_policy
+
+    @property
+    def retry_attempts(self) -> int:
+        warnings.warn(
+            "SeaRouter.retry_attempts is deprecated and will be removed in the"
+            " next major version; use SeaRouter.retry_policy.attempts instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._retry_policy.attempts
+
+    @property
+    def backoff_seconds(self) -> float:
+        warnings.warn(
+            "SeaRouter.backoff_seconds is deprecated and will be removed in the"
+            " next major version; use SeaRouter.retry_policy.base_backoff_seconds"
+            " instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._retry_policy.base_backoff_seconds
 
     def route(self, origin: Port, destination: Port) -> SeaRoute:
         return self._route_cached(

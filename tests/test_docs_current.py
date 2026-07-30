@@ -183,7 +183,11 @@ _INTERNAL_DOC_ALLOWLIST = frozenset(
 def test_every_docs_file_is_discoverable() -> None:
     index = (ROOT / "docs" / "README.md").read_text().lower()
     readme = README.read_text().lower()
-    for path in sorted((ROOT / "docs").glob("*.md")):
+    paths = [
+        *(ROOT / "docs").glob("*.md"),
+        *(ROOT / "docs" / "maintainers").glob("*.md"),
+    ]
+    for path in sorted(paths):
         if path in _INTERNAL_DOC_ALLOWLIST or path.name == "README.md":
             continue
         rel = path.name.lower()

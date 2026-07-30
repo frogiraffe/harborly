@@ -58,7 +58,7 @@ at four. A dense matrix necessarily retains O(n²) floats;
 `SeaRouter.iter_distance_edges` and `matrix --edge-csv` provide bounded-memory
 streaming alternatives.
 
-See [Routing and cache operations](ROUTING_AND_CACHE.md) for failure,
+See [Routing and cache operations](../ROUTING_AND_CACHE.md) for failure,
 retry, cache, and maintenance semantics.
 
 ## Artifact pipeline

@@ -5,7 +5,27 @@ All notable user-visible changes are documented here. The project follows
 
 ## [Unreleased]
 
-## [1.6.1] - 2026-07-30
+## [1.7.0] - 2026-07-30
+
+### Changed
+
+- **Data break.** The bundled registry was rebuilt with clustered canonical
+  identities. 16955 of 20070 records carry a different `SM-*` synthetic
+  `canonical_id`; the distinct identity count falls from 19327 to 19191 as 115
+  identities absorb records the old rounding grid had split. UN/LOCODE-derived
+  canonical IDs are unaffected. Persisted `SM-*` identifiers must be remapped.
+  This is a content refresh, not a format change (`registry_schema_version` is
+  unchanged), but it is called out here because it changes what a stored ID
+  means.
+
+### Deprecated
+
+- The keyword-argument ladders that predate the policy objects
+  (`SeaRouter(retry_attempts=..., backoff_seconds=...)` and
+  `assess_route_length(..., lower_bound_tolerance_nmi=..., high_detour_ratio=...)`)
+  now emit `DeprecationWarning` and are scheduled for removal in the next
+  major version. See `docs/API_COMPATIBILITY.md` for the full
+  deprecated/replacement table.
 
 ### Fixed
 
@@ -68,14 +88,6 @@ All notable user-visible changes are documented here. The project follows
   documentation and reports confirmed 404/410 responses. Never gates a pull
   request or a release.
 
-### Changed
-
-- **Data break.** The bundled registry was rebuilt with the clustered canonical
-  identities. 16955 of 20070 records carry a different `SM-*` synthetic
-  `canonical_id`, and the distinct identity count falls from 19327 to 19191 as
-  115 identities absorb records the rounding grid had split. UN/LOCODE-derived
-  canonical IDs are unaffected. Persisted `SM-*` identifiers must be remapped.
-
 ## [1.6.0] - 2026-07-27
 
 ### Added
@@ -128,8 +140,8 @@ All notable user-visible changes are documented here. The project follows
 - Retried concurrent SQLite WAL initialization on Windows.
 - Included Pandera as a required runtime dependency.
 
-[Unreleased]: https://github.com/frogiraffe/sea-mile/compare/v1.6.1...HEAD
-[1.6.1]: https://github.com/frogiraffe/sea-mile/compare/v1.6.0...v1.6.1
+[Unreleased]: https://github.com/frogiraffe/sea-mile/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/frogiraffe/sea-mile/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/frogiraffe/sea-mile/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/frogiraffe/sea-mile/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/frogiraffe/sea-mile/compare/v1.3.0...v1.4.0

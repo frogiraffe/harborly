@@ -159,7 +159,7 @@ jobs:
         run: |
           uv run twine check --strict dist/*
           tar -tzf dist/*.tar.gz | grep '/scripts/normalize_sdist.py$'
-          tar -tzf dist/*.tar.gz | grep '/docs/RELEASING.md$'
+          tar -tzf dist/*.tar.gz | grep '/docs/maintainers/RELEASING.md$'
 
       - name: Smoke-test the core-only wheel
         run: |

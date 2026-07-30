@@ -17,16 +17,16 @@ The names in `sea_mile.__all__` are stable:
 Breaking signature changes, removals, and incompatible semantic changes require
 a major version.
 
-## Removed in 2.0
+## Deprecated
 
 Each entry below had two spellings: a policy object and a loose keyword ladder
 that predated it. Two ways to say the same thing means two things to document,
-two to validate, and an unstated question about which one wins. 2.0 keeps the
-policy objects and removes the ladders. There is no transition shim — the old
-spellings raise `TypeError`, so a caller finds out at the call rather than
-silently getting a default.
+two to validate, and an unstated question about which one wins. The ladders
+below still work, emit `DeprecationWarning`, and are removed in the next major
+version — see "Deprecation before removal" in
+[Release procedure](maintainers/RELEASING.md#versioning).
 
-| Removed | Replacement |
+| Deprecated | Replacement |
 | --- | --- |
 | `SeaRouter(retry_attempts=...)` | `SeaRouter(retry_policy=RetryPolicy(attempts=...))` |
 | `SeaRouter(backoff_seconds=...)` | `SeaRouter(retry_policy=RetryPolicy(base_backoff_seconds=...))` |
@@ -34,7 +34,7 @@ silently getting a default.
 | `SeaRouter.backoff_seconds` | `SeaRouter.retry_policy.base_backoff_seconds` |
 | `assess_route_length(..., high_detour_ratio=...)` | `assess_route_length(..., policy=RouteQualityPolicy(high_detour_ratio=...))` |
 | `assess_route_length(..., lower_bound_tolerance_nmi=...)` | `assess_route_length(..., policy=RouteQualityPolicy(lower_bound_tolerance_nmi=...))` |
-| `GET /route`, `GET /healthz` | `GET /v1/route`, `GET /v1/livez` |
+| `GET /route`, `GET /healthz` | `GET /v1/route`, `GET /v1/livez` (see [API service](API_SERVICE.md)) |
 
 `SeaRouter.distance_matrix` remains the dense matrix API.
 `SeaRouter.iter_distance_edges` is its bounded-memory streaming counterpart and
@@ -70,6 +70,6 @@ snapshots and are not API constants.
 CI validates Python 3.11, 3.12, 3.13, and 3.14 on Linux. Python 3.14 is also
 validated on macOS and Windows. The complete suite also runs on Python 3.11
 with the declared minimum direct dependencies. Dependency constraints and
-update rules are described in [Dependency policy](DEPENDENCY_POLICY.md).
+update rules are described in [Dependency policy](maintainers/DEPENDENCY_POLICY.md).
 
 Security reports follow [SECURITY.md](../SECURITY.md).
