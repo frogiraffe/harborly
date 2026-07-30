@@ -98,6 +98,7 @@ handling must use this value rather than `message`.
 | `malformed_backend_result` | The backend returned a result sea-mile cannot use, such as a missing length or geometry. |
 | `implausible_route` | The route failed the physical plausibility check. |
 | `circuit_breaker_open` | Repeated transient failures opened the circuit breaker, or a half-open probe is already running. |
+| `timeout_budget_exhausted` | `RetryPolicy.overall_timeout_seconds` cannot hold the next backoff, so the retry ladder stopped early. |
 
 A missing routing extra is not a `routing_error`. A route call without the extra raises
 `ImportError`, which the CLI prints to `stderr` with exit code 2.

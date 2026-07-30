@@ -47,6 +47,7 @@ class RoutingErrorReason(StrEnum):
     MALFORMED_BACKEND_RESULT = "malformed_backend_result"
     IMPLAUSIBLE_ROUTE = "implausible_route"
     CIRCUIT_BREAKER_OPEN = "circuit_breaker_open"
+    TIMEOUT_BUDGET_EXHAUSTED = "timeout_budget_exhausted"
 
 
 class RoutingError(SeaMileError):

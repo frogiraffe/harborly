@@ -568,6 +568,8 @@ _REVIEW_FIELDS = [
     "candidate_latitude",
     "candidate_longitude",
     "candidate_unlocode",
+    "candidate_match_method",
+    "candidate_name_score",
 ]
 
 _REVIEW_STATUSES = frozenset({MatchStatus.REVIEW_REQUIRED, MatchStatus.UNRESOLVED})
@@ -726,6 +728,8 @@ class _ReviewWriter:
                             else ""
                         ),
                         "candidate_unlocode": candidate.unlocode or "",
+                        "candidate_match_method": candidate.match_method,
+                        "candidate_name_score": candidate.name_score,
                     }
                 )
         if not pending:

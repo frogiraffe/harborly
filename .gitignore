@@ -21,3 +21,6 @@ __pycache__/
 .DS_Store
 .idea/
 .vscode/
+
+# Generated accuracy benchmark output
+benchmark-results/

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import multiprocessing
 import os
 import secrets
@@ -39,11 +40,15 @@ from sea_mile.geo import great_circle_nmi, validate_coordinate
 from sea_mile.ports import Port, PortRegistry
 from sea_mile.route_cache import RouteCache
 from sea_mile.routing import (
+    CacheFailurePolicy,
+    ReadinessCheck,
     RetryPolicy,
     RouteQualityFlag,
     RouteQualityPolicy,
     assess_route_length,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 _DEFAULT_MATRIX_WORKER_LIMIT = 4
 _MATRIX_BATCH_SIZE = 32
@@ -208,20 +213,12 @@ class SeaRouter:
         restrictions: tuple[str, ...] = ("northwest",),
         cache_path: str | Path | None = None,
         retry_policy: RetryPolicy | None = None,
-        retry_attempts: int | None = None,
-        backoff_seconds: float | None = None,
         quality_policy: RouteQualityPolicy | None = None,
         circuit_breaker_policy: CircuitBreakerPolicy | None = None,
+        cache_failure_policy: CacheFailurePolicy = CacheFailurePolicy.STRICT,
         _routing_backend: _RoutingBackend | None = None,
     ) -> None:
-        if retry_policy is not None:
-            self._retry_policy = retry_policy
-        else:
-            attempts = 4 if retry_attempts is None else retry_attempts
-            backoff = 0.25 if backoff_seconds is None else backoff_seconds
-            self._retry_policy = RetryPolicy(
-                attempts=attempts, base_backoff_seconds=backoff
-            )
+        self._retry_policy = retry_policy if retry_policy is not None else RetryPolicy()
         self.algorithm = algorithm
         self.backend = backend
         self.restrictions = restrictions
@@ -235,17 +232,10 @@ class SeaRouter:
         )
         self._quality_policy = quality_policy
         self._persistent_cache = RouteCache(cache_path) if cache_path else None
+        self._cache_failure_policy = cache_failure_policy
         # Memoized per instance, keyed on the ports and the config, so a
         # repeated pair in a batch skips recomputation.
         self._route_cached = lru_cache(maxsize=4096)(self._route_uncached)
-
-    @property
-    def retry_attempts(self) -> int:
-        return self._retry_policy.attempts
-
-    @property
-    def backoff_seconds(self) -> float:
-        return self._retry_policy.base_backoff_seconds
 
     @property
     def retry_policy(self) -> RetryPolicy:
@@ -255,6 +245,46 @@ class SeaRouter:
         return self._route_cached(
             origin, destination, self.algorithm, self.backend, self.restrictions
         )
+
+    def check_ready(self) -> tuple[ReadinessCheck, ...]:
+        """Probe what a route call needs, without computing one.
+
+        Routing itself is far too expensive to run on every readiness poll, so
+        this touches the dependencies that actually go missing: the backend
+        import and the persistent cache.
+        """
+
+        return (self._backend_readiness(), self._cache_readiness())
+
+    def _backend_readiness(self) -> ReadinessCheck:
+        try:
+            # The bundled backend imports searoute lazily, so reading the
+            # version is what surfaces a missing 'routing' extra.
+            version = self._backend.version
+        except Exception as error:  # noqa: BLE001 - any failure means unusable
+            return ReadinessCheck(
+                "routing_backend", False, f"{self._backend.name} is unusable: {error}"
+            )
+        return ReadinessCheck(
+            "routing_backend", True, f"{self._backend.name} {version}"
+        )
+
+    def _cache_readiness(self) -> ReadinessCheck:
+        cache = self._persistent_cache
+        if cache is None:
+            return ReadinessCheck("route_cache", True, "not configured")
+        try:
+            cache.get("readiness-probe")
+        except Exception as error:  # noqa: BLE001 - any failure means unusable
+            # Readiness has to agree with what a request would actually do.
+            # Under BEST_EFFORT this cache costs speed, not correctness, so
+            # reporting not-ready would retire a server that still works.
+            degraded = self._cache_failure_policy is CacheFailurePolicy.BEST_EFFORT
+            reaction = "requests continue without it" if degraded else "requests fail"
+            return ReadinessCheck(
+                "route_cache", degraded, f"unusable ({error}); {reaction}"
+            )
+        return ReadinessCheck("route_cache", True, "readable")
 
     def _route_uncached(
         self,
@@ -304,7 +334,10 @@ class SeaRouter:
                 try:
                     self._persistent_cache.delete(cache_key)
                 except Exception as error:
-                    raise self._cache_access_error("delete", error) from error
+                    # Under BEST_EFFORT this returns, and the bare `raise`
+                    # below re-raises the routing failure the caller asked
+                    # about instead of the eviction that followed it.
+                    self._handle_cache_failure("delete", error)
             raise
         if cache_key is not None and not from_cache:
             if self._persistent_cache is None:
@@ -312,7 +345,7 @@ class SeaRouter:
             try:
                 self._persistent_cache.put(cache_key, result)
             except Exception as error:
-                raise self._cache_access_error("write", error) from error
+                self._handle_cache_failure("write", error)
         return SeaRoute(
             origin=origin,
             destination=destination,
@@ -354,7 +387,8 @@ class SeaRouter:
         try:
             cached = cache.get(cache_key)
         except Exception as error:
-            raise self._cache_access_error("read", error) from error
+            self._handle_cache_failure("read", error)
+            cached = None
         if cached is not None:
             return cached, cache_key, True
         return (
@@ -398,6 +432,15 @@ class SeaRouter:
             reason=RoutingErrorReason.CACHE_ACCESS_FAILED,
         )
 
+    def _handle_cache_failure(self, action: str, error: Exception) -> None:
+        """Apply the cache failure policy. Returns only if the caller may go on."""
+
+        if self._cache_failure_policy is CacheFailurePolicy.STRICT:
+            raise self._cache_access_error(action, error) from error
+        _LOGGER.warning(
+            "route cache %s failed, continuing without the cache: %s", action, error
+        )
+
     def _call_backend_with_retry(
         self,
         origin: LatLon,
@@ -405,6 +448,11 @@ class SeaRouter:
         config: RoutingConfig,
     ) -> BackendRoute:
         policy = self._retry_policy
+        deadline = (
+            None
+            if policy.overall_timeout_seconds is None
+            else time.monotonic() + policy.overall_timeout_seconds
+        )
         for attempt in range(policy.attempts):
             if self._circuit_breaker is not None:
                 self._circuit_breaker.check()
@@ -433,6 +481,15 @@ class SeaRouter:
                     (1.0 - policy.jitter_ratio)
                     + 2.0 * policy.jitter_ratio * secrets.SystemRandom().random()
                 )
+                if deadline is not None and jittered >= deadline - time.monotonic():
+                    # Sleeping anyway would only hold the caller's worker for a
+                    # retry we already know cannot start inside the budget.
+                    raise RoutingError(
+                        f"routing gave up after {attempt + 1} attempt(s): the "
+                        f"{policy.overall_timeout_seconds}s budget cannot hold "
+                        f"another {jittered:.2f}s backoff; last error: {error}",
+                        reason=RoutingErrorReason.TIMEOUT_BUDGET_EXHAUSTED,
+                    ) from error
                 time.sleep(jittered)
         raise RuntimeError("retry loop exhausted without returning or raising")
 

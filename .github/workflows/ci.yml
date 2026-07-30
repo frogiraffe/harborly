@@ -41,6 +41,10 @@ jobs:
       - name: Ruff lint
         run: uv run ruff check src tests scripts
 
+      - name: Documentation prose lint
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14'
+        run: uv run python scripts/check_docs.py
+
       # NumPy stubs require a Python interpreter that parses PEP 695 syntax.
       - name: Mypy
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14'
@@ -153,7 +157,7 @@ jobs:
 
       - name: Validate package metadata
         run: |
-          uv run twine check dist/*
+          uv run twine check --strict dist/*
           tar -tzf dist/*.tar.gz | grep '/scripts/normalize_sdist.py$'
           tar -tzf dist/*.tar.gz | grep '/docs/RELEASING.md$'
 

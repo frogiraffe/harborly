@@ -5,6 +5,7 @@ import pytest
 
 from sea_mile import (
     AmbiguousPortError,
+    MatchPolicy,
     PortNotFoundError,
     PortRegistry,
     RegistryDataError,
@@ -677,6 +678,63 @@ def test_match_names_auto_resolves_a_single_official_match(
 
     assert result.status == "auto_resolved"
     assert result.selected_registry_id == "WPI:1"
+
+
+def _misspelling_registry() -> PortRegistry:
+    records = pd.DataFrame(
+        [_record("WPI:40", "NGA_WPI", "NL", "Rotterdam", "NLRTM", 51.95, 4.14)]
+    )
+    aliases = pd.DataFrame([_alias("WPI:40", "NGA_WPI", "Rotterdam")])
+    return PortRegistry(records, aliases)
+
+
+def test_match_names_offers_fuzzy_candidates_for_a_misspelled_name() -> None:
+    # Without fuzzy candidates a reviewer gets an empty row and nothing to pick.
+    [result] = _misspelling_registry().match_names(["Rotterdm"], country_codes=["NL"])
+
+    assert [candidate.registry_id for candidate in result.candidates] == ["WPI:40"]
+    assert result.status == "review_required"
+
+
+def test_fuzzy_only_review_reports_a_reason_code_of_its_own() -> None:
+    # "no_candidate" would contradict the candidates attached to the result.
+    [result] = _misspelling_registry().match_names(["Rotterdm"], country_codes=["NL"])
+
+    assert result.reason_code == "fuzzy_candidates_only"
+
+
+def test_candidates_record_how_they_were_matched() -> None:
+    # A reviewer has to tell a fuzzy suggestion apart from an exact hit.
+    registry = _misspelling_registry()
+
+    [fuzzy] = registry.match_names(["Rotterdm"], country_codes=["NL"])
+    [exact] = registry.match_names(["Rotterdam"], country_codes=["NL"])
+
+    assert fuzzy.candidates[0].match_method == "fuzzy_alias"
+    assert 0.0 < fuzzy.candidates[0].name_score < 100.0
+    assert exact.candidates[0].match_method == "exact_alias"
+    assert exact.candidates[0].name_score == 100.0
+
+
+def test_match_names_honors_a_stricter_fuzzy_cutoff_from_the_policy() -> None:
+    # MatchPolicy was public and documented but unreachable from match_names.
+    strict = MatchPolicy(fuzzy_score_cutoff=99.0)
+
+    [result] = _misspelling_registry().match_names(
+        ["Rotterdm"], country_codes=["NL"], policy=strict
+    )
+
+    assert result.candidates == ()
+    assert result.status == "unresolved"
+
+
+def test_a_row_without_a_country_still_reaches_global_fuzzy_candidates() -> None:
+    # A blank country column used to drop the row out of candidate generation.
+    [result] = _misspelling_registry().match_names(["Rotterdm"], country_codes=[None])
+
+    assert [candidate.registry_id for candidate in result.candidates] == ["WPI:40"]
+    assert result.status == "review_required"
+    assert result.confidence_tier == "D"
 
 
 def test_nearest_grouped_collapses_sources(registry: PortRegistry) -> None:

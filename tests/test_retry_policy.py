@@ -5,7 +5,7 @@ import pytest
 
 from sea_mile import RetryPolicy
 from sea_mile._routing_backend import BackendRoute
-from sea_mile.exceptions import RoutingError
+from sea_mile.exceptions import RoutingError, RoutingErrorReason
 from sea_mile.ports import Port
 from sea_mile.router import SeaRouter, _is_transient_backend_error
 
@@ -62,37 +62,24 @@ _VALID_ROUTE = BackendRoute(
 )
 
 
-def test_retry_policy_validation():
-    with pytest.raises(ValueError):
-        SeaRouter(retry_attempts=0)
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"attempts": 0},
+        {"attempts": 10},
+        {"base_backoff_seconds": -1.0},
+        {"base_backoff_seconds": math.nan},
+        {"base_backoff_seconds": math.inf},
+        {"base_backoff_seconds": 10.0, "max_backoff_seconds": 5.0},
+        {"max_backoff_seconds": math.nan},
+        {"jitter_ratio": 1.5},
+    ],
+)
+def test_retry_policy_validation(kwargs):
+    """Validation belongs to the policy now that it is the only way to set this."""
 
     with pytest.raises(ValueError):
-        SeaRouter(retry_attempts=9)
-
-    with pytest.raises(ValueError):
-        SeaRouter(backoff_seconds=-1.0)
-
-    with pytest.raises(ValueError):
-        SeaRouter(backoff_seconds=9.0)
-
-    with pytest.raises(ValueError):
-        SeaRouter(backoff_seconds=math.nan)
-
-    with pytest.raises(ValueError):
-        SeaRouter(backoff_seconds=math.inf)
-
-    # Direct RetryPolicy tests
-    with pytest.raises(ValueError):
-        RetryPolicy(attempts=0)
-
-    with pytest.raises(ValueError):
-        RetryPolicy(attempts=10)
-
-    with pytest.raises(ValueError):
-        RetryPolicy(base_backoff_seconds=10.0, max_backoff_seconds=5.0)
-
-    with pytest.raises(ValueError):
-        RetryPolicy(jitter_ratio=1.5)
+        RetryPolicy(**kwargs)
 
 
 def test_first_call_success(monkeypatch):
@@ -105,7 +92,7 @@ def test_first_call_success(monkeypatch):
     monkeypatch.setattr("sea_mile.router.time.sleep", mock_sleep)
 
     backend = CountingBackend([_VALID_ROUTE])
-    router = SeaRouter(retry_attempts=3, _routing_backend=backend)
+    router = SeaRouter(retry_policy=RetryPolicy(attempts=3), _routing_backend=backend)
 
     port_a = _fake_port("A")
     port_b = _fake_port("B")
@@ -130,7 +117,10 @@ def test_transient_then_success(monkeypatch):
     monkeypatch.setattr("sea_mile.router.secrets.SystemRandom.random", mock_random)
 
     backend = CountingBackend([TimeoutError("timeout"), _VALID_ROUTE])
-    router = SeaRouter(retry_attempts=3, backoff_seconds=0.25, _routing_backend=backend)
+    router = SeaRouter(
+        retry_policy=RetryPolicy(attempts=3, base_backoff_seconds=0.25),
+        _routing_backend=backend,
+    )
 
     port_a = _fake_port("A")
     port_b = _fake_port("B")
@@ -156,7 +146,7 @@ def test_retry_exhaustion(monkeypatch):
     error3 = TimeoutError("3")
 
     backend = CountingBackend([error1, error2, error3])
-    router = SeaRouter(retry_attempts=3, _routing_backend=backend)
+    router = SeaRouter(retry_policy=RetryPolicy(attempts=3), _routing_backend=backend)
 
     port_a = _fake_port("A")
     port_b = _fake_port("B")
@@ -180,7 +170,7 @@ def test_non_transient_no_retry(monkeypatch):
 
     error = ValueError("bad data")
     backend = CountingBackend([error, _VALID_ROUTE])
-    router = SeaRouter(retry_attempts=3, _routing_backend=backend)
+    router = SeaRouter(retry_policy=RetryPolicy(attempts=3), _routing_backend=backend)
 
     port_a = _fake_port("A")
     port_b = _fake_port("B")
@@ -201,7 +191,7 @@ def test_exact_retry_count(monkeypatch):
 
     errors = [TimeoutError("err")] * 5
     backend = CountingBackend(errors)
-    router = SeaRouter(retry_attempts=4, _routing_backend=backend)
+    router = SeaRouter(retry_policy=RetryPolicy(attempts=4), _routing_backend=backend)
 
     port_a = _fake_port("A")
     port_b = _fake_port("B")
@@ -210,6 +200,117 @@ def test_exact_retry_count(monkeypatch):
         router.route(port_a, port_b)
 
     assert backend.call_count == 4
+
+
+class _FakeClock:
+    """A clock that only moves when the retry loop sleeps.
+
+    Backoff is the whole point of the budget, so simulating it is enough to
+    exercise the decision without making the test wait in real time.
+    """
+
+    def __init__(self):
+        self.now = 0.0
+
+    def monotonic(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += seconds
+
+
+@pytest.fixture
+def fake_clock(monkeypatch):
+    clock = _FakeClock()
+    monkeypatch.setattr("sea_mile.router.time.monotonic", clock.monotonic)
+    monkeypatch.setattr("sea_mile.router.time.sleep", clock.sleep)
+    monkeypatch.setattr(
+        "sea_mile.router.secrets.SystemRandom.random", lambda _self: 0.5
+    )
+    return clock
+
+
+def test_the_budget_refuses_a_backoff_it_cannot_afford(fake_clock):
+    """Without a budget these four attempts sleep 0.25 + 0.5 + 1.0 seconds.
+
+    The point of the budget is that the caller's worker is not held for the
+    full ladder, so the loop has to stop where the next wait no longer fits.
+    """
+
+    backend = CountingBackend([TimeoutError("boom")] * 4)
+    router = SeaRouter(
+        retry_policy=RetryPolicy(
+            attempts=4, base_backoff_seconds=0.25, overall_timeout_seconds=0.6
+        ),
+        _routing_backend=backend,
+    )
+
+    with pytest.raises(RoutingError) as exc_info:
+        router.route(_fake_port("A"), _fake_port("B"))
+
+    assert exc_info.value.reason is RoutingErrorReason.TIMEOUT_BUDGET_EXHAUSTED
+    assert backend.call_count == 2
+    assert fake_clock.now == 0.25
+
+
+def test_a_budget_that_fits_the_whole_ladder_changes_nothing(fake_clock):
+    backend = CountingBackend([TimeoutError("boom"), _VALID_ROUTE])
+    router = SeaRouter(
+        retry_policy=RetryPolicy(
+            attempts=4, base_backoff_seconds=0.25, overall_timeout_seconds=30.0
+        ),
+        _routing_backend=backend,
+    )
+
+    result = router.route(_fake_port("A"), _fake_port("B"))
+
+    assert result.distance_nmi == 1000.0
+    assert backend.call_count == 2
+
+
+def test_an_exhausted_budget_still_names_the_failure_that_caused_it(fake_clock):
+    """The budget explains why we stopped, not why the call was failing."""
+
+    last = TimeoutError("second")
+    backend = CountingBackend([TimeoutError("first"), last])
+    router = SeaRouter(
+        retry_policy=RetryPolicy(
+            attempts=4, base_backoff_seconds=0.25, overall_timeout_seconds=0.6
+        ),
+        _routing_backend=backend,
+    )
+
+    with pytest.raises(RoutingError) as exc_info:
+        router.route(_fake_port("A"), _fake_port("B"))
+
+    assert exc_info.value.__cause__ is last
+
+
+def test_a_non_transient_failure_is_not_relabelled_as_a_budget_timeout(fake_clock):
+    backend = CountingBackend([ValueError("bad data")])
+    router = SeaRouter(
+        retry_policy=RetryPolicy(attempts=4, overall_timeout_seconds=0.0001),
+        _routing_backend=backend,
+    )
+
+    with pytest.raises(RoutingError) as exc_info:
+        router.route(_fake_port("A"), _fake_port("B"))
+
+    assert exc_info.value.reason is not RoutingErrorReason.TIMEOUT_BUDGET_EXHAUSTED
+    assert backend.call_count == 1
+
+
+def test_the_overall_timeout_is_validated():
+    with pytest.raises(ValueError):
+        RetryPolicy(overall_timeout_seconds=0.0)
+
+    with pytest.raises(ValueError):
+        RetryPolicy(overall_timeout_seconds=-1.0)
+
+    with pytest.raises(ValueError):
+        RetryPolicy(overall_timeout_seconds=math.inf)
+
+    assert RetryPolicy().overall_timeout_seconds is None
 
 
 class DummyResponse:

@@ -40,6 +40,26 @@ the repository maintainer. The maintainer should compare the release diff,
 confirm the version and `CITATION.cff` date, move the relevant `CHANGELOG.md`
 items out of `Unreleased`, and review source-data changes before approving.
 
+## Post-publication verification
+
+PyPI artifacts and tags are immutable: a broken release is fixed with a new
+patch release, never by replacing the uploaded files. After the publish job
+finishes, manually confirm on `https://pypi.org/project/sea-mile/`:
+
+- the new version is the one displayed;
+- the long description renders (it is `README.md` as of the published commit —
+  confirm every link and image uses an absolute `https://github.com/...` URL,
+  since PyPI resolves relative links against the project page, not the
+  repository);
+- the CI, PyPI, Python, and License badges render;
+- the Homepage, Repository, and Issues project links resolve;
+- `pip install sea-mile` succeeds in a clean virtual environment and
+  `sea-mile info` runs.
+
+If any of these fail, the tag and uploaded artifacts stay published as-is;
+open an issue describing exactly what failed and ship the fix as the next
+patch release.
+
 ## Local reproduction
 
 ```bash
@@ -49,7 +69,7 @@ uv run pytest --cov=sea_mile -W error::ResourceWarning \
 export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
 uv build
 uv run python scripts/normalize_sdist.py dist/*.tar.gz
-uv run twine check dist/*
+uv run twine check --strict dist/*
 ```
 
 Build a second output directory with the same epoch and compare the artifact

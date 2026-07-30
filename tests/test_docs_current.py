@@ -9,6 +9,7 @@ from pathlib import Path
 from markdown_it import MarkdownIt
 
 import sea_mile
+from scripts.check_docs import _heading_slugs
 from sea_mile.cli import _parser
 from sea_mile.exceptions import RoutingErrorReason
 
@@ -19,7 +20,13 @@ API_COMPATIBILITY = ROOT / "docs" / "API_COMPATIBILITY.md"
 OUTPUT_SCHEMAS = ROOT / "docs" / "OUTPUT_SCHEMAS.md"
 MARKDOWN_FILES = [
     *sorted(ROOT.glob("*.md")),
-    *sorted((ROOT / "docs").rglob("*.md")),
+    # docs/superpowers/ holds agentic-workflow planning artifacts, not public
+    # documentation -- see scripts/check_docs.py's matching exclusion.
+    *sorted(
+        path
+        for path in (ROOT / "docs").rglob("*.md")
+        if "superpowers" not in path.parts
+    ),
     *sorted((ROOT / "examples").rglob("*.md")),
     ROOT / "src" / "sea_mile" / "data" / "ATTRIBUTION.md",
 ]
@@ -139,11 +146,48 @@ def test_markdown_files_render_and_have_balanced_fences() -> None:
 def test_local_markdown_links_resolve() -> None:
     link_pattern = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
     for path in MARKDOWN_FILES:
-        for target in link_pattern.findall(path.read_text(encoding="utf-8")):
-            if "://" in target or target.startswith(("#", "mailto:")):
+        text = path.read_text(encoding="utf-8")
+        for target in link_pattern.findall(text):
+            if "://" in target or target.startswith("mailto:"):
                 continue
-            relative_target = target.split("#", 1)[0]
-            assert (path.parent / relative_target).exists(), (path, target)
+            if target.startswith("#"):
+                anchor = target[1:]
+                assert not anchor or anchor in _heading_slugs(text), (path, target)
+                continue
+            file_part, _, fragment = target.partition("#")
+            resolved = path.parent / file_part
+            assert resolved.exists(), (path, target)
+            if fragment:
+                assert fragment in _heading_slugs(
+                    resolved.read_text(encoding="utf-8")
+                ), (path, target)
+
+
+def test_every_optional_dependency_extra_is_documented() -> None:
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    extras = set(project["project"]["optional-dependencies"])
+    readme = README.read_text().lower()
+    missing = sorted(extra for extra in extras if extra.lower() not in readme)
+    assert not missing, f"extras missing from README.md: {missing}"
+
+
+# Maintainer/methodology docs that are intentionally not required to be
+# reachable from README.md or docs/README.md.
+_INTERNAL_DOC_ALLOWLIST = frozenset(
+    {
+        ROOT / "benchmarks" / "route_accuracy" / "data" / "README.md",
+    }
+)
+
+
+def test_every_docs_file_is_discoverable() -> None:
+    index = (ROOT / "docs" / "README.md").read_text().lower()
+    readme = README.read_text().lower()
+    for path in sorted((ROOT / "docs").glob("*.md")):
+        if path in _INTERNAL_DOC_ALLOWLIST or path.name == "README.md":
+            continue
+        rel = path.name.lower()
+        assert rel in index or rel in readme, f"orphaned doc: {path}"
 
 
 def test_documentation_uses_neutral_technical_language() -> None:

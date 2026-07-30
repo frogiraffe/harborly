@@ -22,7 +22,7 @@ case from real data is very welcome.
 - sea-mile version:
 - Python version:
 - Operating system:
-- Installed extras (routing, tui, fast, analysis):
+- Installed extras (routing, tui, fast, analysis, api, map):
 
 ## Output
 

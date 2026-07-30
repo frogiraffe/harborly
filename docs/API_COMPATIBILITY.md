@@ -8,14 +8,33 @@ throughout the 1.x series.
 The names in `sea_mile.__all__` are stable:
 
 `AmbiguousPortError`, `BackendError`, `BackendErrorKind`, `BatchMatchResult`,
-`CanonicalEvidence`, `ConfidenceTier`, `MatchPolicy`, `MatchReason`,
-`MatchStatus`, `Port`, `PortCoordinateError`, `PortGroup`,
+`CacheFailurePolicy`, `CanonicalEvidence`, `ConfidenceTier`, `MatchPolicy`,
+`MatchReason`, `MatchStatus`, `Port`, `PortCoordinateError`, `PortGroup`,
 `PortNotFoundError`, `PortRegistry`, `RegistryDataError`, `RetryPolicy`,
 `RouteQualityFlag`, `RouteQualityPolicy`, `RoutingError`, `SeaMileError`,
 `SeaRoute`, `SeaRouter`, and `SourceDataError`.
 
 Breaking signature changes, removals, and incompatible semantic changes require
 a major version.
+
+## Removed in 2.0
+
+Each entry below had two spellings: a policy object and a loose keyword ladder
+that predated it. Two ways to say the same thing means two things to document,
+two to validate, and an unstated question about which one wins. 2.0 keeps the
+policy objects and removes the ladders. There is no transition shim — the old
+spellings raise `TypeError`, so a caller finds out at the call rather than
+silently getting a default.
+
+| Removed | Replacement |
+| --- | --- |
+| `SeaRouter(retry_attempts=...)` | `SeaRouter(retry_policy=RetryPolicy(attempts=...))` |
+| `SeaRouter(backoff_seconds=...)` | `SeaRouter(retry_policy=RetryPolicy(base_backoff_seconds=...))` |
+| `SeaRouter.retry_attempts` | `SeaRouter.retry_policy.attempts` |
+| `SeaRouter.backoff_seconds` | `SeaRouter.retry_policy.base_backoff_seconds` |
+| `assess_route_length(..., high_detour_ratio=...)` | `assess_route_length(..., policy=RouteQualityPolicy(high_detour_ratio=...))` |
+| `assess_route_length(..., lower_bound_tolerance_nmi=...)` | `assess_route_length(..., policy=RouteQualityPolicy(lower_bound_tolerance_nmi=...))` |
+| `GET /route`, `GET /healthz` | `GET /v1/route`, `GET /v1/livez` |
 
 `SeaRouter.distance_matrix` remains the dense matrix API.
 `SeaRouter.iter_distance_edges` is its bounded-memory streaming counterpart and

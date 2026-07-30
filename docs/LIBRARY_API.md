@@ -187,16 +187,37 @@ explanatory `reason`. The `status` is a `MatchStatus` value, the `confidence_tie
 is a `ConfidenceTier` value from `A` to `D`, and the `reason_code` is a
 `MatchReason` value. Programmatic handling must use `reason_code`; `reason` text
 may change. The `MatchReason` values are `unique_exact_wpi`,
-`unique_exact_unlocode`, `coordinate_conflict`, `multiple_identities`, and
-`no_candidate`, plus `manual_decision` when the CLI review workflow applies a
-reviewed choice.
+`unique_exact_unlocode`, `coordinate_conflict`, `multiple_identities`,
+`no_candidate`, and `fuzzy_candidates_only`, plus `manual_decision` when the CLI
+review workflow applies a reviewed choice.
 
 Each result also carries `candidates`, a tuple of `MatchCandidate` records. Each holds
 the `registry_id`, `provider`, `name`, `country_code`, coordinates, and `unlocode` of
-one exact match that informed the decision, so a review step can show the evidence
-behind a `review_required` or `unresolved` outcome. It also carries `rules_applied`, the
-ordered tuple of decision-rule tokens that fired, such as `single_exact_wpi` then
+one match that informed the decision, so a review step can show the evidence
+behind a `review_required` or `unresolved` outcome. `match_method` and `name_score`
+record how the candidate was found, so a reviewer can tell an `exact_alias` hit from
+a `fuzzy_alias` suggestion. It also carries `rules_applied`, the ordered tuple of
+decision-rule tokens that fired, such as `single_exact_wpi` then
 `coordinate_conflict_detected`.
+
+### Fuzzy candidates are review evidence, never an auto-resolution
+
+When no exact official match exists, `match_names` falls back to a fuzzy alias
+search so a reviewer has something to choose from. Fuzzy evidence never selects a
+port on its own: such a result is reported as `review_required` with reason code
+`fuzzy_candidates_only` and `selected_registry_id` left unset. Only exact official
+matches can reach `auto_resolved`. A row whose country cell is empty is searched
+against the global alias pool under the same review-only rule.
+
+Pass a `MatchPolicy` to control the fuzzy score cutoff and how many candidates are
+offered:
+
+```python
+from sea_mile import MatchPolicy
+
+policy = MatchPolicy(fuzzy_score_cutoff=90.0, max_strong_candidates=3)
+results = registry.match_names(names, country_codes=countries, policy=policy)
+```
 
 `match_names` delegates each decision to `decide_exact_match`. A single exact WPI
 match and a single exact UN/LOCODE match are not necessarily the same physical
@@ -295,6 +316,21 @@ router = SeaRouter(quality_policy=quality_policy, retry_policy=retry_policy)
 
 Backend retries are configured via `RetryPolicy`, which accepts 1–8 attempts,
 finite non-negative backoff times, and a `jitter_ratio` from 0.0 to 1.0.
+
+`overall_timeout_seconds` (default `None`, meaning no budget) caps the whole
+retry ladder. Before each backoff the router checks whether the wait still fits
+the budget; where it does not, it stops instead of sleeping and raises
+`RoutingError` with the reason `timeout_budget_exhausted`, chaining the failure
+that was being retried. Without it, `RetryPolicy(attempts=8,
+max_backoff_seconds=8.0)` can spend roughly 24 seconds asleep inside a single
+`route()` call, which under `sea-mile serve` holds a threadpool worker for that
+whole time.
+
+The budget bounds *scheduling*, not execution. A backend call already running
+cannot be interrupted, so one slow attempt can still overrun the budget. A hard
+per-attempt deadline requires a backend that accepts one; the bundled
+`searoute` backend is a synchronous in-process call and does not.
+
 Timeouts, connection errors, HTTP 429, and HTTP 5xx responses are internally
 classified as transient. `BackendError` exposes the resulting
 `BackendErrorKind` (`NETWORK`, `TIMEOUT`, `RATE_LIMIT`, `SERVER`,
@@ -358,14 +394,35 @@ and `cache clear`. Cache schema, retention, retry, circuit-breaker, and partial
 result behavior are documented in
 [Routing and cache operations](ROUTING_AND_CACHE.md).
 
+`SeaRouter(cache_failure_policy=...)` takes a `CacheFailurePolicy` and decides
+what a failing cache costs the caller. Every entry the cache holds can be
+recomputed, so a cache failure need not be a routing failure — but which answer
+is right depends on who is asking, so it is stated rather than assumed.
+
+- `CacheFailurePolicy.STRICT` (default, and the behaviour of every release so
+  far) turns any read, write, or eviction failure into a `RoutingError` with
+  the reason `cache_access_failed`. A caller who asked for a cached result
+  should hear that the cache is broken.
+- `CacheFailurePolicy.BEST_EFFORT` logs the failure at `WARNING` on the
+  `sea_mile.router` logger and answers from a fresh computation: an unreadable
+  entry becomes a cache miss, an unwritable result is still returned, and a
+  failed eviction no longer replaces the routing error that triggered it. For a
+  long-running service that would rather be slow than unavailable.
+
+Neither policy changes what a *healthy* cache does.
+
 ## Optional service and visualizations
 
 `sea-mile serve` starts the FastAPI application from `sea_mile.api` with Uvicorn
 after checking that both the `api` and `routing` extras are installed. The base
-URL redirects to `/docs`, and `GET /healthz` returns the service name, liveness
-status, and installed package version.
+URL redirects to `/docs`, and `GET /v1/livez` returns the service name, liveness
+status, and installed package version. `GET /v1/readyz` probes the dependencies
+a route request needs and returns `503` when any is unusable; `SeaRouter`
+exposes the same probe as `check_ready()`, which returns `ReadinessCheck`
+records without computing a route. `GET /healthz` is a deprecated alias of
+`/v1/livez` and is removed in 2.0.
 
-The `GET /route` endpoint accepts `origin`, `destination`, and optional
+The `GET /v1/route` endpoint accepts `origin`, `destination`, and optional
 `origin_country` and `destination_country` query parameters. It resolves both
 ports through `PortRegistry.bundled()`, routes them with `SeaRouter`, and returns:
 
@@ -383,10 +440,14 @@ ports through `PortRegistry.bundled()`, routes them with `SeaRouter`, and return
 }
 ```
 
+`GET /route` is a deprecated alias of the same endpoint and is removed in 2.0.
+
 The OpenAPI document defines the route, GeoJSON, port-provenance, health, and
-error response models. HTTP 404 indicates an unknown port, 409 an ambiguous
-identity, 422 invalid input, 502 a routing-backend failure, and 503 an
-unavailable routing dependency.
+error response models. Errors carry `{schema_version, error: {code, message,
+retryable, details}}`, where `code` is the raising exception's stable `.code`.
+HTTP 404 indicates an unknown port, 409 an ambiguous identity, 422 invalid
+input, 502 a routing-backend failure, and 503 unavailable routing or an open
+circuit breaker. See [HTTP service](API_SERVICE.md) for the full contract.
 
 The local application intentionally has no matrix endpoint and supplies no
 authentication, rate limiting, TLS termination, or request deadline. See

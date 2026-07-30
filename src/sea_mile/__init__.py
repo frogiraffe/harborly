@@ -21,7 +21,12 @@ from .matching import (
     MatchStatus,
 )
 from .ports import Port, PortGroup, PortRegistry
-from .routing import RetryPolicy, RouteQualityFlag, RouteQualityPolicy
+from .routing import (
+    CacheFailurePolicy,
+    RetryPolicy,
+    RouteQualityFlag,
+    RouteQualityPolicy,
+)
 
 if TYPE_CHECKING:
     from .router import SeaRoute, SeaRouter
@@ -53,6 +58,7 @@ __all__ = [
     "BackendError",
     "BackendErrorKind",
     "BatchMatchResult",
+    "CacheFailurePolicy",
     "CanonicalEvidence",
     "ConfidenceTier",
     "MatchPolicy",

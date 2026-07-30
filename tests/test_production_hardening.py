@@ -21,6 +21,7 @@ from sea_mile.geo import great_circle_nmi
 from sea_mile.ports import Port
 from sea_mile.route_cache import RouteCache
 from sea_mile.router import SeaRouter
+from sea_mile.routing import RetryPolicy
 
 
 class DeterministicBackend:
@@ -149,8 +150,7 @@ def test_transient_backend_errors_use_exponential_backoff(monkeypatch) -> None:
 
     result = SeaRouter(
         _routing_backend=backend,
-        retry_attempts=4,
-        backoff_seconds=0.1,
+        retry_policy=RetryPolicy(attempts=4, base_backoff_seconds=0.1),
     ).route(_port("A", 36.8, 34.65), _port("B", 37.94, 23.63))
 
     assert result.distance_nmi > 0
@@ -173,8 +173,7 @@ def test_retry_configuration_has_hard_upper_bounds(attempts, backoff) -> None:
     with pytest.raises(ValueError):
         SeaRouter(
             _routing_backend=DeterministicBackend(),
-            retry_attempts=attempts,
-            backoff_seconds=backoff,
+            retry_policy=RetryPolicy(attempts=attempts, base_backoff_seconds=backoff),
         )
 
 
@@ -241,6 +240,8 @@ def test_review_contract_rejects_invalid_rows() -> None:
                 "candidate_latitude": 36.8,
                 "candidate_longitude": 34.65,
                 "candidate_unlocode": "TRMER",
+                "candidate_match_method": "exact_alias",
+                "candidate_name_score": 100.0,
             }
         ]
     )
@@ -291,6 +292,8 @@ def test_review_contract_allows_an_unresolved_row_without_candidates() -> None:
                 "candidate_latitude": None,
                 "candidate_longitude": None,
                 "candidate_unlocode": None,
+                "candidate_match_method": None,
+                "candidate_name_score": None,
             }
         ]
     )

@@ -36,6 +36,10 @@ REVIEW_SCHEMA = pa.DataFrameSchema(
         "candidate_latitude": pa.Column(float, _LATITUDE, nullable=True, coerce=True),
         "candidate_longitude": pa.Column(float, _LONGITUDE, nullable=True, coerce=True),
         "candidate_unlocode": pa.Column(str, nullable=True, coerce=False),
+        "candidate_match_method": pa.Column(str, nullable=True, coerce=False),
+        "candidate_name_score": pa.Column(
+            float, pa.Check.in_range(0.0, 100.0), nullable=True, coerce=True
+        ),
     },
     checks=pa.Check(
         lambda frame: (

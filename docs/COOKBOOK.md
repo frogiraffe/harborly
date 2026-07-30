@@ -3,6 +3,10 @@
 These recipes use the installed `sea-mile` command. In a source checkout,
 prefix each command with `uv run`.
 
+See also the
+[synthetic GeoJSON map example](https://github.com/frogiraffe/sea-mile/tree/main/examples/synthetic)
+for a runnable demo with made-up routes that needs no network access.
+
 ## Resolve before routing
 
 Use exact identities for repeatable automation:

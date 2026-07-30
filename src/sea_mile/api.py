@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from functools import lru_cache
 from importlib.metadata import PackageNotFoundError, version
 from typing import Annotated, Any, Literal, Protocol
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import RedirectResponse
+from fastapi import Depends, FastAPI, Query, Request, Response
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 from sea_mile.exceptions import (
@@ -16,9 +19,12 @@ from sea_mile.exceptions import (
     PortCoordinateError,
     PortNotFoundError,
     RoutingError,
+    RoutingErrorReason,
+    SeaMileError,
 )
 from sea_mile.ports import Port, PortRegistry
 from sea_mile.router import SeaRoute, SeaRouter
+from sea_mile.routing import ReadinessCheck
 
 
 class _RouteService(Protocol):
@@ -31,6 +37,23 @@ class HealthResponse(BaseModel):
     service: Literal["sea-mile"]
     status: Literal["ok"]
     version: str
+
+
+class ReadinessCheckResponse(BaseModel):
+    """One dependency probe reported by the readiness endpoint."""
+
+    name: str
+    passed: bool
+    detail: str
+
+
+class ReadinessResponse(BaseModel):
+    """Whether this process can currently serve a route request."""
+
+    service: Literal["sea-mile"]
+    status: Literal["ready", "not_ready"]
+    version: str
+    checks: list[ReadinessCheckResponse]
 
 
 class PortResponse(BaseModel):
@@ -94,16 +117,189 @@ class RouteResponse(BaseModel):
     geojson: RouteFeatureResponse
 
 
-class ErrorResponse(BaseModel):
-    """API error with a human-readable explanation."""
+ERROR_SCHEMA_VERSION: Literal["1"] = "1"
+_RETRY_AFTER_SECONDS = "5"
 
-    detail: str
+# Failure modes worth another attempt. Everything else names a condition that
+# will hold again for an identical request, so a client retrying it only adds
+# load.
+_RETRYABLE_ROUTING_REASONS = frozenset(
+    {
+        RoutingErrorReason.BACKEND_CALL_FAILED,
+        RoutingErrorReason.CIRCUIT_BREAKER_OPEN,
+        RoutingErrorReason.TIMEOUT_BUDGET_EXHAUSTED,
+    }
+)
+
+# Reasons that describe this service declining to serve rather than an upstream
+# answering badly, so they report 503 instead of 502.
+_UNAVAILABLE_ROUTING_REASONS = frozenset(
+    {
+        RoutingErrorReason.CIRCUIT_BREAKER_OPEN,
+        RoutingErrorReason.TIMEOUT_BUDGET_EXHAUSTED,
+    }
+)
+
+
+class ErrorBody(BaseModel):
+    """The machine-readable half of an error response."""
+
+    code: str = Field(description="Stable token identifying the failure")
+    message: str = Field(description="Human-readable explanation; may change")
+    retryable: bool = Field(
+        description="Whether an identical request could succeed later"
+    )
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+class ErrorResponse(BaseModel):
+    """API error carrying a code a client can branch on."""
+
+    schema_version: Literal["1"] = ERROR_SCHEMA_VERSION
+    error: ErrorBody
 
 
 class UnprocessableResponse(BaseModel):
     """Application or FastAPI query-validation error."""
 
-    detail: str | list[dict[str, Any]]
+    schema_version: Literal["1"] = ERROR_SCHEMA_VERSION
+    error: ErrorBody
+
+
+_ROUTE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
+    404: {"model": ErrorResponse, "description": "Port not found"},
+    409: {"model": ErrorResponse, "description": "Port identity is ambiguous"},
+    422: {
+        "model": UnprocessableResponse,
+        "description": "Invalid query parameters or port coordinates",
+    },
+    500: {"model": ErrorResponse, "description": "Unexpected sea-mile failure"},
+    502: {"model": ErrorResponse, "description": "Routing backend failed"},
+    503: {
+        "model": ErrorResponse,
+        "description": "Routing is unavailable or the circuit breaker is open",
+    },
+}
+
+
+def _error_response(
+    status_code: int,
+    code: str,
+    message: str,
+    *,
+    retryable: bool = False,
+    details: dict[str, Any] | None = None,
+) -> JSONResponse:
+    body = ErrorResponse(
+        error=ErrorBody(
+            code=code,
+            message=message,
+            retryable=retryable,
+            details=details or {},
+        )
+    )
+    headers = {"Retry-After": _RETRY_AFTER_SECONDS} if retryable else None
+    return JSONResponse(
+        status_code=status_code, content=body.model_dump(), headers=headers
+    )
+
+
+def _install_error_handlers(application: FastAPI) -> None:
+    """Translate domain failures into the error contract in one place.
+
+    Each exception already knows its own `code`, so the endpoints do not repeat
+    a try/except ladder and a new endpoint inherits the contract.
+    """
+
+    @application.exception_handler(PortNotFoundError)
+    async def _port_not_found(_: Request, error: PortNotFoundError) -> JSONResponse:
+        return _error_response(404, error.code, str(error))
+
+    @application.exception_handler(AmbiguousPortError)
+    async def _ambiguous_port(_: Request, error: AmbiguousPortError) -> JSONResponse:
+        return _error_response(409, error.code, str(error))
+
+    @application.exception_handler(PortCoordinateError)
+    async def _bad_coordinate(_: Request, error: PortCoordinateError) -> JSONResponse:
+        return _error_response(422, error.code, str(error))
+
+    @application.exception_handler(RoutingError)
+    async def _routing_failed(_: Request, error: RoutingError) -> JSONResponse:
+        retryable = error.reason in _RETRYABLE_ROUTING_REASONS
+        status = 503 if error.reason in _UNAVAILABLE_ROUTING_REASONS else 502
+        return _error_response(
+            status,
+            error.code,
+            str(error),
+            retryable=retryable,
+            details={"reason": str(error.reason)},
+        )
+
+    @application.exception_handler(ImportError)
+    async def _routing_unavailable(_: Request, error: ImportError) -> JSONResponse:
+        return _error_response(503, "routing_unavailable", str(error))
+
+    @application.exception_handler(SeaMileError)
+    async def _other_domain_error(_: Request, error: SeaMileError) -> JSONResponse:
+        return _error_response(500, error.code, str(error))
+
+    @application.exception_handler(RequestValidationError)
+    async def _invalid_request(
+        _: Request, error: RequestValidationError
+    ) -> JSONResponse:
+        return _error_response(
+            422,
+            "invalid_request",
+            "the request parameters are not valid",
+            details={"errors": jsonable_encoder(error.errors())},
+        )
+
+
+def _deprecation_marker(successor: str) -> Callable[[Response], None]:
+    """Announce a superseded path in the response, not only in the schema.
+
+    A deprecation recorded solely in OpenAPI is invisible to the client that
+    is still calling the old path, which is exactly who needs to hear it.
+    """
+
+    def mark(response: Response) -> None:
+        response.headers["Deprecation"] = "true"
+        response.headers["Link"] = f'<{successor}>; rel="successor-version"'
+
+    return mark
+
+
+def _readiness_checks(
+    registry: PortRegistry | None, router: _RouteService | None
+) -> list[ReadinessCheck]:
+    """Probe exactly what this application would use to answer a route request."""
+
+    checks: list[ReadinessCheck] = []
+    try:
+        active_registry = registry if registry is not None else _bundled_registry()
+    except Exception as error:  # noqa: BLE001 - any failure means unusable
+        checks.append(ReadinessCheck("port_registry", False, str(error)))
+    else:
+        checks.append(
+            ReadinessCheck("port_registry", True, f"{len(active_registry)} records")
+        )
+
+    try:
+        active_router = router if router is not None else _sea_router()
+    except Exception as error:  # noqa: BLE001 - any failure means unusable
+        checks.append(ReadinessCheck("routing_backend", False, str(error)))
+        return checks
+
+    probe = getattr(active_router, "check_ready", None)
+    if probe is None:
+        # An injected service that does not offer a probe. Claiming it is
+        # healthy would be a guess, so say what was and was not established.
+        checks.append(
+            ReadinessCheck("routing_backend", True, "injected service; not probed")
+        )
+        return checks
+    checks.extend(probe())
+    return checks
 
 
 def _package_version() -> str:
@@ -143,40 +339,61 @@ def create_app(
         ],
     )
 
+    _install_error_handlers(application)
+
     @application.get("/", include_in_schema=False)
     def root() -> RedirectResponse:
         return RedirectResponse(url="/docs")
 
-    @application.get(
-        "/healthz",
-        response_model=HealthResponse,
-        tags=["operations"],
-        summary="Check service liveness",
-    )
-    def healthz() -> HealthResponse:
+    def livez() -> HealthResponse:
+        """Report that the process is up, saying nothing about its dependencies."""
+
         return HealthResponse(
             service="sea-mile", status="ok", version=_package_version()
         )
 
+    for path, successor in (("/v1/livez", None), ("/healthz", "/v1/livez")):
+        application.get(
+            path,
+            response_model=HealthResponse,
+            tags=["operations"],
+            summary="Check service liveness",
+            deprecated=successor is not None,
+            dependencies=(
+                [] if successor is None else [Depends(_deprecation_marker(successor))]
+            ),
+        )(livez)
+
     @application.get(
-        "/route",
-        response_model=RouteResponse,
-        tags=["routing"],
-        summary="Calculate an approximate sea route",
+        "/v1/readyz",
+        response_model=ReadinessResponse,
+        tags=["operations"],
+        summary="Check whether dependencies can serve a request",
         responses={
-            404: {"model": ErrorResponse, "description": "Port not found"},
-            409: {"model": ErrorResponse, "description": "Port identity is ambiguous"},
-            422: {
-                "model": UnprocessableResponse,
-                "description": "Invalid query parameters or port coordinates",
-            },
-            502: {"model": ErrorResponse, "description": "Routing backend failed"},
             503: {
-                "model": ErrorResponse,
-                "description": "Routing extra is unavailable",
-            },
+                "model": ReadinessResponse,
+                "description": "At least one dependency is unusable",
+            }
         },
     )
+    def readyz() -> JSONResponse:
+        checks = _readiness_checks(registry, router)
+        ready = all(check.passed for check in checks)
+        body = ReadinessResponse(
+            service="sea-mile",
+            status="ready" if ready else "not_ready",
+            version=_package_version(),
+            checks=[
+                ReadinessCheckResponse(
+                    name=check.name, passed=check.passed, detail=check.detail
+                )
+                for check in checks
+            ],
+        )
+        return JSONResponse(
+            status_code=200 if ready else 503, content=body.model_dump()
+        )
+
     def get_route(
         origin: Annotated[
             str,
@@ -217,26 +434,30 @@ def create_app(
     ) -> RouteResponse:
         active_registry = registry if registry is not None else _bundled_registry()
         active_router = router if router is not None else _sea_router()
-        try:
-            origin_port = active_registry.resolve(origin, country_code=origin_country)
-            destination_port = active_registry.resolve(
-                destination, country_code=destination_country
-            )
-            result = active_router.route(origin_port, destination_port)
-        except PortNotFoundError as error:
-            raise HTTPException(status_code=404, detail=str(error)) from error
-        except AmbiguousPortError as error:
-            raise HTTPException(status_code=409, detail=str(error)) from error
-        except (PortCoordinateError, ValueError) as error:
-            raise HTTPException(status_code=422, detail=str(error)) from error
-        except ImportError as error:
-            raise HTTPException(status_code=503, detail=str(error)) from error
-        except RoutingError as error:
-            raise HTTPException(status_code=502, detail=str(error)) from error
+        origin_port = active_registry.resolve(origin, country_code=origin_country)
+        destination_port = active_registry.resolve(
+            destination, country_code=destination_country
+        )
+        result = active_router.route(origin_port, destination_port)
         return RouteResponse(
             distance_nmi=result.distance_nmi,
             geojson=RouteFeatureResponse(**result.to_geojson_feature()),
         )
+
+    # The unversioned path stays as a deprecated alias so existing callers keep
+    # working; it is removed in 2.0.
+    for path, successor in (("/v1/route", None), ("/route", "/v1/route")):
+        application.get(
+            path,
+            response_model=RouteResponse,
+            tags=["routing"],
+            summary="Calculate an approximate sea route",
+            deprecated=successor is not None,
+            dependencies=(
+                [] if successor is None else [Depends(_deprecation_marker(successor))]
+            ),
+            responses=_ROUTE_ERROR_RESPONSES,
+        )(get_route)
 
     return application
 

@@ -836,6 +836,9 @@ def test_match_review_writes_one_row_per_candidate(tmp_path) -> None:
     assert [row["candidate_registry_id"] for row in rows] == ["WPI:2", "UNLOCODE:USHAM"]
     assert all(row["row_id"] == "7" for row in rows)
     assert all(row["reason_code"] == "coordinate_conflict" for row in rows)
+    # A reviewer must be able to tell an exact hit from a fuzzy suggestion.
+    assert all(row["candidate_match_method"] == "exact_alias" for row in rows)
+    assert all(row["candidate_name_score"] == "100.0" for row in rows)
 
 
 @pytest.mark.parametrize(

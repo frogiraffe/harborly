@@ -45,9 +45,37 @@ from sea_mile.exceptions import (
     PortNotFoundError,
     RegistryDataError,
 )
-from sea_mile.matching import BatchMatchResult, MatchCandidate, decide_exact_match
+from sea_mile.matching import (
+    BatchMatchResult,
+    MatchCandidate,
+    MatchPolicy,
+    MatchReason,
+    MatchStatus,
+    decide_exact_match,
+)
 from sea_mile.search import AliasSearchIndex
 from sea_mile.spatial import PortSpatialIndex
+
+
+def _match_candidates(
+    results: Sequence[PortSearchResult],
+) -> tuple[MatchCandidate, ...]:
+    """Carry each search hit into review evidence, keeping how it was found."""
+
+    return tuple(
+        MatchCandidate(
+            registry_id=result.port.registry_id,
+            provider=result.port.provider,
+            name=result.port.name,
+            country_code=result.port.country_code,
+            latitude=result.port.latitude,
+            longitude=result.port.longitude,
+            unlocode=result.port.unlocode,
+            match_method=result.match_method,
+            name_score=result.name_score,
+        )
+        for result in results
+    )
 
 
 class PortRegistry:
@@ -280,7 +308,9 @@ class PortRegistry:
         names: Sequence[str],
         *,
         country_codes: Sequence[str | None] | None = None,
+        policy: MatchPolicy | None = None,
     ) -> list[BatchMatchResult]:
+        active_policy = policy if policy is not None else MatchPolicy()
         results: list[BatchMatchResult] = []
         for index, name in enumerate(names):
             country = country_codes[index] if country_codes is not None else None
@@ -309,27 +339,35 @@ class PortRegistry:
                 unlocode_ids,
                 coordinates_by_registry_id=coordinates,
             )
-            candidates = tuple(
-                MatchCandidate(
-                    registry_id=result.port.registry_id,
-                    provider=result.port.provider,
-                    name=result.port.name,
-                    country_code=result.port.country_code,
-                    latitude=result.port.latitude,
-                    longitude=result.port.longitude,
-                    unlocode=result.port.unlocode,
+            candidates = _match_candidates(exact)
+            status = decision.status
+            reason_code = decision.reason_code
+            reason = decision.reason
+            if not candidates and status is MatchStatus.UNRESOLVED:
+                # Fuzzy evidence never auto-resolves; it only gives a reviewer
+                # something to choose from where there was previously nothing.
+                candidates = _match_candidates(
+                    self._search_cached(
+                        name,
+                        country_code=country,
+                        fuzzy=True,
+                        limit=active_policy.max_strong_candidates,
+                        minimum_score=active_policy.fuzzy_score_cutoff,
+                    )
                 )
-                for result in exact
-            )
+                if candidates:
+                    status = MatchStatus.REVIEW_REQUIRED
+                    reason_code = MatchReason.FUZZY_CANDIDATES_ONLY
+                    reason = "no exact official match; fuzzy candidates need review"
             results.append(
                 BatchMatchResult(
                     query=name,
                     country_code=country,
-                    status=decision.status,
+                    status=status,
                     confidence_tier=decision.confidence_tier,
                     selected_registry_id=decision.selected_registry_id,
-                    reason_code=decision.reason_code,
-                    reason=decision.reason,
+                    reason_code=reason_code,
+                    reason=reason,
                     rules_applied=decision.rules_applied,
                     candidates=candidates,
                 )

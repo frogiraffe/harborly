@@ -1,6 +1,7 @@
 import pandas as pd
 
 from sea_mile.canonical import assign_canonical_ids_with_evidence
+from sea_mile.geo import great_circle_nmi
 
 
 def _make_registry(**kwargs):
@@ -119,3 +120,45 @@ def test_difference_between_canonical_id_and_source_registry_id():
     assert coord_ev.canonical_id == "XXTST"
     assert coord_ev.source_registry_id == "SOURCE_REG_1"
     assert coord_ev.canonical_id != coord_ev.source_registry_id
+
+
+def test_nearby_codeless_records_share_one_synthetic_id():
+    # 0.02 degrees of latitude is about 1.2 nmi, far inside the 25 nmi
+    # agreement threshold, but it straddles a 0.1-degree rounding bucket.
+    df = _make_registry(
+        registry_id=["REG:A", "REG:B"],
+        canonical_name=["SEASIDE", "SEASIDE"],
+        country_code=["XX", "XX"],
+        unlocode=[pd.NA, pd.NA],
+        latitude=[40.04, 40.06],
+        longitude=[20.0, 20.0],
+    )
+    canonical_ids, _ = assign_canonical_ids_with_evidence(df)
+
+    assert len(set(canonical_ids)) == 1
+
+
+def test_synthetic_clusters_never_span_more_than_the_agreement_radius():
+    # 0.4 degrees of latitude is about 24 nmi. REG:A sits between the other two
+    # and is within 25 nmi of each, but REG:B and REG:C are 48 nmi apart. Growing
+    # a cluster around a single leader would chain all three into one identity.
+    df = _make_registry(
+        registry_id=["REG:A", "REG:B", "REG:C"],
+        canonical_name=["COVE", "COVE", "COVE"],
+        country_code=["XX", "XX", "XX"],
+        unlocode=[pd.NA, pd.NA, pd.NA],
+        latitude=[0.0, 0.4, -0.4],
+        longitude=[0.0, 0.0, 0.0],
+    )
+    canonical_ids, _ = assign_canonical_ids_with_evidence(df)
+
+    frame = df.assign(canonical_id=canonical_ids)
+    for _, group in frame.groupby("canonical_id"):
+        spread = max(
+            great_circle_nmi(
+                first.latitude, first.longitude, second.latitude, second.longitude
+            )
+            for first in group.itertuples()
+            for second in group.itertuples()
+        )
+        assert spread <= 25.0

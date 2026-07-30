@@ -14,11 +14,12 @@ Run before submitting a pull request:
 uv run ruff format --check src tests scripts
 uv run ruff check src tests scripts
 uv run mypy src
+uv run python scripts/check_docs.py
 uv run pytest -q
 uv run bandit -r src
 uv run pip-audit
 uv build
-uv run twine check dist/*
+uv run twine check --strict dist/*
 ```
 
 The security and metadata commands require the audit dependency group:
@@ -26,6 +27,18 @@ The security and metadata commands require the audit dependency group:
 
 Behavior changes require tests. Public commands, exports, schemas, and serialized
 fields require corresponding documentation updates.
+
+## Documentation prose
+
+`scripts/check_docs.py` scans README/CHANGELOG/CONTRIBUTING/docs/examples/
+benchmarks/generated reports for two things: banned phrasing that overstates a
+reproducibility guarantee this project doesn't make, or misdescribes an
+editorial change (see `FORBIDDEN_PATTERNS` in the script for the exact list),
+and heuristic AI-writing signals (vague attribution, generic scene-setting,
+formulaic contrast, inflated claims, duplicated conclusions). Banned phrasing
+fails the check; heuristic signals are printed for human review and never
+fail it, since they have real false positives in ordinary technical prose. It
+never rewrites anything.
 
 ## Engineering requirements
 

@@ -18,6 +18,14 @@ class RetryPolicy:
     base_backoff_seconds: float = 0.25
     max_backoff_seconds: float = 8.0
     jitter_ratio: float = 0.5
+    overall_timeout_seconds: float | None = None
+    """Wall-clock budget for the whole retry ladder, or None for no budget.
+
+    This bounds *scheduling*, not execution: the loop refuses to start a wait
+    or an attempt once the budget cannot hold it, but a backend call already
+    running cannot be interrupted, so a single slow attempt can still overrun.
+    Enforcing a per-attempt deadline needs a backend that accepts one.
+    """
 
     def __post_init__(self) -> None:
         if self.attempts < 1:
@@ -34,6 +42,37 @@ class RetryPolicy:
             )
         if not isfinite(self.jitter_ratio) or not 0.0 <= self.jitter_ratio <= 1.0:
             raise ValueError("jitter_ratio must be finite and between 0.0 and 1.0")
+        if self.overall_timeout_seconds is not None and (
+            not isfinite(self.overall_timeout_seconds)
+            or self.overall_timeout_seconds <= 0
+        ):
+            raise ValueError("overall_timeout_seconds must be finite and positive")
+
+
+@dataclass(frozen=True, slots=True)
+class ReadinessCheck:
+    """One dependency probe: what was checked, whether it works, and why."""
+
+    name: str
+    passed: bool
+    detail: str
+
+
+class CacheFailurePolicy(StrEnum):
+    """What a failing persistent route cache should cost the caller.
+
+    Every entry the cache holds can be recomputed, so a cache failure need not
+    be a routing failure. Which answer is right depends on the caller, so it is
+    stated rather than assumed.
+    """
+
+    STRICT = "strict"
+    """Surface any cache failure as a RoutingError. The default: an SDK caller
+    asking for a cached result should hear that the cache is broken."""
+
+    BEST_EFFORT = "best_effort"
+    """Log cache failures and answer from a fresh computation. For a service
+    that would rather be slow than unavailable."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,19 +105,12 @@ def assess_route_length(
     great_circle_distance_nmi: float,
     *,
     policy: RouteQualityPolicy | None = None,
-    lower_bound_tolerance_nmi: float = 0.5,
-    high_detour_ratio: float = 3.0,
 ) -> RouteAssessment:
-    """Check a sea-route result against basic physical plausibility rules.
+    """Check a sea-route result against basic physical plausibility rules."""
 
-    When *policy* is given, its thresholds take precedence over the explicit
-    keyword arguments.  The explicit kwargs still work and keep backward
-    compatibility.
-    """
-
-    if policy is not None:
-        lower_bound_tolerance_nmi = policy.lower_bound_tolerance_nmi
-        high_detour_ratio = policy.high_detour_ratio
+    active = policy if policy is not None else RouteQualityPolicy()
+    lower_bound_tolerance_nmi = active.lower_bound_tolerance_nmi
+    high_detour_ratio = active.high_detour_ratio
 
     if not isfinite(sea_distance_nmi) or sea_distance_nmi < 0:
         return RouteAssessment(False, RouteQualityFlag.INVALID_ROUTE_DISTANCE, None)

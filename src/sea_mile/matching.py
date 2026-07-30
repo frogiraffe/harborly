@@ -46,6 +46,7 @@ class MatchReason(StrEnum):
     COORDINATE_CONFLICT = "coordinate_conflict"
     MULTIPLE_IDENTITIES = "multiple_identities"
     NO_CANDIDATE = "no_candidate"
+    FUZZY_CANDIDATES_ONLY = "fuzzy_candidates_only"
     MANUAL_DECISION = "manual_decision"
 
 
@@ -70,6 +71,8 @@ class MatchCandidate:
     latitude: float | None
     longitude: float | None
     unlocode: str | None
+    match_method: str = "exact_alias"
+    name_score: float = 100.0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -80,6 +83,8 @@ class MatchCandidate:
             "latitude": self.latitude,
             "longitude": self.longitude,
             "unlocode": self.unlocode,
+            "match_method": self.match_method,
+            "name_score": self.name_score,
         }
 
 

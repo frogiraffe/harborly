@@ -7,6 +7,7 @@ from sea_mile._routing_backend import BackendRoute, RoutingConfig
 from sea_mile.coordinates import LatLon
 from sea_mile.ports import Port
 from sea_mile.router import SeaRouter
+from sea_mile.routing import RetryPolicy
 
 # These will fail with ImportError until the circuit breaker is implemented.
 # That's the expected behavior for this commit.
@@ -280,7 +281,7 @@ def test_router_allows_exactly_one_concurrent_half_open_probe(
 ) -> None:
     backend = ControlledHalfOpenBackend(probe_succeeds=probe_succeeds)
     router = SeaRouter(
-        retry_attempts=1,
+        retry_policy=RetryPolicy(attempts=1),
         circuit_breaker_policy=CircuitBreakerPolicy(
             failure_threshold=1,
             recovery_seconds=10.0,
@@ -411,7 +412,7 @@ def test_router_circuit_breaker_integration(monkeypatch):
     backend = FlakyBackend()
     policy = CircuitBreakerPolicy(failure_threshold=2, recovery_seconds=60.0)
     router = SeaRouter(
-        retry_attempts=5,
+        retry_policy=RetryPolicy(attempts=5),
         circuit_breaker_policy=policy,
         _routing_backend=backend,
     )

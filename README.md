@@ -3,7 +3,7 @@
 [![CI](https://github.com/frogiraffe/sea-mile/actions/workflows/ci.yml/badge.svg)](https://github.com/frogiraffe/sea-mile/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/sea-mile.svg)](https://pypi.org/project/sea-mile/)
 [![Python](https://img.shields.io/pypi/pyversions/sea-mile.svg)](https://pypi.org/project/sea-mile/)
-[![License](https://img.shields.io/pypi/l/sea-mile.svg)](LICENSE)
+[![License](https://img.shields.io/pypi/l/sea-mile.svg)](https://github.com/frogiraffe/sea-mile/blob/main/LICENSE)
 
 **Port identity, spatial search, and analytical sea routing.**
 
@@ -79,7 +79,7 @@ sea-mile route TRMER GRPIR \
 The route command prints the resolved ports, approximate distance, routing
 engine, physical-quality flag, and the navigation warning. Use `--json` when a
 script needs the stable schema described in
-[output schemas](docs/OUTPUT_SCHEMAS.md).
+[output schemas](https://github.com/frogiraffe/sea-mile/blob/main/docs/OUTPUT_SCHEMAS.md).
 
 Example output:
 
@@ -100,7 +100,7 @@ represent berth-level positions. Route geometry follows an approximate
 maritime graph; restrictions, graph coverage, and source coordinates can all
 affect the result. Treat `quality_flag` as a physical consistency check, not a
 navigation certificate. See
-[sources, attribution, and limitations](docs/SOURCES_AND_LIMITATIONS.md) for
+[sources, attribution, and limitations](https://github.com/frogiraffe/sea-mile/blob/main/docs/SOURCES_AND_LIMITATIONS.md) for
 the complete data boundary.
 
 ## Python SDK
@@ -126,10 +126,12 @@ print(route.distance_nmi, route.quality_flag)
 registry IDs, canonical IDs, UN/LOCODEs, and exact aliases. It does not select a
 fuzzy match. Ambiguity raises `AmbiguousPortError`.
 
-See [Library API](docs/LIBRARY_API.md), [API compatibility](docs/API_COMPATIBILITY.md),
-[data dictionary](docs/DATA_DICTIONARY.md), and
-[output schemas](docs/OUTPUT_SCHEMAS.md). Task-oriented examples are collected
-in the [cookbook](docs/COOKBOOK.md).
+See [Library API](https://github.com/frogiraffe/sea-mile/blob/main/docs/LIBRARY_API.md),
+[API compatibility](https://github.com/frogiraffe/sea-mile/blob/main/docs/API_COMPATIBILITY.md),
+[data dictionary](https://github.com/frogiraffe/sea-mile/blob/main/docs/DATA_DICTIONARY.md), and
+[output schemas](https://github.com/frogiraffe/sea-mile/blob/main/docs/OUTPUT_SCHEMAS.md). Task-oriented
+examples are collected in the
+[cookbook](https://github.com/frogiraffe/sea-mile/blob/main/docs/COOKBOOK.md).
 
 ## CLI
 
@@ -156,7 +158,8 @@ The TUI displays a braille world map with embedded coastlines and port markers.
 Press `Esc` to enter browse mode, then use `+`/`-` to zoom, `h`/`j`/`k`/`l`
 to pan, `g` to center on the selected port, and `0` to reset the view. Press
 `i` to return to insert mode and continue typing in the search bar.
-See the dedicated [TUI guide](docs/TUI.md) for installation and controls.
+See the dedicated [TUI guide](https://github.com/frogiraffe/sea-mile/blob/main/docs/TUI.md)
+for installation and controls.
 
 ```bash
 sea-mile search Mersin --country TR
@@ -175,9 +178,12 @@ sea-mile serve --host 127.0.0.1 --port 8000
 `route --html-map` requires both the `routing` and `map` extras. The server
 requires both the `api` and `routing` extras and checks them before it starts.
 Its base URL redirects to the interactive API documentation at `/docs`;
-`GET /healthz` reports liveness. The server exposes
-`GET /route?origin=TRMER&destination=GRPIR`, which uses the bundled registry and
-returns `distance_nmi` together with a GeoJSON route feature.
+`GET /v1/livez` reports liveness and `GET /v1/readyz` reports whether the
+registry and routing backend can actually serve a request. The server exposes
+`GET /v1/route?origin=TRMER&destination=GRPIR`, which uses the bundled registry
+and returns `distance_nmi` together with a GeoJSON route feature. Failures
+return `{"schema_version": "1", "error": {"code", "message", "retryable",
+"details"}}`. The unversioned `GET /route` is a deprecated alias.
 
 HTML maps opened directly from disk use the bundled Natural Earth coastline
 instead of requesting remote tiles. This avoids the missing-`Referer` 403
@@ -272,7 +278,7 @@ provider versions and a deterministic content hash.
 
 The bundled data derives from NGA World Port Index and GeoNames. Local builds
 can add UN/LOCODE and user-supplied OpenStreetMap data. See
-[sources, attribution, and limitations](docs/SOURCES_AND_LIMITATIONS.md).
+[sources, attribution, and limitations](https://github.com/frogiraffe/sea-mile/blob/main/docs/SOURCES_AND_LIMITATIONS.md).
 
 ## Development and release gate
 
@@ -288,7 +294,7 @@ uv run pip-audit
 SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" uv build
 SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" \
   uv run python scripts/normalize_sdist.py dist/*.tar.gz
-uv run twine check dist/*
+uv run twine check --strict dist/*
 ```
 
 Python 3.11–3.14 are tested on Linux; Python 3.14 is also tested on macOS and
@@ -301,15 +307,19 @@ optional API/routing/map workflow in isolated environments.
 
 Design and maintenance details live outside this user guide:
 
-- [Architecture](docs/ARCHITECTURE.md)
-- [Routing and cache operations](docs/ROUTING_AND_CACHE.md)
-- [HTTP service](docs/API_SERVICE.md)
-- [TUI guide](docs/TUI.md)
-- [Cookbook](docs/COOKBOOK.md)
-- [Dependency policy](docs/DEPENDENCY_POLICY.md)
-- [API compatibility](docs/API_COMPATIBILITY.md)
-- [Release procedure](docs/RELEASING.md)
-- [Changelog](CHANGELOG.md)
+- [Documentation index](https://github.com/frogiraffe/sea-mile/blob/main/docs/README.md)
+- [Architecture](https://github.com/frogiraffe/sea-mile/blob/main/docs/ARCHITECTURE.md)
+- [Routing and cache operations](https://github.com/frogiraffe/sea-mile/blob/main/docs/ROUTING_AND_CACHE.md)
+- [HTTP service](https://github.com/frogiraffe/sea-mile/blob/main/docs/API_SERVICE.md)
+- [TUI guide](https://github.com/frogiraffe/sea-mile/blob/main/docs/TUI.md)
+- [Cookbook](https://github.com/frogiraffe/sea-mile/blob/main/docs/COOKBOOK.md)
+- [Performance](https://github.com/frogiraffe/sea-mile/blob/main/docs/PERFORMANCE.md)
+- [Dependency policy](https://github.com/frogiraffe/sea-mile/blob/main/docs/DEPENDENCY_POLICY.md)
+- [API compatibility](https://github.com/frogiraffe/sea-mile/blob/main/docs/API_COMPATIBILITY.md)
+- [Release procedure](https://github.com/frogiraffe/sea-mile/blob/main/docs/RELEASING.md)
+- [Changelog](https://github.com/frogiraffe/sea-mile/blob/main/CHANGELOG.md)
 
-Security reports follow [SECURITY.md](SECURITY.md); contributions follow
-[CONTRIBUTING.md](CONTRIBUTING.md).
+Security reports follow
+[SECURITY.md](https://github.com/frogiraffe/sea-mile/blob/main/SECURITY.md);
+contributions follow
+[CONTRIBUTING.md](https://github.com/frogiraffe/sea-mile/blob/main/CONTRIBUTING.md).

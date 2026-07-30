@@ -1,0 +1,16 @@
+name,origin_name,origin_lat,origin_lon,destination_name,destination_lat,destination_lon,expected_passages,forbidden_passages
+asia_europe_via_suez,Shanghai,31.23,121.47,Rotterdam,51.95,4.14,malacca|bab_el_mandeb|suez_canal|gibraltar,panama_canal|cape_of_good_hope
+north_europe_to_aegean,Rotterdam,51.95,4.14,Piraeus,37.94,23.63,gibraltar,suez_canal|panama_canal
+us_coast_to_coast,New York,40.67,-74.04,Los Angeles,33.73,-118.26,panama_canal,suez_canal|cape_horn
+turkish_straits,Istanbul,41.01,28.98,Piraeus,37.94,23.63,bosphorus|dardanelles,suez_canal|gibraltar
+gulf_to_singapore,Dubai,25.28,55.30,Singapore,1.26,103.83,strait_of_hormuz|malacca,suez_canal|panama_canal
+baltic_entry,Hamburg,53.53,9.95,Stockholm,59.32,18.07,danish_straits,gibraltar|suez_canal
+south_atlantic_to_indian,Santos,-23.95,-46.33,Durban,-29.87,31.03,cape_of_good_hope,suez_canal|panama_canal
+south_america_southern_tip,Valparaiso,-33.03,-71.63,Buenos Aires,-34.60,-58.37,strait_of_magellan,panama_canal|suez_canal
+north_atlantic_crossing,Rotterdam,51.95,4.14,New York,40.67,-74.04,dover_strait,suez_canal|panama_canal|gibraltar
+red_sea_to_mediterranean,Jeddah,21.48,39.18,Alexandria,31.20,29.89,suez_canal,gibraltar|panama_canal
+east_asia_coastal,Busan,35.10,129.04,Shanghai,31.23,121.47,,suez_canal|panama_canal|malacca
+india_to_gulf,Mumbai,18.94,72.84,Dubai,25.28,55.30,strait_of_hormuz,suez_canal|malacca
+west_africa_to_europe,Lagos,6.44,3.40,Rotterdam,51.95,4.14,,suez_canal|panama_canal|cape_of_good_hope
+australia_to_asia,Melbourne,-37.84,144.92,Singapore,1.26,103.83,,suez_canal|panama_canal|gibraltar
+mediterranean_internal,Barcelona,41.35,2.16,Piraeus,37.94,23.63,,gibraltar|suez_canal|panama_canal

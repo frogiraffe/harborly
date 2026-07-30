@@ -1,0 +1,27 @@
+name: Check external links
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # weekly, Monday 06:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.21"
+
+      - name: Set up Python
+        run: uv python install 3.14
+
+      - name: Install documentation-checking dependencies
+        run: uv sync --locked --dev --python 3.14
+
+      - name: Check external documentation links
+        run: uv run python -m scripts.check_external_links | tee -a "$GITHUB_STEP_SUMMARY"
