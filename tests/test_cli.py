@@ -1265,6 +1265,7 @@ def test_route_sequence_outputs(monkeypatch, tmp_path, capsys) -> None:
     monkeypatch.setattr("harborly.cli._require_optional_extras", lambda *_args: True)
     monkeypatch.setattr("harborly.cli._load_registry", lambda _args: registry)
     monkeypatch.setattr("harborly.router.SeaRouter", FakeRouter)
+    monkeypatch.setattr("harborly.router.SequenceSeaRoute", _SequenceCommandResult)
 
     assert main(["route", "A", "C", "--via", "B", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["data"] == result.summary()

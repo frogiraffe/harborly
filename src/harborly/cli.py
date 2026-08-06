@@ -412,7 +412,7 @@ def _cmd_near(args: argparse.Namespace) -> int:
 
 
 def _cmd_route(args: argparse.Namespace) -> int:
-    from harborly.router import SeaRouter
+    from harborly.router import SeaRouter, SequenceSeaRoute
 
     if args.via and args.html_map:
         raise ValueError("route --via cannot be combined with --html-map")
@@ -441,6 +441,7 @@ def _cmd_route(args: argparse.Namespace) -> int:
     via_ports = [_endpoint_port(registry, value, None) for value in args.via]
     destination = _endpoint_port(registry, args.destination, args.destination_country)
     try:
+        result: SeaRoute | SequenceSeaRoute
         route_kwargs = {}
         if args.speed_knots is not None:
             route_kwargs["speed_knots"] = args.speed_knots
@@ -464,7 +465,7 @@ def _cmd_route(args: argparse.Namespace) -> int:
         args.geojson.parent.mkdir(parents=True, exist_ok=True)
         geojson = (
             result.to_geojson_feature_collection()
-            if via_ports
+            if isinstance(result, SequenceSeaRoute)
             else result.to_geojson_feature()
         )
         args.geojson.write_text(
@@ -477,6 +478,7 @@ def _cmd_route(args: argparse.Namespace) -> int:
         except OSError as error:
             raise ValueError(f"could not write KML to {args.kml}: {error}") from error
     if args.html_map and html_map_writer is not None:
+        assert not isinstance(result, SequenceSeaRoute)
         try:
             html_map_writer(result, args.html_map)
         except OSError as error:
@@ -485,7 +487,7 @@ def _cmd_route(args: argparse.Namespace) -> int:
             ) from error
     if args.json:
         _emit_json(args, result.summary())
-    elif via_ports:
+    elif isinstance(result, SequenceSeaRoute):
         for index, leg in enumerate(result.legs, start=1):
             print(
                 f"leg {index}: {leg.origin.name} ({leg.origin.registry_id}) -> "
