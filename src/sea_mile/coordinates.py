@@ -11,9 +11,6 @@ class LatLon(NamedTuple):
     latitude: float
     longitude: float
 
-    def as_tuple(self) -> tuple[float, float]:
-        return (self.latitude, self.longitude)
-
     def to_lon_lat(self) -> LonLat:
         return LonLat(longitude=self.longitude, latitude=self.latitude)
 

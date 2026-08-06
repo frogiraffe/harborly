@@ -7,14 +7,12 @@ import multiprocessing
 import os
 import secrets
 import time
-import warnings
 from collections import deque
 from collections.abc import Iterable, Sequence
 from concurrent.futures import Future, ProcessPoolExecutor
 from contextlib import suppress
 from dataclasses import dataclass
 from functools import lru_cache
-from math import isfinite
 from pathlib import Path
 from typing import Any
 
@@ -37,7 +35,7 @@ from sea_mile.exceptions import (
     RoutingErrorReason,
     SeaMileError,
 )
-from sea_mile.geo import great_circle_nmi, validate_coordinate
+from sea_mile.geo import great_circle_nmi, line_string_coordinates, validate_coordinate
 from sea_mile.ports import Port, PortRegistry
 from sea_mile.route_cache import RouteCache
 from sea_mile.routing import (
@@ -88,6 +86,18 @@ class SeaRoute:
     algorithm: str
     backend: str
     restrictions: tuple[str, ...]
+    speed_knots: float | None = None
+
+    @property
+    def duration_hours(self) -> float | None:
+        if self.speed_knots is not None and self.speed_knots > 0:
+            return round(self.distance_nmi / self.speed_knots, 2)
+        return None
+
+    @property
+    def duration_days(self) -> float | None:
+        hours = self.duration_hours
+        return round(hours / 24.0, 2) if hours is not None else None
 
     def summary(self) -> dict[str, Any]:
         return {
@@ -97,6 +107,9 @@ class SeaRoute:
             "great_circle_nmi": self.great_circle_nmi,
             "detour_ratio": self.detour_ratio,
             "quality_flag": str(self.quality_flag),
+            "speed_knots": self.speed_knots,
+            "duration_hours": self.duration_hours,
+            "duration_days": self.duration_days,
             "engine": self.engine,
             "engine_version": self.engine_version,
             "algorithm": self.algorithm,
@@ -114,6 +127,75 @@ class SeaRoute:
             },
             "geometry": self.geometry,
         }
+
+    def to_kml(self) -> str:
+        from sea_mile.kml import to_kml_string
+
+        return to_kml_string(self)
+
+    def write_kml(self, path: str | Path) -> None:
+        from sea_mile.kml import write_route_kml
+
+        write_route_kml(self, path)
+
+
+@dataclass(frozen=True, slots=True)
+class SequenceSeaRoute:
+    """A multi-leg sea route connecting a sequence of ports."""
+
+    ports: tuple[Port, ...]
+    legs: tuple[SeaRoute, ...]
+    total_distance_nmi: float
+    total_great_circle_nmi: float
+    speed_knots: float | None = None
+
+    @property
+    def duration_hours(self) -> float | None:
+        if self.speed_knots is not None and self.speed_knots > 0:
+            return round(self.total_distance_nmi / self.speed_knots, 2)
+        # Fall back to summing per-leg durations (e.g. per-leg speed was set).
+        leg_durations = [leg.duration_hours for leg in self.legs]
+        if leg_durations and all(d is not None for d in leg_durations):
+            return round(sum(d for d in leg_durations if d is not None), 2)
+        return None
+
+    @property
+    def duration_days(self) -> float | None:
+        hours = self.duration_hours
+        return round(hours / 24.0, 2) if hours is not None else None
+
+    def summary(self) -> dict[str, Any]:
+        return {
+            "ports": [p.to_dict() for p in self.ports],
+            "total_distance_nmi": self.total_distance_nmi,
+            "total_great_circle_nmi": self.total_great_circle_nmi,
+            "speed_knots": self.speed_knots,
+            "duration_hours": self.duration_hours,
+            "duration_days": self.duration_days,
+            "legs": [leg.summary() for leg in self.legs],
+        }
+
+    def to_geojson_feature_collection(self) -> dict[str, Any]:
+        return {
+            "type": "FeatureCollection",
+            "features": [leg.to_geojson_feature() for leg in self.legs],
+            "properties": {
+                "total_distance_nmi": self.total_distance_nmi,
+                "total_great_circle_nmi": self.total_great_circle_nmi,
+                "routing_units": "nautical_miles",
+                "navigation_warning": "Approximate graph route; not for navigation.",
+            },
+        }
+
+    def to_kml(self) -> str:
+        from sea_mile.kml import to_kml_string
+
+        return to_kml_string(self)
+
+    def write_kml(self, path: str | Path) -> None:
+        from sea_mile.kml import write_route_kml
+
+        write_route_kml(self, path)
 
 
 _worker_router: SeaRouter | None = None
@@ -211,36 +293,18 @@ class SeaRouter:
         *,
         algorithm: str = "astar",
         backend: str = "networkx",
-        restrictions: tuple[str, ...] = ("northwest",),
+        restrictions: Iterable[str] = ("northwest",),
         cache_path: str | Path | None = None,
         retry_policy: RetryPolicy | None = None,
-        retry_attempts: int | None = None,
-        backoff_seconds: float | None = None,
         quality_policy: RouteQualityPolicy | None = None,
         circuit_breaker_policy: CircuitBreakerPolicy | None = None,
         cache_failure_policy: CacheFailurePolicy = CacheFailurePolicy.STRICT,
         _routing_backend: _RoutingBackend | None = None,
     ) -> None:
-        if retry_attempts is not None or backoff_seconds is not None:
-            warnings.warn(
-                "SeaRouter(retry_attempts=..., backoff_seconds=...) is deprecated"
-                " and will be removed in the next major version; pass"
-                " retry_policy=RetryPolicy(attempts=..., base_backoff_seconds=...)"
-                " instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        if retry_policy is not None:
-            self._retry_policy = retry_policy
-        else:
-            attempts = 4 if retry_attempts is None else retry_attempts
-            backoff = 0.25 if backoff_seconds is None else backoff_seconds
-            self._retry_policy = RetryPolicy(
-                attempts=attempts, base_backoff_seconds=backoff
-            )
+        self._retry_policy = retry_policy if retry_policy is not None else RetryPolicy()
         self.algorithm = algorithm
         self.backend = backend
-        self.restrictions = restrictions
+        self.restrictions = tuple(str(r) for r in restrictions)
         self._circuit_breaker = (
             CircuitBreaker(circuit_breaker_policy)
             if circuit_breaker_policy is not None
@@ -260,30 +324,56 @@ class SeaRouter:
     def retry_policy(self) -> RetryPolicy:
         return self._retry_policy
 
-    @property
-    def retry_attempts(self) -> int:
-        warnings.warn(
-            "SeaRouter.retry_attempts is deprecated and will be removed in the"
-            " next major version; use SeaRouter.retry_policy.attempts instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return self._retry_policy.attempts
-
-    @property
-    def backoff_seconds(self) -> float:
-        warnings.warn(
-            "SeaRouter.backoff_seconds is deprecated and will be removed in the"
-            " next major version; use SeaRouter.retry_policy.base_backoff_seconds"
-            " instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return self._retry_policy.base_backoff_seconds
-
-    def route(self, origin: Port, destination: Port) -> SeaRoute:
-        return self._route_cached(
+    def route(
+        self,
+        origin: Port,
+        destination: Port,
+        *,
+        speed_knots: float | None = None,
+    ) -> SeaRoute:
+        base = self._route_cached(
             origin, destination, self.algorithm, self.backend, self.restrictions
+        )
+        if speed_knots is not None:
+            return SeaRoute(
+                origin=base.origin,
+                destination=base.destination,
+                distance_nmi=base.distance_nmi,
+                great_circle_nmi=base.great_circle_nmi,
+                detour_ratio=base.detour_ratio,
+                quality_flag=base.quality_flag,
+                geometry=base.geometry,
+                engine=base.engine,
+                engine_version=base.engine_version,
+                algorithm=base.algorithm,
+                backend=base.backend,
+                restrictions=base.restrictions,
+                speed_knots=float(speed_knots),
+            )
+        return base
+
+    def route_sequence(
+        self,
+        ports: Sequence[Port],
+        *,
+        speed_knots: float | None = None,
+    ) -> SequenceSeaRoute:
+        if len(ports) < 2:
+            raise ValueError("route_sequence requires at least two ports")
+        legs: list[SeaRoute] = []
+        total_dist = 0.0
+        total_gc = 0.0
+        for i in range(len(ports) - 1):
+            leg = self.route(ports[i], ports[i + 1], speed_knots=speed_knots)
+            legs.append(leg)
+            total_dist += leg.distance_nmi
+            total_gc += leg.great_circle_nmi
+        return SequenceSeaRoute(
+            ports=tuple(ports),
+            legs=tuple(legs),
+            total_distance_nmi=total_dist,
+            total_great_circle_nmi=total_gc,
+            speed_knots=float(speed_knots) if speed_knots is not None else None,
         )
 
     def check_ready(self) -> tuple[ReadinessCheck, ...]:
@@ -337,7 +427,10 @@ class SeaRouter:
         origin_coordinates = self._coordinates(origin)
         destination_coordinates = self._coordinates(destination)
         great_circle = great_circle_nmi(
-            *origin_coordinates.as_tuple(), *destination_coordinates.as_tuple()
+            origin_coordinates.latitude,
+            origin_coordinates.longitude,
+            destination_coordinates.latitude,
+            destination_coordinates.longitude,
         )
         config = RoutingConfig(
             algorithm=algorithm,
@@ -438,26 +531,10 @@ class SeaRouter:
         )
 
     def _validate_geometry(self, geometry: object) -> None:
-        if not isinstance(geometry, dict) or geometry.get("type") != "LineString":
-            raise self._malformed_geometry_error()
-        coordinates = geometry.get("coordinates")
-        if not isinstance(coordinates, (list, tuple)) or len(coordinates) < 2:
-            raise self._malformed_geometry_error()
-        for point in coordinates:
-            if not isinstance(point, (list, tuple)) or len(point) < 2:
-                raise self._malformed_geometry_error()
-            try:
-                longitude = float(point[0])
-                latitude = float(point[1])
-            except (TypeError, ValueError) as error:
-                raise self._malformed_geometry_error() from error
-            if (
-                not isfinite(latitude)
-                or not isfinite(longitude)
-                or not -90 <= latitude <= 90
-                or not -180 <= longitude <= 180
-            ):
-                raise self._malformed_geometry_error()
+        try:
+            line_string_coordinates(geometry)
+        except ValueError as error:
+            raise self._malformed_geometry_error() from error
 
     def _malformed_geometry_error(self) -> RoutingError:
         return RoutingError(
@@ -684,3 +761,88 @@ class SeaRouter:
                 f"port {port.registry_id} has an invalid coordinate: {check.reason}"
             )
         return LatLon(latitude=float(latitude), longitude=float(longitude))
+
+
+class AsyncSeaRouter:
+    """Non-blocking asynchronous wrapper around SeaRouter for asyncio workflows."""
+
+    def __init__(self, router: SeaRouter | None = None, **kwargs: Any) -> None:
+        self.sync_router = router if router is not None else SeaRouter(**kwargs)
+
+    async def route(
+        self,
+        origin: Port,
+        destination: Port,
+        *,
+        speed_knots: float | None = None,
+    ) -> SeaRoute:
+        import asyncio
+
+        return await asyncio.to_thread(
+            self.sync_router.route, origin, destination, speed_knots=speed_knots
+        )
+
+    async def route_sequence(
+        self,
+        ports: Sequence[Port],
+        *,
+        speed_knots: float | None = None,
+    ) -> SequenceSeaRoute:
+        import asyncio
+
+        return await asyncio.to_thread(
+            self.sync_router.route_sequence, ports, speed_knots=speed_knots
+        )
+
+    async def route_coordinates(
+        self,
+        origin_latitude: float,
+        origin_longitude: float,
+        destination_latitude: float,
+        destination_longitude: float,
+    ) -> SeaRoute:
+        import asyncio
+
+        return await asyncio.to_thread(
+            self.sync_router.route_coordinates,
+            origin_latitude,
+            origin_longitude,
+            destination_latitude,
+            destination_longitude,
+        )
+
+    async def distance_matrix(
+        self,
+        ports: Sequence[Port],
+        *,
+        max_workers: int | None = None,
+    ) -> list[list[float]]:
+        import asyncio
+
+        return await asyncio.to_thread(
+            self.sync_router.distance_matrix,
+            ports,
+            max_workers=max_workers,
+        )
+
+    async def iter_distance_edges(
+        self,
+        ports: Sequence[Port],
+        *,
+        max_workers: int | None = None,
+    ) -> Any:
+        import asyncio
+
+        def fetch_edges() -> list[tuple[int, int, float]]:
+            return list(
+                self.sync_router.iter_distance_edges(ports, max_workers=max_workers)
+            )
+
+        edges = await asyncio.to_thread(fetch_edges)
+        for edge in edges:
+            yield edge
+
+    async def check_ready(self) -> tuple[ReadinessCheck, ...]:
+        import asyncio
+
+        return await asyncio.to_thread(self.sync_router.check_ready)

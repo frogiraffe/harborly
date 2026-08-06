@@ -10,6 +10,7 @@ import folium
 from branca.element import MacroElement, Template
 
 from sea_mile.coordinates import LonLat
+from sea_mile.geo import line_string_coordinates
 from sea_mile.router import SeaRoute
 from sea_mile.tui.coastlines import load_coastlines
 
@@ -79,28 +80,10 @@ def _coastline_feature_collection() -> dict[str, Any]:
 
 
 def _route_lon_lat(route: SeaRoute) -> tuple[LonLat, ...]:
-    coordinates = route.geometry.get("coordinates")
-    if not isinstance(coordinates, (list, tuple)):
-        raise ValueError("route geometry has no coordinate sequence")
-
-    points: list[LonLat] = []
-    for coordinate in coordinates:
-        if not isinstance(coordinate, (list, tuple)) or len(coordinate) < 2:
-            raise ValueError("route geometry contains an invalid coordinate")
-        try:
-            points.append(
-                LonLat(
-                    longitude=float(coordinate[0]),
-                    latitude=float(coordinate[1]),
-                )
-            )
-        except (TypeError, ValueError) as error:
-            raise ValueError(
-                "route geometry contains a non-numeric coordinate"
-            ) from error
-    if len(points) < 2:
-        raise ValueError("route geometry needs at least two coordinates")
-    return tuple(points)
+    return tuple(
+        LonLat(longitude=lon, latitude=lat)
+        for lon, lat in line_string_coordinates(route.geometry)
+    )
 
 
 def _route_locations(points: tuple[LonLat, ...]) -> tuple[tuple[float, float], ...]:

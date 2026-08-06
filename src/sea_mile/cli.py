@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import csv
 import dataclasses
+import html
 import io
 import json
 import logging
@@ -146,6 +147,18 @@ def _positive_int(value: str) -> int:
         ) from None
     if parsed < 1:
         raise argparse.ArgumentTypeError(f"{value!r} is not a positive integer")
+    return parsed
+
+
+def _positive_float(value: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"{value!r} is not a positive number"
+        ) from None
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError(f"{value!r} is not a positive number")
     return parsed
 
 
@@ -423,7 +436,12 @@ def _cmd_route(args: argparse.Namespace) -> int:
     origin = _endpoint_port(registry, args.origin, args.origin_country)
     destination = _endpoint_port(registry, args.destination, args.destination_country)
     try:
-        result = SeaRouter(cache_path=args.cache).route(origin, destination)
+        route_kwargs = {}
+        if args.speed_knots is not None:
+            route_kwargs["speed_knots"] = args.speed_knots
+        result = SeaRouter(cache_path=args.cache).route(
+            origin, destination, **route_kwargs
+        )
     except ImportError:
         _print_optional_extras_error(
             "route --html-map" if args.html_map else "route",
@@ -437,6 +455,11 @@ def _cmd_route(args: argparse.Namespace) -> int:
             + "\n",
             encoding="utf-8",
         )
+    if args.kml:
+        try:
+            result.write_kml(args.kml)
+        except OSError as error:
+            raise ValueError(f"could not write KML to {args.kml}: {error}") from error
     if args.html_map and html_map_writer is not None:
         try:
             html_map_writer(result, args.html_map)
@@ -456,12 +479,18 @@ def _cmd_route(args: argparse.Namespace) -> int:
         print(f"great_circle_nmi: {result.great_circle_nmi:.2f}")
         print(f"detour_ratio: {detour}")
         print(f"quality_flag: {result.quality_flag}")
+        if result.speed_knots is not None:
+            print(f"speed_knots: {result.speed_knots:.1f}")
+            print(f"duration_hours: {result.duration_hours:.2f}")
+            print(f"duration_days: {result.duration_days:.2f}")
         print(
             f"engine: {result.engine} {result.engine_version} "
             f"({result.algorithm}, {result.backend})"
         )
         if args.geojson:
             print(f"geojson: {args.geojson}")
+        if args.kml:
+            print(f"kml: {args.kml}")
         if args.html_map:
             print(f"html_map: {args.html_map}")
             print(
@@ -541,15 +570,64 @@ def _cmd_export(args: argparse.Namespace) -> int:
             "features": [port.to_geojson_feature() for port in ports],
         }
         text = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
-    else:
-        text = _ports_to_csv(ports)
+        if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(text, encoding="utf-8")
+            print(f"wrote {len(ports)} records to {args.output}")
+        else:
+            sys.stdout.write(text)
+    elif args.format == "kml":
+        lines = [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<kml xmlns="http://www.opengis.net/kml/2.2">',
+            "  <Document>",
+            f"    <name>Ports Export ({len(ports)} records)</name>",
+        ]
+        for port in ports:
+            if port.latitude is not None and port.longitude is not None:
+                lines.extend(
+                    [
+                        "    <Placemark>",
+                        f"      <name>{html.escape(port.name)}</name>",
+                        (
+                            f"      <description>{html.escape(port.registry_id)} "
+                            f"({html.escape(port.country_code or '')})</description>"
+                        ),
+                        "      <Point>",
+                        (
+                            "        <coordinates>"
+                            f"{port.longitude},{port.latitude},0"
+                            "</coordinates>"
+                        ),
+                        "      </Point>",
+                        "    </Placemark>",
+                    ]
+                )
+        lines.extend(["  </Document>", "</kml>"])
+        text = "\n".join(lines) + "\n"
+        if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(text, encoding="utf-8")
+            print(f"wrote {len(ports)} records to {args.output}")
+        else:
+            sys.stdout.write(text)
+    elif args.format == "geoparquet":
+        if not args.output:
+            raise ValueError(
+                "export format 'geoparquet' requires an --output file path"
+            )
+        from sea_mile.geoparquet import write_ports_geoparquet
 
-    if args.output:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(text, encoding="utf-8")
+        write_ports_geoparquet(ports, args.output)
         print(f"wrote {len(ports)} records to {args.output}")
     else:
-        sys.stdout.write(text)
+        text = _ports_to_csv(ports)
+        if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(text, encoding="utf-8")
+            print(f"wrote {len(ports)} records to {args.output}")
+        else:
+            sys.stdout.write(text)
     return 0
 
 
@@ -1148,6 +1226,7 @@ def _parser() -> argparse.ArgumentParser:
     route.add_argument(
         "--geojson", type=Path, help="write the route as a GeoJSON Feature"
     )
+    route.add_argument("--kml", type=Path, help="write the route as a KML document")
     route.add_argument(
         "--html-map",
         type=Path,
@@ -1157,6 +1236,11 @@ def _parser() -> argparse.ArgumentParser:
         "--cache",
         type=Path,
         help="persist routing results in this SQLite cache",
+    )
+    route.add_argument(
+        "--speed-knots",
+        type=_positive_float,
+        help="vessel speed in knots to calculate voyage duration",
     )
     route.set_defaults(func=_cmd_route)
 
@@ -1224,7 +1308,10 @@ def _parser() -> argparse.ArgumentParser:
     export.add_argument("--country", dest="country_code")
     export.add_argument("--limit", type=int, default=1000)
     export.add_argument(
-        "--format", choices=("csv", "geojson"), default="csv", help="output format"
+        "--format",
+        choices=("csv", "geojson", "kml", "geoparquet"),
+        default="csv",
+        help="output format",
     )
     export.add_argument(
         "--output", type=Path, help="write to this file instead of stdout"

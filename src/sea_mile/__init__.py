@@ -23,17 +23,20 @@ from .matching import (
 from .ports import Port, PortGroup, PortRegistry
 from .routing import (
     CacheFailurePolicy,
+    PassageRestriction,
     RetryPolicy,
     RouteQualityFlag,
     RouteQualityPolicy,
 )
 
 if TYPE_CHECKING:
-    from .router import SeaRoute, SeaRouter
+    from .router import AsyncSeaRouter, SeaRoute, SeaRouter, SequenceSeaRoute
 
 _LAZY_EXPORTS = {
+    "AsyncSeaRouter": "sea_mile.router",
     "SeaRoute": "sea_mile.router",
     "SeaRouter": "sea_mile.router",
+    "SequenceSeaRoute": "sea_mile.router",
 }
 
 
@@ -55,6 +58,7 @@ def __dir__() -> list[str]:
 
 __all__ = [
     "AmbiguousPortError",
+    "AsyncSeaRouter",
     "BackendError",
     "BackendErrorKind",
     "BatchMatchResult",
@@ -64,6 +68,7 @@ __all__ = [
     "MatchPolicy",
     "MatchReason",
     "MatchStatus",
+    "PassageRestriction",
     "Port",
     "PortCoordinateError",
     "PortGroup",
@@ -77,5 +82,6 @@ __all__ = [
     "SeaMileError",
     "SeaRoute",
     "SeaRouter",
+    "SequenceSeaRoute",
     "SourceDataError",
 ]

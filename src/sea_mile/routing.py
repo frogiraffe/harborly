@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
-import warnings
 from dataclasses import dataclass
 from enum import StrEnum
 from math import isfinite
-from typing import Any
 
 MAX_RETRY_ATTEMPTS = 8
-_MAX_BACKOFF_SECONDS = 8.0
-_UNSET: Any = object()
+
+
+class PassageRestriction(StrEnum):
+    """Common maritime passage and canal restrictions."""
+
+    SUEZ = "suez"
+    PANAMA = "panama"
+    KIEL = "kiel"
+    BABAN = "baban"
+    NORTHWEST = "northwest"
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,29 +114,12 @@ def assess_route_length(
     great_circle_distance_nmi: float,
     *,
     policy: RouteQualityPolicy | None = None,
-    lower_bound_tolerance_nmi: float = _UNSET,
-    high_detour_ratio: float = _UNSET,
 ) -> RouteAssessment:
-    """Check a sea-route result against basic physical plausibility rules.
+    """Check a sea-route result against basic physical plausibility rules."""
 
-    *lower_bound_tolerance_nmi* and *high_detour_ratio* are deprecated; pass a
-    *policy* instead. When *policy* is given, its thresholds take precedence
-    over the deprecated keywords.
-    """
-
-    if lower_bound_tolerance_nmi is not _UNSET or high_detour_ratio is not _UNSET:
-        warnings.warn(
-            "assess_route_length(lower_bound_tolerance_nmi=..., "
-            "high_detour_ratio=...) is deprecated and will be removed in the"
-            " next major version; pass policy=RouteQualityPolicy(...) instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
     active = policy if policy is not None else RouteQualityPolicy()
-    if lower_bound_tolerance_nmi is _UNSET or policy is not None:
-        lower_bound_tolerance_nmi = active.lower_bound_tolerance_nmi
-    if high_detour_ratio is _UNSET or policy is not None:
-        high_detour_ratio = active.high_detour_ratio
+    lower_bound_tolerance_nmi = active.lower_bound_tolerance_nmi
+    high_detour_ratio = active.high_detour_ratio
 
     if not isfinite(sea_distance_nmi) or sea_distance_nmi < 0:
         return RouteAssessment(False, RouteQualityFlag.INVALID_ROUTE_DISTANCE, None)

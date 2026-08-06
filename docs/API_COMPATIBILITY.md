@@ -7,34 +7,21 @@ throughout the 1.x series.
 
 The names in `sea_mile.__all__` are stable:
 
-`AmbiguousPortError`, `BackendError`, `BackendErrorKind`, `BatchMatchResult`,
+`AmbiguousPortError`, `AsyncSeaRouter`, `BackendError`, `BackendErrorKind`, `BatchMatchResult`,
 `CacheFailurePolicy`, `CanonicalEvidence`, `ConfidenceTier`, `MatchPolicy`,
-`MatchReason`, `MatchStatus`, `Port`, `PortCoordinateError`, `PortGroup`,
+`MatchReason`, `MatchStatus`, `PassageRestriction`, `Port`, `PortCoordinateError`, `PortGroup`,
 `PortNotFoundError`, `PortRegistry`, `RegistryDataError`, `RetryPolicy`,
 `RouteQualityFlag`, `RouteQualityPolicy`, `RoutingError`, `SeaMileError`,
-`SeaRoute`, `SeaRouter`, and `SourceDataError`.
+`SeaRoute`, `SeaRouter`, `SequenceSeaRoute`, and `SourceDataError`.
+
+### Lower-level modules
+
+The following module-level APIs are stable within 1.x:
+- sea_mile.kml: to_kml_string(route), write_route_kml(route, path)
+- sea_mile.geoparquet: write_ports_geoparquet(ports, path), write_route_geoparquet(route, path)
 
 Breaking signature changes, removals, and incompatible semantic changes require
 a major version.
-
-## Deprecated
-
-Each entry below had two spellings: a policy object and a loose keyword ladder
-that predated it. Two ways to say the same thing means two things to document,
-two to validate, and an unstated question about which one wins. The ladders
-below still work, emit `DeprecationWarning`, and are removed in the next major
-version — see "Deprecation before removal" in
-[Release procedure](maintainers/RELEASING.md#versioning).
-
-| Deprecated | Replacement |
-| --- | --- |
-| `SeaRouter(retry_attempts=...)` | `SeaRouter(retry_policy=RetryPolicy(attempts=...))` |
-| `SeaRouter(backoff_seconds=...)` | `SeaRouter(retry_policy=RetryPolicy(base_backoff_seconds=...))` |
-| `SeaRouter.retry_attempts` | `SeaRouter.retry_policy.attempts` |
-| `SeaRouter.backoff_seconds` | `SeaRouter.retry_policy.base_backoff_seconds` |
-| `assess_route_length(..., high_detour_ratio=...)` | `assess_route_length(..., policy=RouteQualityPolicy(high_detour_ratio=...))` |
-| `assess_route_length(..., lower_bound_tolerance_nmi=...)` | `assess_route_length(..., policy=RouteQualityPolicy(lower_bound_tolerance_nmi=...))` |
-| `GET /route`, `GET /healthz` | `GET /v1/route`, `GET /v1/livez` (see [API service](API_SERVICE.md)) |
 
 `SeaRouter.distance_matrix` remains the dense matrix API.
 `SeaRouter.iter_distance_edges` is its bounded-memory streaming counterpart and
@@ -48,6 +35,8 @@ interfaces unless another document explicitly defines them as public.
 Documented commands, arguments, and exit status values are stable within 1.x.
 Text tables and error wording may change without a major version. Scripts should
 use `--json`.
+
+`--kml` on `route` and `--format kml` / `--format geoparquet` on `export` are stable 1.x CLI flags.
 
 ## JSON output
 
@@ -64,6 +53,12 @@ not stable.
 `PortRegistry.from_directory` rejects unsupported versions. Registry contents,
 record counts, aliases, coordinates, and provider coverage may change with source
 snapshots and are not API constants.
+
+## GIS export formats
+
+- KML output follows the KML 2.2 schema. MultiLineString geometries are encoded as KML <MultiGeometry>.
+- GeoParquet output follows the GeoParquet 1.0.0 specification. Geometry column uses OGC WKB encoding. CRS is OGC:CRS84 (lon/lat WGS84, crs=null per spec). The geo metadata key is always present in Parquet schema metadata.
+- These formats are additive in 1.x; new optional columns may be added without a major version.
 
 ## Supported environments
 

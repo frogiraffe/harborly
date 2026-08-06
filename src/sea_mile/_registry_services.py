@@ -13,6 +13,7 @@ from sea_mile._registry_data import (
     _port_from_row,
     _port_priority,
 )
+from sea_mile._registry_search import normalize_unlocode
 from sea_mile._registry_validation import validate_limit
 from sea_mile.exceptions import (
     PortCoordinateError,
@@ -244,7 +245,7 @@ def group_for_query(
     registry: PortRegistry, query: str, *, country_code: str | None = None
 ) -> PortGroup:
     """Return the grouped port for a UN/LOCODE code or a registry ID."""
-    normalized = "".join(str(query).split()).upper()
+    normalized = normalize_unlocode(query)
     coded = registry.get_by_unlocode(normalized) if len(normalized) == 5 else []
     if coded:
         anchor = coded[0]

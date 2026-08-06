@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from functools import lru_cache
 from importlib.metadata import PackageNotFoundError, version
 from typing import Annotated, Any, Literal, Protocol
 
 import uvicorn
-from fastapi import Depends, FastAPI, Query, Request, Response
+from fastapi import FastAPI, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -255,20 +254,6 @@ def _install_error_handlers(application: FastAPI) -> None:
         )
 
 
-def _deprecation_marker(successor: str) -> Callable[[Response], None]:
-    """Announce a superseded path in the response, not only in the schema.
-
-    A deprecation recorded solely in OpenAPI is invisible to the client that
-    is still calling the old path, which is exactly who needs to hear it.
-    """
-
-    def mark(response: Response) -> None:
-        response.headers["Deprecation"] = "true"
-        response.headers["Link"] = f'<{successor}>; rel="successor-version"'
-
-    return mark
-
-
 def _readiness_checks(
     registry: PortRegistry | None, router: _RouteService | None
 ) -> list[ReadinessCheck]:
@@ -352,17 +337,12 @@ def create_app(
             service="sea-mile", status="ok", version=_package_version()
         )
 
-    for path, successor in (("/v1/livez", None), ("/healthz", "/v1/livez")):
-        application.get(
-            path,
-            response_model=HealthResponse,
-            tags=["operations"],
-            summary="Check service liveness",
-            deprecated=successor is not None,
-            dependencies=(
-                [] if successor is None else [Depends(_deprecation_marker(successor))]
-            ),
-        )(livez)
+    application.get(
+        "/v1/livez",
+        response_model=HealthResponse,
+        tags=["operations"],
+        summary="Check service liveness",
+    )(livez)
 
     @application.get(
         "/v1/readyz",
@@ -446,18 +426,13 @@ def create_app(
 
     # The unversioned path stays as a deprecated alias so existing callers keep
     # working; it is removed in 2.0.
-    for path, successor in (("/v1/route", None), ("/route", "/v1/route")):
-        application.get(
-            path,
-            response_model=RouteResponse,
-            tags=["routing"],
-            summary="Calculate an approximate sea route",
-            deprecated=successor is not None,
-            dependencies=(
-                [] if successor is None else [Depends(_deprecation_marker(successor))]
-            ),
-            responses=_ROUTE_ERROR_RESPONSES,
-        )(get_route)
+    application.get(
+        "/v1/route",
+        response_model=RouteResponse,
+        tags=["routing"],
+        summary="Calculate an approximate sea route",
+        responses=_ROUTE_ERROR_RESPONSES,
+    )(get_route)
 
     return application
 

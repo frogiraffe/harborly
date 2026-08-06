@@ -15,6 +15,7 @@ from typing import TypeGuard, cast
 
 from sea_mile._routing_backend import BackendRoute, RoutingConfig
 from sea_mile.coordinates import LatLon
+from sea_mile.geo import line_string_coordinates
 
 _CACHE_KEY_SCHEMA_VERSION = 1
 _DATABASE_SCHEMA_VERSION = 1
@@ -61,18 +62,10 @@ def _is_valid_cache_distance(distance: object) -> bool:
 
 
 def _is_valid_cache_geometry(geometry: object) -> bool:
-    if not isinstance(geometry, dict):
+    try:
+        line_string_coordinates(geometry)
+    except ValueError:
         return False
-    if geometry.get("type") != "LineString":
-        return False
-    coords = geometry.get("coordinates")
-    if not isinstance(coords, (list, tuple)) or len(coords) < 2:
-        return False
-    for pt in coords:
-        if not isinstance(pt, (list, tuple)) or len(pt) != 2:
-            return False
-        if not (_is_finite_number(pt[0]) and _is_finite_number(pt[1])):
-            return False
     return True
 
 
@@ -141,8 +134,8 @@ class RouteCache:
 
         payload = {
             "schema": _CACHE_KEY_SCHEMA_VERSION,
-            "origin": origin.as_tuple(),
-            "destination": destination.as_tuple(),
+            "origin": (origin.latitude, origin.longitude),
+            "destination": (destination.latitude, destination.longitude),
             "config": config.to_dict(),
             "engine": engine,
             "engine_version": engine_version,
@@ -301,9 +294,3 @@ class RouteCache:
             yield connection
         finally:
             connection.close()
-
-    def __enter__(self) -> RouteCache:
-        return self
-
-    def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
-        pass

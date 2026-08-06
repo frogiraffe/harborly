@@ -110,3 +110,40 @@ def test_router_rejects_out_of_range_coordinates() -> None:
 
     with pytest.raises(PortCoordinateError, match="outside valid"):
         SeaRouter().route(origin, destination)
+
+
+def test_passage_restriction_enum_integration() -> None:
+    from sea_mile import PassageRestriction
+
+    router = SeaRouter(
+        restrictions=[PassageRestriction.SUEZ, PassageRestriction.PANAMA]
+    )
+    assert router.restrictions == ("suez", "panama")
+
+
+def test_route_sequence_multi_leg() -> None:
+    port_a = port("TEST:1", "Mersin", 36.8, 34.65)
+    port_b = port("TEST:2", "Piraeus", 37.94, 23.63)
+    port_c = port("TEST:3", "Istanbul", 41.0, 28.97)
+
+    seq = SeaRouter().route_sequence([port_a, port_b, port_c])
+
+    assert len(seq.legs) == 2
+    assert seq.total_distance_nmi == seq.legs[0].distance_nmi + seq.legs[1].distance_nmi
+    geojson = seq.to_geojson_feature_collection()
+    assert geojson["type"] == "FeatureCollection"
+    assert len(geojson["features"]) == 2
+
+
+def test_vessel_speed_duration_calculation() -> None:
+    port_a = port("TEST:1", "Mersin", 36.8, 34.65)
+    port_b = port("TEST:2", "Piraeus", 37.94, 23.63)
+
+    route = SeaRouter().route(port_a, port_b, speed_knots=14.0)
+
+    assert route.speed_knots == 14.0
+    assert route.duration_hours is not None
+    assert route.duration_hours == round(route.distance_nmi / 14.0, 2)
+    assert route.duration_days is not None
+    assert route.duration_days == round(route.duration_hours / 24.0, 2)
+    assert route.summary()["speed_knots"] == 14.0

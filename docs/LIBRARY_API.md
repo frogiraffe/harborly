@@ -7,7 +7,8 @@ searoute package.
 ## Public API surface
 
 The stable top-level exports are the core types: `Port`, `PortGroup`,
-`PortRegistry`, `SeaRoute`, `SeaRouter`, `BatchMatchResult`, `MatchStatus`,
+`PortRegistry`, `SeaRoute`, `SeaRouter`, `AsyncSeaRouter`, `SequenceSeaRoute`,
+`PassageRestriction`, `BatchMatchResult`, `MatchStatus`,
 `ConfidenceTier`, `MatchReason`, `MatchPolicy`, `RetryPolicy`,
 `RouteQualityFlag`, `RouteQualityPolicy`, `CanonicalEvidence`, `BackendError`,
 `BackendErrorKind`, and the `SeaMileError` family (`RegistryDataError`,
@@ -19,11 +20,13 @@ Lower-level APIs are imported from their defining modules:
 - `sea_mile.geo`: `validate_coordinate`, `CoordinateCheck`, `great_circle_nmi`.
 - `sea_mile.text`: `canonical_key`, `normalize_display_text`.
 - `sea_mile.sources`: `parse_wpi_dms`, `parse_unlocode_coordinates`.
-- `sea_mile.matching`: `decide_exact_match`, `ExactMatchDecision`, `MatchCandidate`, `MatchPolicy`, `generate_source_aware_candidates`.
+- `sea_mile.matching`: `decide_exact_match`, `ExactMatchDecision`, `MatchCandidate`, `MatchPolicy`.
 - `sea_mile.ports`: `PortSearchResult`, `NearbyPortResult`, `NearbyPortGroup`.
 - `sea_mile.canonical`: `assign_canonical_ids`, `assign_canonical_ids_with_evidence`, `CanonicalEvidence`.
 - `sea_mile.routing`: `RouteQualityFlag`, `RouteQualityPolicy`, `assess_route_length`.
 - `sea_mile.build`: `build_reference_registry`, `download_reference_data`.
+- `sea_mile.kml`: `to_kml_string`, `write_route_kml`.
+- `sea_mile.geoparquet`: `write_ports_geoparquet`, `write_route_geoparquet`.
 
 ## Data lifecycle
 
@@ -227,18 +230,6 @@ by hundreds of nautical miles. Candidate coordinates allow
 of selecting a conflicting record. Call `decide_exact_match` directly when
 candidate ID lists are already available.
 
-### Matching pandas frames and large files
-
-`generate_source_aware_candidates` accepts an optional `MatchPolicy` to
-control fuzzy score cutoffs and candidate limits:
-
-```python
-from sea_mile.matching import generate_source_aware_candidates, MatchPolicy
-
-policy = MatchPolicy(fuzzy_score_cutoff=75, max_strong_candidates=10)
-candidates = generate_source_aware_candidates(queries, aliases, policy=policy)
-```
-
 `match_series` takes a pandas Series of names and returns the same `BatchMatchResult`
 list as `match_names`. It reads a missing cell as an empty name.
 
@@ -419,8 +410,7 @@ URL redirects to `/docs`, and `GET /v1/livez` returns the service name, liveness
 status, and installed package version. `GET /v1/readyz` probes the dependencies
 a route request needs and returns `503` when any is unusable; `SeaRouter`
 exposes the same probe as `check_ready()`, which returns `ReadinessCheck`
-records without computing a route. `GET /healthz` is a deprecated alias of
-`/v1/livez` and is removed in 2.0.
+records without computing a route.
 
 The `GET /v1/route` endpoint accepts `origin`, `destination`, and optional
 `origin_country` and `destination_country` query parameters. It resolves both
@@ -461,6 +451,34 @@ application uses the bundled registry.
 Folium preview. The route geometry crosses the visualization boundary as
 `LonLat(longitude, latitude)` before Folium receives its required latitude,
 longitude locations. Install the `map` and `routing` extras.
+
+`sea-mile route ORIGIN DESTINATION --kml route.kml` writes a KML document
+suitable for Google Earth and GIS tools. `sea-mile export --format kml` exports
+matching port records. The KML module (`sea_mile.kml`) exposes `to_kml_string`
+and `write_route_kml` for programmatic access:
+
+```python
+from sea_mile.kml import to_kml_string, write_route_kml
+
+kml_str = to_kml_string(route)          # SeaRoute or SequenceSeaRoute
+write_route_kml(seq, "voyage.kml")      # writes to disk
+```
+
+`sea-mile export --format geoparquet --output ports.geoparquet` exports matching
+port records as an OGC GeoParquet file. `sea_mile.geoparquet` provides
+`write_ports_geoparquet` and `write_route_geoparquet`:
+
+```python
+from sea_mile.geoparquet import write_ports_geoparquet, write_route_geoparquet
+
+write_route_geoparquet(route, "route.geoparquet")   # LineString WKB geometry
+write_ports_geoparquet(ports, "ports.geoparquet")   # Point WKB geometry
+```
+
+GeoParquet files use OGC WKB encoding, CRS `OGC:CRS84` (lon/lat WGS84), and
+include a `geo` metadata key compliant with the GeoParquet 1.0.0 specification.
+`MultiLineString` routes (e.g. antimeridian-crossing) are encoded as WKB type 5.
+`pyarrow` is a core dependency and is always available in a standard installation.
 
 When opened directly as a `file://` URL, the HTML uses the embedded Natural
 Earth 110m coastline and does not request public raster tiles. When served over

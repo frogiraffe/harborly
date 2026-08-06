@@ -322,11 +322,12 @@ class BrailleWorldMap:
         groups: Sequence[PortGroup],
         *,
         selected: int | None = None,
-    ) -> None:
+    ) -> list[_Cluster]:
         """Plot port coordinates as braille dots with clustering.
 
         At low zoom levels, nearby ports are merged into clusters showing
         a count badge.  The selected port is always drawn in bright red.
+        Returns the clusters for callers that need the port-to-cell mapping.
         """
         clusters = _cluster_ports(
             groups,
@@ -362,6 +363,7 @@ class BrailleWorldMap:
                 for ox in (0, 1):
                     for oy in (0, 1):
                         self._canvas.set_pixel(px + ox, py + oy)
+        return clusters
 
     def clear(self) -> None:
         """Clear the canvas for re-rendering."""
@@ -379,21 +381,13 @@ class BrailleWorldMap:
         """
         self.clear()
         self.draw_coastlines()
-        self.draw_ports(groups, selected=selected)
+        clusters = self.draw_ports(groups, selected=selected)
 
         raw = self._canvas.render()
         lines = raw.split("\n")
 
         # Pre-compute port-to-cell mapping for O(1) color lookup.
         port_cells: dict[tuple[int, int], bool] = {}  # (col, row) -> is_selected
-        clusters = _cluster_ports(
-            groups,
-            self._pixel_width,
-            self._pixel_height,
-            zoom=self._zoom,
-            center_lat=self._center_lat,
-            center_lon=self._center_lon,
-        )
         for cl in clusters:
             is_sel = cl.selected_idx is not None
             col = cl.px // 2

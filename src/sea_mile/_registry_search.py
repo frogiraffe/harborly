@@ -180,7 +180,7 @@ def resolve_port_uncached(
     """Resolve an exact port match or code to a single Port."""
     if query in registry._by_id.index:
         return registry.get(query)
-    normalized_code = "".join(str(query).split()).upper()
+    normalized_code = normalize_unlocode(query)
     if len(normalized_code) == 5:
         locode_ports = registry.get_by_unlocode(normalized_code)
         if locode_ports:

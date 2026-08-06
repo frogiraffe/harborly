@@ -1,6 +1,6 @@
 """Liveness answers "is the process up"; readiness answers "can it serve".
 
-`/healthz` only ever answered the first question, so a server missing the
+Liveness only ever answers the first question, so a server missing the
 routing extra reported itself healthy and then failed every route request with
 a 503. A supervisor watching that endpoint had no way to tell the difference.
 """
@@ -129,15 +129,14 @@ async def _get(app, path: str) -> httpx.Response:
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("path", ["/v1/livez", "/healthz"])
-async def test_liveness_answers_while_dependencies_are_broken(registry, path) -> None:
+async def test_liveness_answers_while_dependencies_are_broken(registry) -> None:
     """A process that cannot route is still a process worth not restarting."""
 
     app = create_app(
         registry=registry, router=SeaRouter(_routing_backend=_UninstalledBackend())
     )
 
-    response = await _get(app, path)
+    response = await _get(app, "/v1/livez")
 
     assert response.status_code == 200
     assert response.json()["status"] == "ok"

@@ -1,7 +1,7 @@
 """Stable coordinate and distance quality rules."""
 
 from dataclasses import dataclass
-from math import asin, cos, radians, sin, sqrt
+from math import asin, cos, isfinite, radians, sin, sqrt
 from typing import Any
 
 _MEAN_EARTH_RADIUS_KM = 6371.0087714
@@ -59,3 +59,32 @@ def great_circle_nmi(
     # asin raise a math domain error.
     central_angle = 2 * asin(min(1.0, sqrt(haversine)))
     return _EARTH_RADIUS_NMI * central_angle
+
+
+def line_string_coordinates(geometry: object) -> list[tuple[float, float]]:
+    """Validate a GeoJSON LineString and return its finite lon/lat pairs.
+
+    Raises :exc:`ValueError` when the geometry is not a LineString, has fewer
+    than two coordinates, or holds a non-finite or out-of-range coordinate.
+    """
+
+    if not isinstance(geometry, dict) or geometry.get("type") != "LineString":
+        raise ValueError("expected a GeoJSON LineString geometry")
+    coordinates = geometry.get("coordinates")
+    if not isinstance(coordinates, (list, tuple)) or len(coordinates) < 2:
+        raise ValueError("LineString needs at least two coordinates")
+    points: list[tuple[float, float]] = []
+    for point in coordinates:
+        if not isinstance(point, (list, tuple)) or len(point) < 2:
+            raise ValueError("LineString contains an invalid coordinate")
+        try:
+            longitude = float(point[0])
+            latitude = float(point[1])
+        except (TypeError, ValueError) as error:
+            raise ValueError("LineString contains a non-numeric coordinate") from error
+        if not isfinite(latitude) or not isfinite(longitude):
+            raise ValueError("LineString contains a non-finite coordinate")
+        if not -90 <= latitude <= 90 or not -180 <= longitude <= 180:
+            raise ValueError("LineString contains an out-of-range coordinate")
+        points.append((longitude, latitude))
+    return points

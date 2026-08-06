@@ -93,3 +93,94 @@ sea-mile serve --host 127.0.0.1 --port 8000
 
 Open `http://127.0.0.1:8000/docs`. The root URL redirects there. See
 [HTTP service](API_SERVICE.md) before any non-local deployment.
+
+## Route avoiding a canal (PassageRestriction)
+
+From Python, use the `PassageRestriction` enum to route around blocked or restricted passages. For example, to avoid the Suez Canal and route via the Cape of Good Hope:
+
+```python
+from sea_mile import SeaRouter, PassageRestriction
+
+router = SeaRouter(restrictions=[PassageRestriction.SUEZ])
+```
+
+From the CLI:
+
+```bash
+sea-mile route TRMER DEHAM --restrictions suez
+```
+
+## Multi-leg voyage (route_sequence)
+
+To calculate a continuous sequence of routes connecting multiple points:
+
+```python
+seq = router.route_sequence([origin, mid, dest], speed_knots=14.0)
+
+# Access individual legs and aggregates
+print(seq.legs)
+print(seq.total_distance_nmi)
+print(seq.duration_days)
+
+# Export the entire voyage
+seq.write_kml('voyage.kml')
+```
+
+## Compute ETA for a voyage (speed_knots)
+
+You can compute the estimated time en route by supplying a vessel speed:
+
+```python
+route = router.route(origin, dest, speed_knots=14.0)
+
+print(route.duration_hours)
+print(route.duration_days)
+```
+
+If no speed is provided, `duration_hours` and `duration_days` will be `None`.
+
+## Export to KML and GeoParquet
+
+To export routes using the CLI:
+
+```bash
+# KML
+sea-mile route TRMER GRPIR --kml route.kml
+
+# GeoParquet (OGC WKB encoding, CRS OGC:CRS84, GeoParquet 1.0.0 spec)
+sea-mile export --format geoparquet --output ports.geoparquet --country TR
+```
+
+From Python:
+
+```python
+# KML
+from sea_mile.kml import write_route_kml
+write_route_kml(route, 'route.kml')
+
+# GeoParquet
+from sea_mile.geoparquet import write_route_geoparquet, write_ports_geoparquet
+write_route_geoparquet(route, 'route.geoparquet')
+write_ports_geoparquet(ports, 'ports.geoparquet')
+```
+
+## Concurrent routes with AsyncSeaRouter
+
+`AsyncSeaRouter` is a drop-in replacement for `SeaRouter` in asynchronous contexts.
+
+```python
+import asyncio
+from sea_mile import AsyncSeaRouter
+
+async def main():
+    router = AsyncSeaRouter()
+    
+    # Run multiple routes concurrently
+    routes = await asyncio.gather(
+        router.route(origin1, dest1),
+        router.route(origin2, dest2)
+    )
+    
+    # Or sequence them
+    seq = await router.route_sequence([origin, mid, dest])
+```

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from importlib.metadata import version
-from typing import NoReturn
 
 import httpx
 import pytest
@@ -44,11 +43,6 @@ class FakeRouter:
         )
 
 
-class MissingRoutingRouter:
-    def route(self, origin: Port, destination: Port) -> NoReturn:
-        raise ImportError("routing needs the 'routing' extra")
-
-
 @pytest.fixture
 def registry() -> PortRegistry:
     return PortRegistry(registry_frame(), alias_frame())
@@ -60,9 +54,8 @@ def anyio_backend() -> str:
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("path", ["/v1/route", "/route"])
 async def test_route_endpoint_returns_distance_and_geojson(
-    registry: PortRegistry, path: str
+    registry: PortRegistry,
 ) -> None:
     transport = httpx.ASGITransport(
         app=create_app(registry=registry, router=FakeRouter())
@@ -70,7 +63,7 @@ async def test_route_endpoint_returns_distance_and_geojson(
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get(
-            path,
+            "/v1/route",
             params={"origin": "WPI:1", "destination": "WPI:2"},
         )
 
@@ -94,55 +87,12 @@ async def test_route_endpoint_reports_unknown_ports(
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get(
-            "/route",
+            "/v1/route",
             params={"origin": "missing", "destination": "WPI:2"},
         )
 
     assert response.status_code == 404
     assert "no exact port match" in response.json()["error"]["message"]
-
-
-@pytest.mark.anyio
-async def test_the_deprecated_alias_answers_exactly_like_the_versioned_path(
-    registry: PortRegistry,
-) -> None:
-    """The alias exists for old callers, so it must not have its own behaviour."""
-
-    transport = httpx.ASGITransport(
-        app=create_app(registry=registry, router=MissingRoutingRouter())
-    )
-    params = {"origin": "WPI:1", "destination": "WPI:2"}
-
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        versioned = await client.get("/v1/route", params=params)
-        alias = await client.get("/route", params=params)
-
-    assert versioned.status_code == alias.status_code == 503
-    assert versioned.json() == alias.json()
-    assert alias.json()["error"]["code"] == "routing_unavailable"
-
-
-@pytest.mark.anyio
-@pytest.mark.parametrize(
-    ("alias", "successor"), [("/route", "/v1/route"), ("/healthz", "/v1/livez")]
-)
-async def test_a_deprecated_path_tells_its_caller_so(
-    registry: PortRegistry, alias: str, successor: str
-) -> None:
-    """A deprecation only recorded in OpenAPI is invisible to the caller using it."""
-
-    transport = httpx.ASGITransport(
-        app=create_app(registry=registry, router=FakeRouter())
-    )
-    params = {"origin": "WPI:1", "destination": "WPI:2"}
-
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        deprecated = await client.get(alias, params=params)
-        current = await client.get(successor, params=params)
-
-    assert deprecated.headers["deprecation"] == "true"
-    assert successor in deprecated.headers["link"]
-    assert "deprecation" not in current.headers
 
 
 @pytest.mark.anyio
@@ -167,7 +117,7 @@ async def test_health_endpoint_reports_package_version(registry: PortRegistry) -
     )
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get("/healthz")
+        response = await client.get("/v1/livez")
 
     assert response.status_code == 200
     assert response.json() == {
@@ -183,18 +133,14 @@ def test_openapi_documents_route_contract_and_errors(registry: PortRegistry) -> 
     assert schema["info"]["title"] == "sea-mile API"
     assert schema["info"]["version"] == version("sea-mile")
     assert set(schema["paths"]) == {
-        "/healthz",
-        "/route",
         "/v1/livez",
         "/v1/readyz",
         "/v1/route",
     }
-    assert schema["paths"]["/healthz"]["get"]["deprecated"] is True
 
     route = schema["paths"]["/v1/route"]["get"]
     assert route["tags"] == ["routing"]
     assert route.get("deprecated") is not True
-    assert schema["paths"]["/route"]["get"]["deprecated"] is True
     assert route["responses"]["200"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/RouteResponse"
     }

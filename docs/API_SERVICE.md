@@ -11,21 +11,10 @@
 - `GET /v1/route` resolves two bundled port identities and calculates one
   approximate route.
 
-`GET /route` and `GET /healthz` are deprecated aliases of `GET /v1/route` and
-`GET /v1/livez`. They behave identically and are removed in 2.0. Their
-responses carry `Deprecation: true` and a `Link` header naming the successor
-path, so a caller still using an old path hears about it without reading these
-docs:
-
-```
-Deprecation: true
-Link: </v1/route>; rel="successor-version"
-```
-
 ## Liveness and readiness
 
 They answer different questions, and conflating them was a real gap: a server
-without the `routing` extra reported itself healthy on `/healthz` and then
+without the `routing` extra reported itself healthy on liveness and then
 failed every route request, so a supervisor could not tell the two apart.
 
 `/v1/livez` says the process is up. It says nothing about dependencies and
@@ -39,7 +28,7 @@ would only replace a process that is fine.
 {
   "service": "sea-mile",
   "status": "ready",
-  "version": "1.6.0",
+  "version": "1.0.0",
   "checks": [
     {"name": "port_registry", "passed": true, "detail": "20070 records"},
     {"name": "routing_backend", "passed": true, "detail": "searoute 1.6.0"},
