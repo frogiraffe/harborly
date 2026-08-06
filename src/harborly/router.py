@@ -901,6 +901,11 @@ class AsyncSeaRouter:
                     close()
 
         producer = asyncio.create_task(asyncio.to_thread(produce))
+
+        def consume_producer_exception(task: asyncio.Task[None]) -> None:
+            with suppress(asyncio.CancelledError):
+                task.exception()
+
         try:
             while True:
                 event = await queue.get()
@@ -914,8 +919,9 @@ class AsyncSeaRouter:
             with pending_lock:
                 if pending is not None:
                     pending.cancel()
-            with suppress(asyncio.CancelledError):
-                await producer
+            # A thread cannot interrupt an in-flight synchronous next() call.
+            # Let it observe stop after that call instead of delaying cancellation.
+            producer.add_done_callback(consume_producer_exception)
 
     async def check_ready(self) -> tuple[ReadinessCheck, ...]:
         import asyncio

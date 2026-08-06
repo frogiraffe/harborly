@@ -28,12 +28,16 @@ class _PausedEdgeRouter:
     def __init__(self) -> None:
         self.waiting = threading.Event()
         self.release = threading.Event()
+        self.closed = threading.Event()
 
     def iter_distance_edges(self, _ports, *, max_workers=None):
-        yield (0, 1, 12.5)
-        self.waiting.set()
-        self.release.wait()
-        yield (1, 0, 21.5)
+        try:
+            yield (0, 1, 12.5)
+            self.waiting.set()
+            self.release.wait()
+            yield (1, 0, 21.5)
+        finally:
+            self.closed.set()
 
 
 class _ManyEdgeRouter:
@@ -153,6 +157,28 @@ async def test_async_edge_iteration_yields_before_a_paused_producer_completes() 
     finally:
         sync_router.release.set()
         await first_edge
+        await stream.aclose()
+
+
+@pytest.mark.anyio
+async def test_async_edge_cancellation_does_not_wait_for_blocked_sync_next() -> None:
+    sync_router = _PausedEdgeRouter()
+    stream = AsyncSeaRouter(sync_router).iter_distance_edges([])
+
+    try:
+        assert await asyncio.wait_for(anext(stream), timeout=1) == (0, 1, 12.5)
+        await asyncio.wait_for(asyncio.to_thread(sync_router.waiting.wait), timeout=1)
+
+        blocked_read = asyncio.create_task(anext(stream))
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(asyncio.shield(blocked_read), timeout=0.01)
+        blocked_read.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(blocked_read, timeout=0.1)
+    finally:
+        sync_router.release.set()
+        await asyncio.wait_for(asyncio.to_thread(sync_router.closed.wait), timeout=1)
         await stream.aclose()
 
 
