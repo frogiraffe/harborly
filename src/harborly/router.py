@@ -211,6 +211,7 @@ def _worker_initializer(
     quality_policy: RouteQualityPolicy | None,
     circuit_breaker_policy: CircuitBreakerPolicy | None,
     routing_backend: _RoutingBackend | None,
+    cache_failure_policy: CacheFailurePolicy,
 ) -> None:
     """Pre-import dependencies and initialize a worker-local router instance.
 
@@ -227,6 +228,7 @@ def _worker_initializer(
         retry_policy=retry_policy,
         quality_policy=quality_policy,
         circuit_breaker_policy=circuit_breaker_policy,
+        cache_failure_policy=cache_failure_policy,
         _routing_backend=routing_backend,
     )
 
@@ -726,6 +728,7 @@ class SeaRouter:
             self._quality_policy,
             self._circuit_breaker.policy if self._circuit_breaker else None,
             self._backend,
+            self._cache_failure_policy,
         )
         batches = iter(
             _matrix_task_batches(ports, pairs, batch_size=_MATRIX_BATCH_SIZE)
