@@ -114,6 +114,12 @@ def _remove_route_export_files(paths: Sequence[Path]) -> None:
             path.unlink(missing_ok=True)
 
 
+def _validate_route_output_paths(paths: Sequence[Path | None]) -> None:
+    targets = [path.resolve(strict=False) for path in paths if path is not None]
+    if len(targets) != len(set(targets)):
+        raise ValueError("route output paths must be distinct")
+
+
 def _write_route_exports(
     exports: Sequence[tuple[str, Path, Callable[[Path], None]]],
 ) -> None:
@@ -480,6 +486,7 @@ def _cmd_route(args: argparse.Namespace) -> int:
 
     if args.via and args.html_map:
         raise ValueError("route --via cannot be combined with --html-map")
+    _validate_route_output_paths((args.geojson, args.kml, args.html_map))
 
     requirements = [("routing", "searoute")]
     if args.html_map:

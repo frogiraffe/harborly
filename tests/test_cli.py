@@ -358,6 +358,73 @@ def test_route_html_map_preflight_keeps_required_extras_together(
     assert "--extra routing --extra map" in captured.err
 
 
+def test_route_rejects_relative_aliases_for_duplicate_exports(
+    tmp_path, capsys, monkeypatch
+) -> None:
+    output = tmp_path / "route.out"
+    output.write_text("existing route", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "harborly.cli._require_optional_extras",
+        lambda *_args: pytest.fail("extras should not be checked"),
+    )
+    monkeypatch.setattr(
+        "harborly.cli._load_registry",
+        lambda _args: pytest.fail("registry should not load"),
+    )
+
+    assert (
+        main(
+            [
+                "route",
+                "A",
+                "C",
+                "--geojson",
+                "route.out",
+                "--kml",
+                "./route.out",
+            ]
+        )
+        == 2
+    )
+
+    assert "route output paths must be distinct" in capsys.readouterr().err
+    assert output.read_text(encoding="utf-8") == "existing route"
+
+
+def test_route_rejects_html_map_collision_before_routing(
+    tmp_path, capsys, monkeypatch
+) -> None:
+    output = tmp_path / "route.out"
+    output.write_text("existing route", encoding="utf-8")
+    monkeypatch.setattr(
+        "harborly.cli._require_optional_extras",
+        lambda *_args: pytest.fail("extras should not be checked"),
+    )
+    monkeypatch.setattr(
+        "harborly.cli._load_registry",
+        lambda _args: pytest.fail("registry should not load"),
+    )
+
+    assert (
+        main(
+            [
+                "route",
+                "A",
+                "C",
+                "--geojson",
+                str(output),
+                "--html-map",
+                str(tmp_path / "." / "route.out"),
+            ]
+        )
+        == 2
+    )
+
+    assert "route output paths must be distinct" in capsys.readouterr().err
+    assert output.read_text(encoding="utf-8") == "existing route"
+
+
 def test_route_html_map_write_failure_does_not_emit_success(
     tmp_path, capsys, monkeypatch
 ) -> None:
