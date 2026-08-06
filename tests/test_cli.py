@@ -1295,7 +1295,147 @@ def test_route_sequence_outputs(monkeypatch, tmp_path, capsys) -> None:
     assert "duration_hours: 2.00" in output
     assert json.loads(geojson_path.read_text())["type"] == "FeatureCollection"
     assert len(json.loads(geojson_path.read_text())["features"]) == 2
-    assert result.kml_paths == [kml_path]
+    assert len(result.kml_paths) == 1
+    assert Path(result.kml_paths[0]).parent == kml_path.parent
+    assert Path(result.kml_paths[0]) != kml_path
+
+
+def _set_sequence_command_result(monkeypatch, result: _SequenceCommandResult) -> None:
+    origin, via, destination = object(), object(), object()
+    registry = _RouteCommandRegistry({"A": origin, "B": via, "C": destination})
+
+    class FakeRouter:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def route_sequence(
+            self, *_args: object, **_kwargs: object
+        ) -> _SequenceCommandResult:
+            return result
+
+    monkeypatch.setattr("harborly.cli._require_optional_extras", lambda *_args: True)
+    monkeypatch.setattr("harborly.cli._load_registry", lambda _args: registry)
+    monkeypatch.setattr("harborly.router.SeaRouter", FakeRouter)
+    monkeypatch.setattr("harborly.router.SequenceSeaRoute", _SequenceCommandResult)
+
+
+@pytest.mark.parametrize("existing", [False, True])
+def test_route_sequence_export_failure_preserves_output_state(
+    monkeypatch, tmp_path, capsys, existing
+) -> None:
+    result = _SequenceCommandResult()
+
+    def fail_write_kml(_path: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(result, "write_kml", fail_write_kml)
+    _set_sequence_command_result(monkeypatch, result)
+    geojson_path = tmp_path / "trip.geojson"
+    kml_path = tmp_path / "trip.kml"
+    if existing:
+        geojson_path.write_text("old geojson", encoding="utf-8")
+        kml_path.write_text("old kml", encoding="utf-8")
+
+    assert (
+        main(
+            [
+                "route",
+                "A",
+                "C",
+                "--via",
+                "B",
+                "--geojson",
+                str(geojson_path),
+                "--kml",
+                str(kml_path),
+            ]
+        )
+        == 2
+    )
+
+    assert "could not write KML" in capsys.readouterr().err
+    if existing:
+        assert geojson_path.read_text(encoding="utf-8") == "old geojson"
+        assert kml_path.read_text(encoding="utf-8") == "old kml"
+    else:
+        assert not geojson_path.exists()
+        assert not kml_path.exists()
+    assert not list(tmp_path.glob(".trip.*"))
+
+
+def test_route_sequence_geojson_write_failure_uses_cli_error_path(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    result = _SequenceCommandResult()
+
+    def fail_write_text(_self: Path, *_args: object, **_kwargs: object) -> int:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(Path, "write_text", fail_write_text)
+    _set_sequence_command_result(monkeypatch, result)
+    geojson_path = tmp_path / "trip.geojson"
+
+    assert (
+        main(
+            [
+                "route",
+                "A",
+                "C",
+                "--via",
+                "B",
+                "--geojson",
+                str(geojson_path),
+            ]
+        )
+        == 2
+    )
+
+    assert "could not write GeoJSON" in capsys.readouterr().err
+    assert not geojson_path.exists()
+    assert not list(tmp_path.glob(".trip.*"))
+
+
+def test_route_sequence_publish_failure_rolls_back_new_outputs(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    result = _SequenceCommandResult()
+    _set_sequence_command_result(monkeypatch, result)
+    geojson_path = tmp_path / "trip.geojson"
+    kml_path = tmp_path / "trip.kml"
+    original_replace = Path.replace
+    publishes = 0
+
+    def fail_second_publish(source: Path, target: Path) -> Path:
+        nonlocal publishes
+        if target in {geojson_path, kml_path}:
+            publishes += 1
+            if publishes == 2:
+                raise OSError("disk full")
+        return original_replace(source, target)
+
+    monkeypatch.setattr(Path, "replace", fail_second_publish)
+
+    assert (
+        main(
+            [
+                "route",
+                "A",
+                "C",
+                "--via",
+                "B",
+                "--geojson",
+                str(geojson_path),
+                "--kml",
+                str(kml_path),
+            ]
+        )
+        == 2
+    )
+
+    assert "could not write KML" in capsys.readouterr().err
+    assert not geojson_path.exists()
+    assert not kml_path.exists()
+    assert not list(tmp_path.glob(".trip.*"))
 
 
 def test_route_via_failure_writes_no_partial_output(

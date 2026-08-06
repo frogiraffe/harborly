@@ -11,8 +11,10 @@ import json
 import logging
 import os
 import sys
+import tempfile
 from collections import Counter
 from collections.abc import Callable, Iterator, Sequence
+from contextlib import suppress
 from importlib.metadata import PackageNotFoundError, version
 from importlib.util import find_spec
 from pathlib import Path
@@ -95,6 +97,68 @@ def _endpoint_port(registry: PortRegistry, value: str, country: str | None) -> P
     from harborly.router import _coordinate_port
 
     return _coordinate_port(value, coordinate[0], coordinate[1])
+
+
+def _route_export_temp_path(target: Path) -> Path:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, path = tempfile.mkstemp(
+        prefix=f".{target.name}.", suffix=".tmp", dir=target.parent
+    )
+    os.close(descriptor)
+    return Path(path)
+
+
+def _remove_route_export_files(paths: Sequence[Path]) -> None:
+    for path in paths:
+        with suppress(OSError):
+            path.unlink(missing_ok=True)
+
+
+def _write_route_exports(
+    exports: Sequence[tuple[str, Path, Callable[[Path], None]]],
+) -> None:
+    staged: list[tuple[str, Path, Path]] = []
+    backups: list[tuple[Path, Path]] = []
+    original_targets: set[Path] = set()
+    published_targets: set[Path] = set()
+    label = "route export"
+    target = Path()
+    try:
+        for label, target, write_export in exports:
+            temporary = _route_export_temp_path(target)
+            staged.append((label, target, temporary))
+            write_export(temporary)
+
+        for export_label, target, _ in staged:
+            label = export_label
+            if target.exists():
+                backup = _route_export_temp_path(target)
+                try:
+                    target.replace(backup)
+                except OSError:
+                    _remove_route_export_files([backup])
+                    raise
+                backups.append((target, backup))
+                original_targets.add(target)
+
+        for export_label, target, temporary in staged:
+            label = export_label
+            temporary.replace(target)
+            published_targets.add(target)
+    except OSError as error:
+        for original, backup in reversed(backups):
+            with suppress(OSError):
+                backup.replace(original)
+        _remove_route_export_files(
+            [temporary for _, _, temporary in staged]
+            + [target for target in published_targets if target not in original_targets]
+        )
+        raise ValueError(f"could not write {label} to {target}: {error}") from error
+    except Exception:
+        _remove_route_export_files([temporary for _, _, temporary in staged])
+        raise
+    else:
+        _remove_route_export_files([backup for _, backup in backups])
 
 
 def _ports_to_csv(ports: Sequence[Port]) -> str:
@@ -461,22 +525,22 @@ def _cmd_route(args: argparse.Namespace) -> int:
             [extra for extra, _ in requirements],
         )
         return 2
+    route_exports: list[tuple[str, Path, Callable[[Path], None]]] = []
     if args.geojson:
-        args.geojson.parent.mkdir(parents=True, exist_ok=True)
         geojson = (
             result.to_geojson_feature_collection()
             if isinstance(result, SequenceSeaRoute)
             else result.to_geojson_feature()
         )
-        args.geojson.write_text(
-            json.dumps(geojson, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        geojson_text = json.dumps(geojson, ensure_ascii=False, indent=2) + "\n"
+
+        def write_geojson(path: Path) -> None:
+            path.write_text(geojson_text, encoding="utf-8")
+
+        route_exports.append(("GeoJSON", args.geojson, write_geojson))
     if args.kml:
-        try:
-            result.write_kml(args.kml)
-        except OSError as error:
-            raise ValueError(f"could not write KML to {args.kml}: {error}") from error
+        route_exports.append(("KML", args.kml, result.write_kml))
+    _write_route_exports(route_exports)
     if args.html_map and html_map_writer is not None:
         assert not isinstance(result, SequenceSeaRoute)
         try:
