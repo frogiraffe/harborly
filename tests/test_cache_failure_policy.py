@@ -16,6 +16,7 @@ import logging
 
 import pytest
 
+import harborly.router as router_module
 from harborly._routing_backend import BackendRoute
 from harborly.exceptions import RoutingError, RoutingErrorReason
 from harborly.ports import Port
@@ -182,3 +183,51 @@ def test_a_healthy_cache_is_used_under_both_policies(install_cache):
 
         assert result.distance_nmi == 1000.0
         assert backend.call_count == 0, f"{policy} recomputed a cached route"
+
+
+def test_matrix_workers_receive_the_parent_cache_failure_policy(monkeypatch):
+    class CompletedBatch:
+        def __init__(self, tasks) -> None:
+            self.tasks = tasks
+
+        def result(self):
+            return [(row, column, 1.0) for row, column, _, _ in self.tasks]
+
+    class RecordingExecutor:
+        instance = None
+
+        def __init__(self, **kwargs) -> None:
+            self.initializer = kwargs["initializer"]
+            self.initargs = kwargs["initargs"]
+            RecordingExecutor.instance = self
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def submit(self, _function, tasks):
+            return CompletedBatch(tasks)
+
+    captured: dict[str, object] = {}
+
+    class RecordingWorkerRouter:
+        def __init__(self, **kwargs) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setattr(router_module, "ProcessPoolExecutor", RecordingExecutor)
+    router = SeaRouter(
+        _routing_backend=_StubBackend(),
+        cache_failure_policy=CacheFailurePolicy.BEST_EFFORT,
+    )
+    list(router.iter_distance_edges([_port("A"), _port("B")], max_workers=2))
+
+    executor = RecordingExecutor.instance
+    assert executor is not None
+    assert executor.initargs[-1] is CacheFailurePolicy.BEST_EFFORT
+
+    monkeypatch.setattr(router_module, "SeaRouter", RecordingWorkerRouter)
+    executor.initializer(*executor.initargs)
+
+    assert captured["cache_failure_policy"] is CacheFailurePolicy.BEST_EFFORT
