@@ -52,6 +52,7 @@ _LOGGER = logging.getLogger(__name__)
 _DEFAULT_MATRIX_WORKER_LIMIT = 4
 _MATRIX_BATCH_SIZE = 32
 _MATRIX_PENDING_BATCHES_PER_WORKER = 2
+_ASYNC_EDGE_QUEUE_MAXSIZE = 1
 
 
 def _coordinate_port(label: str, latitude: float, longitude: float) -> Port:
@@ -832,15 +833,69 @@ class AsyncSeaRouter:
         max_workers: int | None = None,
     ) -> Any:
         import asyncio
+        import threading
 
-        def fetch_edges() -> list[tuple[int, int, float]]:
-            return list(
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue[object] = asyncio.Queue(maxsize=_ASYNC_EDGE_QUEUE_MAXSIZE)
+        complete = object()
+        stop = threading.Event()
+        pending_lock = threading.Lock()
+        pending: Future[None] | None = None
+
+        def submit(event: object) -> bool:
+            nonlocal pending
+            with pending_lock:
+                if stop.is_set():
+                    return False
+                pending = asyncio.run_coroutine_threadsafe(queue.put(event), loop)
+            try:
+                pending.result()
+            except BaseException:
+                if stop.is_set():
+                    return False
+                raise
+            finally:
+                with pending_lock:
+                    pending = None
+            return not stop.is_set()
+
+        def produce() -> None:
+            iterator = iter(
                 self.sync_router.iter_distance_edges(ports, max_workers=max_workers)
             )
+            try:
+                while not stop.is_set():
+                    try:
+                        edge = next(iterator)
+                    except StopIteration:
+                        submit(complete)
+                        return
+                    except BaseException as error:
+                        submit(error)
+                        return
+                    if not submit(edge):
+                        return
+            finally:
+                close = getattr(iterator, "close", None)
+                if close is not None:
+                    close()
 
-        edges = await asyncio.to_thread(fetch_edges)
-        for edge in edges:
-            yield edge
+        producer = asyncio.create_task(asyncio.to_thread(produce))
+        try:
+            while True:
+                event = await queue.get()
+                if event is complete:
+                    return
+                if isinstance(event, BaseException):
+                    raise event
+                yield event
+        finally:
+            stop.set()
+            with pending_lock:
+                if pending is not None:
+                    pending.cancel()
+            with suppress(asyncio.CancelledError):
+                await producer
 
     async def check_ready(self) -> tuple[ReadinessCheck, ...]:
         import asyncio
