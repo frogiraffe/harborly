@@ -5,6 +5,7 @@ import json
 import sqlite3
 import sys
 from contextlib import closing
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -1204,3 +1205,164 @@ def test_route_cli_rejects_invalid_restriction(capsys) -> None:
 
     assert exc_info.value.code == 2
     assert "invalid choice" in capsys.readouterr().err
+
+
+class _SequenceCommandResult:
+    def __init__(self) -> None:
+        self.kml_paths: list[object] = []
+
+    def summary(self) -> dict[str, object]:
+        return {
+            "total_distance_nmi": 30.0,
+            "duration_hours": 2.0,
+            "legs": [{"origin": {"name": "A"}}, {"origin": {"name": "B"}}],
+        }
+
+    def to_geojson_feature_collection(self) -> dict[str, object]:
+        return {"type": "FeatureCollection", "features": [{}, {}]}
+
+    def write_kml(self, path: object) -> None:
+        self.kml_paths.append(path)
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        Path(path).write_text("<kml><Placemark/><Placemark/></kml>", encoding="utf-8")
+
+
+def test_route_sequence_outputs(monkeypatch, tmp_path, capsys) -> None:
+    origin, via, destination = object(), object(), object()
+    registry = _RouteCommandRegistry({"A": origin, "B": via, "C": destination})
+    result = _SequenceCommandResult()
+
+    class FakeRouter:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def route_sequence(
+            self, ports: list[object], **_kwargs: object
+        ) -> _SequenceCommandResult:
+            assert ports == [origin, via, destination]
+            return result
+
+    monkeypatch.setattr("harborly.cli._require_optional_extras", lambda *_args: True)
+    monkeypatch.setattr("harborly.cli._load_registry", lambda _args: registry)
+    monkeypatch.setattr("harborly.router.SeaRouter", FakeRouter)
+
+    assert main(["route", "A", "C", "--via", "B", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["data"] == result.summary()
+
+    geojson_path = tmp_path / "trip.geojson"
+    kml_path = tmp_path / "trip.kml"
+    assert (
+        main(
+            [
+                "route",
+                "A",
+                "C",
+                "--via",
+                "B",
+                "--geojson",
+                str(geojson_path),
+                "--kml",
+                str(kml_path),
+            ]
+        )
+        == 0
+    )
+    output = capsys.readouterr().out
+    assert "leg 1:" in output
+    assert "leg 2:" in output
+    assert "total_distance_nmi: 30.00" in output
+    assert "duration_hours: 2.00" in output
+    assert json.loads(geojson_path.read_text())["type"] == "FeatureCollection"
+    assert len(json.loads(geojson_path.read_text())["features"]) == 2
+    assert result.kml_paths == [kml_path]
+
+
+def test_route_via_failure_writes_no_partial_output(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    origin, via, destination = object(), object(), object()
+    registry = _RouteCommandRegistry({"A": origin, "B": via, "C": destination})
+
+    class FakeRouter:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def route_sequence(self, *_args: object, **_kwargs: object) -> object:
+            raise ValueError("leg failed")
+
+    monkeypatch.setattr("harborly.cli._require_optional_extras", lambda *_args: True)
+    monkeypatch.setattr("harborly.cli._load_registry", lambda _args: registry)
+    monkeypatch.setattr("harborly.router.SeaRouter", FakeRouter)
+    geojson_path = tmp_path / "failed.geojson"
+    kml_path = tmp_path / "failed.kml"
+
+    assert (
+        main(
+            [
+                "route",
+                "A",
+                "C",
+                "--via",
+                "B",
+                "--geojson",
+                str(geojson_path),
+                "--kml",
+                str(kml_path),
+            ]
+        )
+        == 2
+    )
+    assert "leg failed" in capsys.readouterr().err
+    assert not geojson_path.exists()
+    assert not kml_path.exists()
+
+
+def test_route_ambiguous_via_writes_no_output(monkeypatch, tmp_path, capsys) -> None:
+    origin, destination = object(), object()
+    registry = _RouteCommandRegistry(
+        {"A": origin, "B": ValueError("ambiguous"), "C": destination}
+    )
+
+    def resolve(value: str, *, country_code: str | None = None) -> object:
+        result = registry.ports[value]
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    monkeypatch.setattr(registry, "resolve", resolve)
+    monkeypatch.setattr("harborly.cli._require_optional_extras", lambda *_args: True)
+    monkeypatch.setattr("harborly.cli._load_registry", lambda _args: registry)
+    monkeypatch.setattr(
+        "harborly.router.SeaRouter",
+        lambda **_kwargs: pytest.fail("router should not construct"),
+    )
+    output = tmp_path / "ambiguous.geojson"
+
+    assert main(["route", "A", "C", "--via", "B", "--geojson", str(output)]) == 2
+    assert "ambiguous" in capsys.readouterr().err
+    assert not output.exists()
+
+
+def test_route_via_rejects_html_map_before_routing(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    monkeypatch.setattr(
+        "harborly.cli._load_registry",
+        lambda _args: pytest.fail("registry should not load"),
+    )
+
+    assert (
+        main(
+            [
+                "route",
+                "A",
+                "C",
+                "--via",
+                "B",
+                "--html-map",
+                str(tmp_path / "route.html"),
+            ]
+        )
+        == 2
+    )
+    assert "--via cannot be combined with --html-map" in capsys.readouterr().err
