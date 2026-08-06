@@ -414,6 +414,9 @@ def _cmd_near(args: argparse.Namespace) -> int:
 def _cmd_route(args: argparse.Namespace) -> int:
     from harborly.router import SeaRouter
 
+    if args.via and args.html_map:
+        raise ValueError("route --via cannot be combined with --html-map")
+
     requirements = [("routing", "searoute")]
     if args.html_map:
         requirements.append(("map", "folium"))
@@ -459,9 +462,13 @@ def _cmd_route(args: argparse.Namespace) -> int:
         return 2
     if args.geojson:
         args.geojson.parent.mkdir(parents=True, exist_ok=True)
+        geojson = (
+            result.to_geojson_feature_collection()
+            if via_ports
+            else result.to_geojson_feature()
+        )
         args.geojson.write_text(
-            json.dumps(result.to_geojson_feature(), ensure_ascii=False, indent=2)
-            + "\n",
+            json.dumps(geojson, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
     if args.kml:
@@ -478,6 +485,21 @@ def _cmd_route(args: argparse.Namespace) -> int:
             ) from error
     if args.json:
         _emit_json(args, result.summary())
+    elif via_ports:
+        for index, leg in enumerate(result.legs, start=1):
+            print(
+                f"leg {index}: {leg.origin.name} ({leg.origin.registry_id}) -> "
+                f"{leg.destination.name} ({leg.destination.registry_id})"
+            )
+            print(f"  distance_nmi: {leg.distance_nmi:.2f}")
+        print(f"total_distance_nmi: {result.total_distance_nmi:.2f}")
+        if result.duration_hours is not None:
+            print(f"duration_hours: {result.duration_hours:.2f}")
+            print(f"duration_days: {result.duration_days:.2f}")
+        if args.geojson:
+            print(f"geojson: {args.geojson}")
+        if args.kml:
+            print(f"kml: {args.kml}")
     else:
         detour = (
             f"{result.detour_ratio:.3f}" if result.detour_ratio is not None else "-"

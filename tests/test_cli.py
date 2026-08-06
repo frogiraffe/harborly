@@ -1210,6 +1210,13 @@ def test_route_cli_rejects_invalid_restriction(capsys) -> None:
 class _SequenceCommandResult:
     def __init__(self) -> None:
         self.kml_paths: list[object] = []
+        self.legs = (
+            _SequenceCommandLeg("A", "B", 10.0),
+            _SequenceCommandLeg("B", "C", 20.0),
+        )
+        self.total_distance_nmi = 30.0
+        self.duration_hours = 2.0
+        self.duration_days = 0.08
 
     def summary(self) -> dict[str, object]:
         return {
@@ -1225,6 +1232,19 @@ class _SequenceCommandResult:
         self.kml_paths.append(path)
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         Path(path).write_text("<kml><Placemark/><Placemark/></kml>", encoding="utf-8")
+
+
+class _SequenceCommandLeg:
+    def __init__(self, origin: str, destination: str, distance_nmi: float) -> None:
+        self.origin = _SequenceCommandPort(origin)
+        self.destination = _SequenceCommandPort(destination)
+        self.distance_nmi = distance_nmi
+
+
+class _SequenceCommandPort:
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.registry_id = name
 
 
 def test_route_sequence_outputs(monkeypatch, tmp_path, capsys) -> None:
