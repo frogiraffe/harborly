@@ -40,6 +40,7 @@ from harborly.ports import Port, PortRegistry
 from harborly.route_cache import RouteCache
 from harborly.routing import (
     CacheFailurePolicy,
+    PassageRestriction,
     ReadinessCheck,
     RetryPolicy,
     RouteQualityFlag,
@@ -296,7 +297,7 @@ class SeaRouter:
         *,
         algorithm: str = "astar",
         backend: str = "networkx",
-        restrictions: Iterable[str] = ("northwest",),
+        restrictions: Iterable[str | PassageRestriction] = ("northwest",),
         cache_path: str | Path | None = None,
         retry_policy: RetryPolicy | None = None,
         quality_policy: RouteQualityPolicy | None = None,
