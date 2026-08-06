@@ -795,6 +795,23 @@ class AsyncSeaRouter:
             self.sync_router.route_sequence, ports, speed_knots=speed_knots
         )
 
+    async def route_ids(
+        self,
+        registry: PortRegistry,
+        origin_id: str,
+        destination_id: str,
+    ) -> SeaRoute:
+        import asyncio
+
+        return await asyncio.to_thread(
+            self.sync_router.route_ids, registry, origin_id, destination_id
+        )
+
+    async def route_many(self, pairs: Sequence[tuple[Port, Port]]) -> list[SeaRoute]:
+        import asyncio
+
+        return await asyncio.to_thread(self.sync_router.route_many, pairs)
+
     async def route_coordinates(
         self,
         origin_latitude: float,
