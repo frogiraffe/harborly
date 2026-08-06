@@ -63,6 +63,25 @@ class _FailingEdgeRouter:
         raise self.error
 
 
+class _ParityRouter:
+    def __init__(self, result: object, error: Exception | None = None) -> None:
+        self.result = result
+        self.error = error
+        self.calls: list[tuple[object, ...]] = []
+
+    def route_ids(self, registry, origin_id, destination_id):
+        self.calls.append(("route_ids", registry, origin_id, destination_id))
+        if self.error is not None:
+            raise self.error
+        return self.result
+
+    def route_many(self, pairs):
+        self.calls.append(("route_many", pairs))
+        if self.error is not None:
+            raise self.error
+        return self.result
+
+
 @pytest.mark.anyio
 async def test_async_router_route() -> None:
     origin = make_port("TEST:1", "Mersin", 36.8, 34.65)
@@ -163,6 +182,44 @@ async def test_async_edge_iteration_preserves_order_and_exception_identity() -> 
         await anext(stream)
 
     assert exc_info.value is error
+
+
+@pytest.mark.anyio
+async def test_async_router_route_ids_delegates_once_with_exact_result() -> None:
+    registry = object()
+    result = object()
+    sync_router = _ParityRouter(result)
+
+    assert (
+        await AsyncSeaRouter(sync_router).route_ids(registry, "origin", "target")
+        is result
+    )
+    assert sync_router.calls == [("route_ids", registry, "origin", "target")]
+
+
+@pytest.mark.anyio
+async def test_async_router_route_many_delegates_once_and_preserves_order() -> None:
+    pairs = ((object(), object()), (object(), object()))
+    result = [object(), object()]
+    sync_router = _ParityRouter(result)
+
+    assert await AsyncSeaRouter(sync_router).route_many(pairs) is result
+    assert sync_router.calls == [("route_many", pairs)]
+
+
+@pytest.mark.anyio
+async def test_async_router_parity_delegates_preserve_exception_identity() -> None:
+    route_ids_error = RuntimeError("route ids failed")
+    with pytest.raises(RuntimeError) as route_ids_exc:
+        await AsyncSeaRouter(_ParityRouter(object(), route_ids_error)).route_ids(
+            object(), "origin", "target"
+        )
+    assert route_ids_exc.value is route_ids_error
+
+    route_many_error = RuntimeError("route many failed")
+    with pytest.raises(RuntimeError) as route_many_exc:
+        await AsyncSeaRouter(_ParityRouter(object(), route_many_error)).route_many(())
+    assert route_many_exc.value is route_many_error
 
 
 @pytest.mark.anyio
