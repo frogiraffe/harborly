@@ -12,9 +12,9 @@ import json
 
 import pandas as pd
 
-from sea_mile._registry_data import bundled_data_directory
-from sea_mile.build.registry import registry_content_hash
-from sea_mile.canonical import assign_canonical_ids
+from harborly._registry_data import bundled_data_directory
+from harborly.build.registry import registry_content_hash
+from harborly.canonical import assign_canonical_ids
 
 
 def _bundled() -> tuple[pd.DataFrame, pd.DataFrame]:

@@ -3,21 +3,21 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from sea_mile._routing_backend import BackendRoute, RoutingConfig
-from sea_mile.coordinates import LatLon
-from sea_mile.ports import Port
-from sea_mile.router import SeaRouter
-from sea_mile.routing import RetryPolicy
+from harborly._routing_backend import BackendRoute, RoutingConfig
+from harborly.coordinates import LatLon
+from harborly.ports import Port
+from harborly.router import SeaRouter
+from harborly.routing import RetryPolicy
 
 # These will fail with ImportError until the circuit breaker is implemented.
 # That's the expected behavior for this commit.
 try:
-    from sea_mile._circuit_breaker import (
+    from harborly._circuit_breaker import (
         CircuitBreaker,
         CircuitBreakerPolicy,
         _CircuitState,
     )
-    from sea_mile.exceptions import RoutingError
+    from harborly.exceptions import RoutingError
 
     _IMPORT_OK = True
 except ImportError:
@@ -381,13 +381,13 @@ def test_cause_chain_preservation():
 
 
 def test_router_circuit_breaker_integration(monkeypatch):
-    from sea_mile.ports import Port
-    from sea_mile.router import RoutingErrorReason, SeaRouter
+    from harborly.ports import Port
+    from harborly.router import RoutingErrorReason, SeaRouter
 
     def mock_sleep(seconds):
         pass
 
-    monkeypatch.setattr("sea_mile.router.time.sleep", mock_sleep)
+    monkeypatch.setattr("harborly.router.time.sleep", mock_sleep)
 
     class FlakyBackend:
         def __init__(self):

@@ -4,7 +4,7 @@ import sys
 
 import pytest
 
-from sea_mile import Port, PortCoordinateError, SeaRouter
+from harborly import Port, PortCoordinateError, SeaRouter
 
 
 def port(
@@ -113,7 +113,7 @@ def test_router_rejects_out_of_range_coordinates() -> None:
 
 
 def test_passage_restriction_enum_integration() -> None:
-    from sea_mile import PassageRestriction
+    from harborly import PassageRestriction
 
     router = SeaRouter(
         restrictions=[PassageRestriction.SUEZ, PassageRestriction.PANAMA]

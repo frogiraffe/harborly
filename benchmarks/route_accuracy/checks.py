@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from benchmarks.route_accuracy.chokepoints import passages_used
-from sea_mile.geo import great_circle_nmi
+from harborly.geo import great_circle_nmi
 
 
 @dataclass(frozen=True, slots=True)

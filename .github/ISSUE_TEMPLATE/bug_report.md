@@ -19,7 +19,7 @@ case from real data is very welcome.
 
 ## Environment
 
-- sea-mile version:
+- harborly version:
 - Python version:
 - Operating system:
 - Installed extras (routing, tui, fast, analysis, api, map):

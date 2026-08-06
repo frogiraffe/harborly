@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from sea_mile import SeaRouter
-from sea_mile.kml import to_kml_string, write_route_kml
-from sea_mile.ports import Port
+from harborly import SeaRouter
+from harborly.kml import to_kml_string, write_route_kml
+from harborly.ports import Port
 
 
 def port(registry_id: str, name: str, latitude: float, longitude: float) -> Port:

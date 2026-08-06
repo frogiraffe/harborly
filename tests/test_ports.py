@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from sea_mile import (
+from harborly import (
     AmbiguousPortError,
     MatchPolicy,
     PortNotFoundError,
@@ -563,7 +563,7 @@ def _record(registry_id, provider, country, name, unlocode, lat, lon) -> dict:
 
 
 def _alias(registry_id, provider, name) -> dict:
-    from sea_mile.text import canonical_key
+    from harborly.text import canonical_key
 
     return {
         "registry_id": registry_id,
@@ -891,7 +891,7 @@ def test_canonical_id_attaches_codeless_record_to_a_coded_sibling() -> None:
 
 
 def test_canonical_ids_are_order_independent() -> None:
-    from sea_mile.canonical import assign_canonical_ids
+    from harborly.canonical import assign_canonical_ids
 
     rows = [
         _record("WPI:50", "NGA_WPI", "ZZ", "Harbor", "ZZHBR", 20.0, 20.0),
@@ -940,17 +940,17 @@ def test_match_dataframe_appends_enrichment_columns(registry: PortRegistry) -> N
     frame = pd.DataFrame({"port": ["Mersin"], "ref": ["X-1"]})
     enriched = registry.match_dataframe(frame, name_column="port")
     assert list(enriched["ref"]) == ["X-1"]
-    assert enriched.loc[0, "sea_mile_status"] == "auto_resolved"
-    assert enriched.loc[0, "sea_mile_registry_id"] == "WPI:1"
-    assert enriched.loc[0, "sea_mile_name"] == "Mersin"
-    assert enriched.loc[0, "sea_mile_unlocode"] == "TRMER"
-    assert "sea_mile_status" not in frame.columns
+    assert enriched.loc[0, "harborly_status"] == "auto_resolved"
+    assert enriched.loc[0, "harborly_registry_id"] == "WPI:1"
+    assert enriched.loc[0, "harborly_name"] == "Mersin"
+    assert enriched.loc[0, "harborly_unlocode"] == "TRMER"
+    assert "harborly_status" not in frame.columns
 
 
 def test_match_dataframe_uses_the_country_column(registry: PortRegistry) -> None:
     frame = pd.DataFrame({"port": ["Piraeus"], "cc": ["GR"]})
     enriched = registry.match_dataframe(frame, name_column="port", country_column="cc")
-    assert enriched.loc[0, "sea_mile_registry_id"] == "WPI:2"
+    assert enriched.loc[0, "harborly_registry_id"] == "WPI:2"
 
 
 def test_match_dataframe_rejects_an_unknown_column(registry: PortRegistry) -> None:

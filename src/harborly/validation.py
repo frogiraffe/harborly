@@ -10,9 +10,9 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from sea_mile.build.download import sha256
-from sea_mile.exceptions import RegistryDataError
-from sea_mile.geo import _EARTH_RADIUS_NMI
+from harborly.build.download import sha256
+from harborly.exceptions import RegistryDataError
+from harborly.geo import _EARTH_RADIUS_NMI
 
 NMI_IN_METERS = 1852.0
 
@@ -121,8 +121,8 @@ def _route_check(registry: pd.DataFrame, aliases: pd.DataFrame) -> dict[str, Any
         return {"skipped": "pyproj is not installed"}
 
     try:
-        from sea_mile.ports import PortRegistry
-        from sea_mile.router import SeaRouter
+        from harborly.ports import PortRegistry
+        from harborly.router import SeaRouter
 
         loaded = PortRegistry(registry, aliases)
         route = SeaRouter().route(loaded.resolve("TRMER"), loaded.resolve("GRPIR"))

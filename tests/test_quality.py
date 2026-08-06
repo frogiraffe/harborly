@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from sea_mile.geo import great_circle_nmi, validate_coordinate
+from harborly.geo import great_circle_nmi, validate_coordinate
 
 
 class CoordinateQualityTests(unittest.TestCase):

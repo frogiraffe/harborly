@@ -1,24 +1,24 @@
 # API compatibility
 
-sea-mile uses semantic versioning. The following interfaces are maintained
+harborly uses semantic versioning. The following interfaces are maintained
 throughout the 1.x series.
 
 ## Python API
 
-The names in `sea_mile.__all__` are stable:
+The names in `harborly.__all__` are stable:
 
 `AmbiguousPortError`, `AsyncSeaRouter`, `BackendError`, `BackendErrorKind`, `BatchMatchResult`,
 `CacheFailurePolicy`, `CanonicalEvidence`, `ConfidenceTier`, `MatchPolicy`,
 `MatchReason`, `MatchStatus`, `PassageRestriction`, `Port`, `PortCoordinateError`, `PortGroup`,
 `PortNotFoundError`, `PortRegistry`, `RegistryDataError`, `RetryPolicy`,
-`RouteQualityFlag`, `RouteQualityPolicy`, `RoutingError`, `SeaMileError`,
+`RouteQualityFlag`, `RouteQualityPolicy`, `RoutingError`, `HarborlyError`,
 `SeaRoute`, `SeaRouter`, `SequenceSeaRoute`, and `SourceDataError`.
 
 ### Lower-level modules
 
 The following module-level APIs are stable within 1.x:
-- sea_mile.kml: to_kml_string(route), write_route_kml(route, path)
-- sea_mile.geoparquet: write_ports_geoparquet(ports, path), write_route_geoparquet(route, path)
+- harborly.kml: to_kml_string(route), write_route_kml(route, path)
+- harborly.geoparquet: write_ports_geoparquet(ports, path), write_route_geoparquet(route, path)
 
 Breaking signature changes, removals, and incompatible semantic changes require
 a major version.
@@ -27,7 +27,7 @@ a major version.
 `SeaRouter.iter_distance_edges` is its bounded-memory streaming counterpart and
 yields `(row_index, column_index, distance_nmi)` tuples in deterministic order.
 
-Modules and names not exported through `sea_mile.__all__` are implementation
+Modules and names not exported through `harborly.__all__` are implementation
 interfaces unless another document explicitly defines them as public.
 
 ## Command-line interface

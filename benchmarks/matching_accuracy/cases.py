@@ -8,9 +8,9 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from sea_mile.geo import great_circle_nmi
-from sea_mile.matching import OFFICIAL_PROVIDERS
-from sea_mile.text import canonical_key
+from harborly.geo import great_circle_nmi
+from harborly.matching import OFFICIAL_PROVIDERS
+from harborly.text import canonical_key
 
 
 @dataclass(frozen=True, slots=True)

@@ -4,15 +4,15 @@ import pytest
 
 pytest.importorskip("folium", reason="tests the optional 'map' extra")
 
-from sea_mile.coordinates import LonLat  # noqa: E402
-from sea_mile.html_map import (  # noqa: E402
+from harborly.coordinates import LonLat  # noqa: E402
+from harborly.html_map import (  # noqa: E402
     _route_locations,
     _route_lon_lat,
     write_route_html,
 )
-from sea_mile.ports import Port  # noqa: E402
-from sea_mile.router import SeaRoute  # noqa: E402
-from sea_mile.routing import RouteQualityFlag  # noqa: E402
+from harborly.ports import Port  # noqa: E402
+from harborly.router import SeaRoute  # noqa: E402
+from harborly.routing import RouteQualityFlag  # noqa: E402
 
 
 def _port(registry_id: str, name: str, latitude: float, longitude: float) -> Port:

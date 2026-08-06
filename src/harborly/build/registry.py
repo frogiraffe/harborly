@@ -10,15 +10,15 @@ from zipfile import ZipFile
 
 import pandas as pd
 
-from sea_mile.canonical import assign_canonical_ids
-from sea_mile.exceptions import RegistryDataError
-from sea_mile.sources import (
+from harborly.canonical import assign_canonical_ids
+from harborly.exceptions import RegistryDataError
+from harborly.sources import (
     load_geonames_port_archive,
     load_osm_port_archive,
     parse_unlocode_coordinates,
     parse_wpi_dms,
 )
-from sea_mile.text import canonical_key, normalize_display_text
+from harborly.text import canonical_key, normalize_display_text
 
 REGISTRY_SCHEMA_VERSION = 1
 _PROVIDER_ORDER = ("NGA_WPI", "UN_LOCODE", "GEONAMES", "OPENSTREETMAP")

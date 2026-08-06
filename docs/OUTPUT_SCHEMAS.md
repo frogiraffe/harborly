@@ -95,7 +95,7 @@ handling must use this value rather than `message`.
 | --- | --- |
 | `backend_call_failed` | The routing backend raised while computing the route. |
 | `cache_access_failed` | The persistent SQLite cache could not be read or updated. |
-| `malformed_backend_result` | The backend returned a result sea-mile cannot use, such as a missing length or geometry. |
+| `malformed_backend_result` | The backend returned a result harborly cannot use, such as a missing length or geometry. |
 | `implausible_route` | The route failed the physical plausibility check. |
 | `circuit_breaker_open` | Repeated transient failures opened the circuit breaker, or a half-open probe is already running. |
 | `timeout_budget_exhausted` | `RetryPolicy.overall_timeout_seconds` cannot hold the next backoff, so the retry ladder stopped early. |

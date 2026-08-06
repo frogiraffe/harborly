@@ -65,7 +65,7 @@ or `near --grouped` row.
 
 ## BatchMatchResult
 
-One decision from `match`. The `sea_mile_*` columns that `match --output` appends are
+One decision from `match`. The `harborly_*` columns that `match --output` appends are
 derived from these fields.
 
 | Field | Type | Null | Meaning |
@@ -118,16 +118,16 @@ library it ran on. All three are recorded so a route is reproducible.
 
 ## Match output columns
 
-`sea-mile match --output` appends these columns to the input rows. Each maps to a
+`harborly match --output` appends these columns to the input rows. Each maps to a
 `BatchMatchResult` field, so downstream joins keep the original columns.
 
 | Column | Source field |
 | --- | --- |
-| `sea_mile_status` | `status` |
-| `sea_mile_reason_code` | `reason_code` |
-| `sea_mile_registry_id` | `selected_registry_id`, empty when unresolved |
-| `sea_mile_name` | representative record name |
-| `sea_mile_country_code` | representative record country |
-| `sea_mile_latitude` | representative record latitude |
-| `sea_mile_longitude` | representative record longitude |
-| `sea_mile_unlocode` | representative record UN/LOCODE |
+| `harborly_status` | `status` |
+| `harborly_reason_code` | `reason_code` |
+| `harborly_registry_id` | `selected_registry_id`, empty when unresolved |
+| `harborly_name` | representative record name |
+| `harborly_country_code` | representative record country |
+| `harborly_latitude` | representative record latitude |
+| `harborly_longitude` | representative record longitude |
+| `harborly_unlocode` | representative record UN/LOCODE |

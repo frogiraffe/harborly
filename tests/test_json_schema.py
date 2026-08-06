@@ -7,8 +7,8 @@ import pytest
 from jsonschema import Draft202012Validator
 from test_cli import write_registry
 
-from sea_mile.cli import main
-from sea_mile.route_cache import RouteCache
+from harborly.cli import main
+from harborly.route_cache import RouteCache
 
 SCHEMA_PATH = (
     Path(__file__).resolve().parents[1]
@@ -71,11 +71,11 @@ def test_data_command_json_matches_schema(
     tmp_path, capsys, validator, monkeypatch
 ) -> None:
     monkeypatch.setattr(
-        "sea_mile.build.download.download_reference_data",
+        "harborly.build.download.download_reference_data",
         lambda *args, **kwargs: {"sources": {}},
     )
     monkeypatch.setattr(
-        "sea_mile.build.registry.build_reference_registry",
+        "harborly.build.registry.build_reference_registry",
         lambda *args, **kwargs: {"registry_rows": 0},
     )
 

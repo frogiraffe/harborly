@@ -1,10 +1,10 @@
 # Cookbook
 
-These recipes use the installed `sea-mile` command. In a source checkout,
+These recipes use the installed `harborly` command. In a source checkout,
 prefix each command with `uv run`.
 
 See also the
-[synthetic GeoJSON map example](https://github.com/frogiraffe/sea-mile/tree/main/examples/synthetic)
+[synthetic GeoJSON map example](https://github.com/frogiraffe/harborly/tree/main/examples/synthetic)
 for a runnable demo with made-up routes that needs no network access.
 
 ## Resolve before routing
@@ -12,9 +12,9 @@ for a runnable demo with made-up routes that needs no network access.
 Use exact identities for repeatable automation:
 
 ```bash
-sea-mile search "Port Said" --country EG
-sea-mile show EGPSD --json
-sea-mile route EGPSD GRPIR --json
+harborly search "Port Said" --country EG
+harborly show EGPSD --json
+harborly route EGPSD GRPIR --json
 ```
 
 `resolve` and `show` do not silently select fuzzy results. If a name is
@@ -27,7 +27,7 @@ A dense matrix retains O(n²) cells. Stream edges to an atomic CSV output when
 the full matrix is unnecessary:
 
 ```bash
-sea-mile matrix TRMER GRPIR TRIST EGPSD \
+harborly matrix TRMER GRPIR TRIST EGPSD \
   --edge-csv route-edges.csv \
   --workers 4 \
   --cache .cache/routes.sqlite3
@@ -38,9 +38,9 @@ If an edge fails, the requested CSV is not replaced with a partial file.
 ## Maintain the route cache
 
 ```bash
-sea-mile cache info .cache/routes.sqlite3 --json
-sea-mile cache prune .cache/routes.sqlite3 --older-than-days 90
-sea-mile cache clear .cache/routes.sqlite3 --vacuum
+harborly cache info .cache/routes.sqlite3 --json
+harborly cache prune .cache/routes.sqlite3 --older-than-days 90
+harborly cache clear .cache/routes.sqlite3 --vacuum
 ```
 
 Stop active writers before vacuuming. Clearing a cache removes computed routes,
@@ -49,7 +49,7 @@ not registry or source data.
 ## Create a portable route map
 
 ```bash
-sea-mile route TRMER GRPIR \
+harborly route TRMER GRPIR \
   --geojson route.geojson \
   --html-map route.html
 ```
@@ -66,7 +66,7 @@ Then open `http://127.0.0.1:8000/route.html`.
 ## Review ambiguous CSV matches
 
 ```bash
-sea-mile match ports.csv \
+harborly match ports.csv \
   --name-column port_name \
   --country-column country \
   --id-column row_id \
@@ -78,7 +78,7 @@ Record one `chosen_registry_id` per `row_id` in a two-column decisions file,
 then apply it:
 
 ```bash
-sea-mile match ports.csv \
+harborly match ports.csv \
   --name-column port_name \
   --id-column row_id \
   --decisions decisions.csv \
@@ -88,7 +88,7 @@ sea-mile match ports.csv \
 ## Run the local HTTP service
 
 ```bash
-sea-mile serve --host 127.0.0.1 --port 8000
+harborly serve --host 127.0.0.1 --port 8000
 ```
 
 Open `http://127.0.0.1:8000/docs`. The root URL redirects there. See
@@ -99,7 +99,7 @@ Open `http://127.0.0.1:8000/docs`. The root URL redirects there. See
 From Python, use the `PassageRestriction` enum to route around blocked or restricted passages. For example, to avoid the Suez Canal and route via the Cape of Good Hope:
 
 ```python
-from sea_mile import SeaRouter, PassageRestriction
+from harborly import SeaRouter, PassageRestriction
 
 router = SeaRouter(restrictions=[PassageRestriction.SUEZ])
 ```
@@ -107,7 +107,7 @@ router = SeaRouter(restrictions=[PassageRestriction.SUEZ])
 From the CLI:
 
 ```bash
-sea-mile route TRMER DEHAM --restrictions suez
+harborly route TRMER DEHAM --restrictions suez
 ```
 
 ## Multi-leg voyage (route_sequence)
@@ -145,21 +145,21 @@ To export routes using the CLI:
 
 ```bash
 # KML
-sea-mile route TRMER GRPIR --kml route.kml
+harborly route TRMER GRPIR --kml route.kml
 
 # GeoParquet (OGC WKB encoding, CRS OGC:CRS84, GeoParquet 1.0.0 spec)
-sea-mile export --format geoparquet --output ports.geoparquet --country TR
+harborly export --format geoparquet --output ports.geoparquet --country TR
 ```
 
 From Python:
 
 ```python
 # KML
-from sea_mile.kml import write_route_kml
+from harborly.kml import write_route_kml
 write_route_kml(route, 'route.kml')
 
 # GeoParquet
-from sea_mile.geoparquet import write_route_geoparquet, write_ports_geoparquet
+from harborly.geoparquet import write_route_geoparquet, write_ports_geoparquet
 write_route_geoparquet(route, 'route.geoparquet')
 write_ports_geoparquet(ports, 'ports.geoparquet')
 ```
@@ -170,7 +170,7 @@ write_ports_geoparquet(ports, 'ports.geoparquet')
 
 ```python
 import asyncio
-from sea_mile import AsyncSeaRouter
+from harborly import AsyncSeaRouter
 
 async def main():
     router = AsyncSeaRouter()

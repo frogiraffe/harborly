@@ -2,10 +2,10 @@
 
 ## Start here
 
-- [Project README](https://github.com/frogiraffe/sea-mile/blob/main/README.md) —
+- [Project README](https://github.com/frogiraffe/harborly/blob/main/README.md) —
   installation, quick start, CLI overview.
 - [Cookbook](COOKBOOK.md) — task-oriented recipes.
-- [Synthetic map example](https://github.com/frogiraffe/sea-mile/tree/main/examples/synthetic) —
+- [Synthetic map example](https://github.com/frogiraffe/harborly/tree/main/examples/synthetic) —
   a runnable demo with made-up routes, no network access required.
 
 ## Interfaces and contracts
@@ -28,12 +28,12 @@
 
 ## Maintainers
 
-Not needed to install or use sea-mile — for people changing the code or
+Not needed to install or use harborly — for people changing the code or
 cutting a release.
 
 - [Architecture](maintainers/ARCHITECTURE.md) — module layout and data flow.
 - [Performance](maintainers/PERFORMANCE.md) — `match_names` and search benchmarks.
 - [Dependency policy](maintainers/DEPENDENCY_POLICY.md).
 - [Release procedure](maintainers/RELEASING.md).
-- [Contributing](https://github.com/frogiraffe/sea-mile/blob/main/CONTRIBUTING.md).
-- [Security](https://github.com/frogiraffe/sea-mile/blob/main/SECURITY.md).
+- [Contributing](https://github.com/frogiraffe/harborly/blob/main/CONTRIBUTING.md).
+- [Security](https://github.com/frogiraffe/harborly/blob/main/SECURITY.md).

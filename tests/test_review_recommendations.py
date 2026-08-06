@@ -17,7 +17,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from sea_mile.text import canonical_key, normalize_display_text
+from harborly.text import canonical_key, normalize_display_text
 
 # ---------------------------------------------------------------------------
 # TEXT TESTS
@@ -64,7 +64,7 @@ class TestCanonicalProximity:
         Ports A and C are >25 nmi apart even though both are within 25 nmi of
         B. The canonical id assignment must not transitively chain merges.
         """
-        from sea_mile.canonical import assign_canonical_ids
+        from harborly.canonical import assign_canonical_ids
 
         registry = pd.DataFrame(
             [
@@ -167,7 +167,7 @@ class TestRegistryIntegrity:
 
     def test_corrupt_manifest_loads_without_error(self) -> None:
         """A corrupt manifest is silently ignored (treated as missing)."""
-        from sea_mile.ports import PortRegistry
+        from harborly.ports import PortRegistry
 
         directory = Path(__file__).parent / "_test_corrupt_manifest"
         try:
@@ -183,14 +183,14 @@ class TestRegistryIntegrity:
 
     def test_duplicate_registry_id_is_rejected(self) -> None:
         """Duplicate registry_id values must not be loaded."""
-        from sea_mile.exceptions import RegistryDataError
+        from harborly.exceptions import RegistryDataError
 
         directory = Path(__file__).parent / "_test_dup_id"
         try:
             dup = pd.concat([self._base_registry(), self._base_registry()])
             self._write_registry(directory, dup)
             with pytest.raises(RegistryDataError, match="unique"):
-                from sea_mile.ports import PortRegistry
+                from harborly.ports import PortRegistry
 
                 PortRegistry.from_directory(directory)
         finally:
@@ -200,7 +200,7 @@ class TestRegistryIntegrity:
 
     def test_nan_latitude_yields_none_coordinate(self) -> None:
         """NaN in latitude becomes None (no usable coordinate)."""
-        from sea_mile.ports import PortRegistry
+        from harborly.ports import PortRegistry
 
         directory = Path(__file__).parent / "_test_nan_lat"
         try:
@@ -217,7 +217,7 @@ class TestRegistryIntegrity:
 
     def test_dangling_alias_is_rejected(self) -> None:
         """Alias referencing a non-existent registry_id raises an error."""
-        from sea_mile.exceptions import RegistryDataError
+        from harborly.exceptions import RegistryDataError
 
         directory = Path(__file__).parent / "_test_dangling"
         try:
@@ -235,7 +235,7 @@ class TestRegistryIntegrity:
                 ]
             ).to_parquet(directory / "port_aliases.parquet", index=False)
             with pytest.raises(RegistryDataError, match="unknown"):
-                from sea_mile.ports import PortRegistry
+                from harborly.ports import PortRegistry
 
                 PortRegistry.from_directory(directory)
         finally:
@@ -252,7 +252,7 @@ class TestRegistryIntegrity:
 class TestSpatialEdgeCases:
     def test_near_polar_coordinates_are_validated(self) -> None:
         """Coordinates near ±90° latitude pass coordinate validation."""
-        from sea_mile.geo import validate_coordinate
+        from harborly.geo import validate_coordinate
 
         check = validate_coordinate(89.999, 0.0)
         assert check.is_valid
@@ -268,13 +268,13 @@ class TestSpatialEdgeCases:
         if searoute_spec is None:
             pytest.skip("searoute not installed")
 
-        from sea_mile._routing_backend import RoutingConfig, SeaRouteBackend
+        from harborly._routing_backend import RoutingConfig, SeaRouteBackend
 
         backend = SeaRouteBackend()
-        origin = __import__("sea_mile.coordinates", fromlist=["LatLon"]).LatLon(
+        origin = __import__("harborly.coordinates", fromlist=["LatLon"]).LatLon(
             latitude=0.0, longitude=179.0
         )
-        dest = __import__("sea_mile.coordinates", fromlist=["LatLon"]).LatLon(
+        dest = __import__("harborly.coordinates", fromlist=["LatLon"]).LatLon(
             latitude=0.0, longitude=-179.0
         )
         config = RoutingConfig("astar", "networkx", ("northwest",))
@@ -284,8 +284,8 @@ class TestSpatialEdgeCases:
 
     def test_radius_boundary_includes_port_at_exact_distance(self) -> None:
         """A port at exactly max_distance_nmi should be included."""
-        from sea_mile.geo import great_circle_nmi
-        from sea_mile.ports import PortRegistry
+        from harborly.geo import great_circle_nmi
+        from harborly.ports import PortRegistry
 
         # Place a port exactly 10 nmi north of (36, 34)
         delta_lat = 10.0 / 60.0  # 10 nmi ≈ 0.1667°
@@ -334,35 +334,35 @@ class TestSpatialEdgeCases:
 class TestRoutingEdgeCases:
     def test_nan_distance_is_rejected(self) -> None:
         """Backend returning NaN distance must be caught by assess_route_length."""
-        from sea_mile.routing import RouteQualityFlag, assess_route_length
+        from harborly.routing import RouteQualityFlag, assess_route_length
 
         result = assess_route_length(float("nan"), 100.0)
         assert not result.is_valid
         assert result.flag == RouteQualityFlag.INVALID_ROUTE_DISTANCE
 
     def test_nan_great_circle_is_rejected(self) -> None:
-        from sea_mile.routing import RouteQualityFlag, assess_route_length
+        from harborly.routing import RouteQualityFlag, assess_route_length
 
         result = assess_route_length(100.0, float("nan"))
         assert not result.is_valid
         assert result.flag == RouteQualityFlag.INVALID_GREAT_CIRCLE_DISTANCE
 
     def test_negative_distance_is_rejected(self) -> None:
-        from sea_mile.routing import RouteQualityFlag, assess_route_length
+        from harborly.routing import RouteQualityFlag, assess_route_length
 
         result = assess_route_length(-10.0, 100.0)
         assert not result.is_valid
         assert result.flag == RouteQualityFlag.INVALID_ROUTE_DISTANCE
 
     def test_infinite_distance_is_rejected(self) -> None:
-        from sea_mile.routing import assess_route_length
+        from harborly.routing import assess_route_length
 
         result = assess_route_length(float("inf"), 100.0)
         assert not result.is_valid
 
     def test_route_quality_policy_overrides_defaults(self) -> None:
         """RouteQualityPolicy thresholds take precedence over kwargs."""
-        from sea_mile.routing import (
+        from harborly.routing import (
             RouteQualityFlag,
             RouteQualityPolicy,
             assess_route_length,
@@ -386,7 +386,7 @@ class TestRoutingEdgeCases:
 class TestCacheEdgeCases:
     def test_corrupt_json_in_cache_is_evicted(self, tmp_path: Path) -> None:
         """A corrupt JSON blob in the cache row is silently evicted."""
-        from sea_mile.route_cache import RouteCache
+        from harborly.route_cache import RouteCache
 
         cache_path = tmp_path / "cache-corrupt.db"
         cache = RouteCache(cache_path)
@@ -408,7 +408,7 @@ class TestCacheEdgeCases:
 
     def test_non_dict_geometry_in_cache_is_evicted(self, tmp_path: Path) -> None:
         """A geometry_json that parses to a non-dict is evicted."""
-        from sea_mile.route_cache import RouteCache
+        from harborly.route_cache import RouteCache
 
         cache_path = tmp_path / "cache-nondict.db"
         cache = RouteCache(cache_path)
@@ -423,7 +423,7 @@ class TestCacheEdgeCases:
 
     def test_infinite_distance_is_evicted_on_read(self, tmp_path: Path) -> None:
         """Self-healing cache evicts infinite distance entries on read."""
-        from sea_mile.route_cache import RouteCache
+        from harborly.route_cache import RouteCache
 
         cache_path = tmp_path / "cache-inf.db"
         cache = RouteCache(cache_path)
@@ -461,10 +461,10 @@ class TestHTMLEdgeCases:
         if folium_spec is None:
             pytest.skip("folium not installed")
 
-        from sea_mile.html_map import write_route_html
-        from sea_mile.ports import Port
-        from sea_mile.router import SeaRoute
-        from sea_mile.routing import RouteQualityFlag
+        from harborly.html_map import write_route_html
+        from harborly.ports import Port
+        from harborly.router import SeaRoute
+        from harborly.routing import RouteQualityFlag
 
         evil_name = '<script>alert("xss")</script>'
         origin = Port(
@@ -541,7 +541,7 @@ class TestDownloadSafety:
         """A zip with path traversal entries must not write outside target."""
         import importlib
 
-        geonames_spec = importlib.util.find_spec("sea_mile.sources.geonames")
+        geonames_spec = importlib.util.find_spec("harborly.sources.geonames")
         if geonames_spec is None:
             pytest.skip("geonames source not available")
 

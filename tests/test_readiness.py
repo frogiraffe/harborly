@@ -12,15 +12,15 @@ from typing import NoReturn
 import httpx
 import pytest
 
-from sea_mile.router import SeaRouter
-from sea_mile.routing import CacheFailurePolicy, ReadinessCheck
+from harborly.router import SeaRouter
+from harborly.routing import CacheFailurePolicy, ReadinessCheck
 
 pytest.importorskip("fastapi", reason="tests the optional 'api' extra")
 
 from test_ports import alias_frame, registry_frame  # noqa: E402
 
-from sea_mile import PortRegistry  # noqa: E402
-from sea_mile.api import create_app  # noqa: E402
+from harborly import PortRegistry  # noqa: E402
+from harborly.api import create_app  # noqa: E402
 
 
 class _WorkingBackend:
@@ -94,7 +94,7 @@ def test_a_broken_cache_blocks_readiness_only_where_it_blocks_requests(
     speed, and reporting not-ready would take a working server out of rotation.
     """
 
-    monkeypatch.setattr("sea_mile.router.RouteCache", lambda _path: _UnreachableCache())
+    monkeypatch.setattr("harborly.router.RouteCache", lambda _path: _UnreachableCache())
 
     strict = SeaRouter(
         cache_path="stubbed",

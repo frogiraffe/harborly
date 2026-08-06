@@ -7,7 +7,7 @@ import time
 from dataclasses import dataclass
 
 from benchmarks.matching_performance.workload import WorkloadRow
-from sea_mile.ports import PortRegistry
+from harborly.ports import PortRegistry
 
 
 @dataclass(frozen=True, slots=True)

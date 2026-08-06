@@ -1,6 +1,6 @@
 import unittest
 
-from sea_mile.routing import RouteQualityFlag, assess_route_length
+from harborly.routing import RouteQualityFlag, assess_route_length
 
 
 class RouteAssessmentTests(unittest.TestCase):

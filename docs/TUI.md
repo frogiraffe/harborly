@@ -6,8 +6,8 @@ braille world map that works without network tiles.
 ## Install and start
 
 ```bash
-uv tool install --force 'sea-mile[tui]'
-sea-mile tui
+uv tool install --force 'harborly[tui]'
+harborly tui
 ```
 
 Add `routing`, `map`, or `api` to the same quoted requirement if the tool
@@ -33,7 +33,7 @@ longitude/latitude. It is a search visualization, not a navigation chart.
 
 ## Troubleshooting
 
-If `sea-mile tui` reports that the extra is missing, reinstall the isolated uv
-tool with every required extra in one command. A bare `sea-mile` command may
+If `harborly tui` reports that the extra is missing, reinstall the isolated uv
+tool with every required extra in one command. A bare `harborly` command may
 refer to a tool installation rather than the source checkout; use
-`uv run sea-mile tui` while developing locally.
+`uv run harborly tui` while developing locally.

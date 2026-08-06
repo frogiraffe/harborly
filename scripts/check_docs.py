@@ -56,7 +56,7 @@ _EXCLUDED_DIR_NAMES = frozenset(
     }
 )
 
-# Standard documentation locations for the sea-mile repository. Scanning the
+# Standard documentation locations for the harborly repository. Scanning the
 # whole tree by default would sweep in third-party markdown under .venv/ and
 # vendored license text; this list matches what the handoff's documentation
 # constraints actually apply to: READMEs, docs, release notes, and generated
@@ -131,7 +131,7 @@ def _check_pypi_target(
             f"pypi-{kind}-relative",
             f"'{target}' is repository-relative and will not resolve when this "
             "file is rendered as the PyPI long description; use an absolute "
-            "https://github.com/frogiraffe/sea-mile/blob/main/... (or "
+            "https://github.com/frogiraffe/harborly/blob/main/... (or "
             ".../tree/main/...) URL",
         )
     ]

@@ -4,8 +4,8 @@ from zipfile import ZipFile
 
 import pytest
 
-from sea_mile.exceptions import RegistryDataError
-from sea_mile.sources.geonames import load_geonames_port_archive
+from harborly.exceptions import RegistryDataError
+from harborly.sources.geonames import load_geonames_port_archive
 
 
 def geonames_row(

@@ -12,17 +12,17 @@ All notable user-visible changes are documented here. The project follows
 - Analytical sea routing using the `searoute` maritime graph.
 - Bounded-memory distance matrix calculation and streaming (`iter_distance_edges`, `matrix --edge-csv`).
 - Fast SQLite persistent route caching with WAL mode and cache maintenance commands (`cache info`, `cache prune`, `cache clear`).
-- CSV matching engine with human-in-the-loop decision review workflow (`sea-mile match`).
-- FastAPI HTTP service (`sea-mile serve`) with `/v1/livez`, `/v1/readyz`, and `/v1/route` endpoints.
-- Interactive Terminal UI (`sea-mile tui`) with braille world map visualization.
+- CSV matching engine with human-in-the-loop decision review workflow (`harborly match`).
+- FastAPI HTTP service (`harborly serve`) with `/v1/livez`, `/v1/readyz`, and `/v1/route` endpoints.
+- Interactive Terminal UI (`harborly tui`) with braille world map visualization.
 - GeoJSON export and standalone HTML route map generation with bundled coastlines.
-- Reproducible data pipeline (`sea-mile data download`, `build`, `prepare`, `verify`, `lock`).
+- Reproducible data pipeline (`harborly data download`, `build`, `prepare`, `verify`, `lock`).
 - AsyncSeaRouter: async/await drop-in for SeaRouter (route, route_sequence, route_ids, route_many, distance_matrix, iter_distance_edges).
 - PassageRestriction enum: restrict Suez, Panama, Kiel, Baban, Northwest passages via `SeaRouter(restrictions=[...])`.
 - route_sequence(): multi-leg routing over an ordered list of Port objects, returns SequenceSeaRoute with per-leg SeaRoute and aggregated totals.
 - SequenceSeaRoute: legs, total_distance_nmi, total_great_circle_nmi, duration_hours, duration_days, to_kml(), write_kml(), to_geojson_feature_collection().
 - speed_knots, duration_hours, duration_days on SeaRoute: pass speed_knots to compute ETA.
-- KML export: `sea-mile route --kml route.kml`, `sea-mile export --format kml`. Programmatic access via `sea_mile.kml`.
-- GeoParquet export: `sea-mile export --format geoparquet` (OGC WKB, CRS OGC:CRS84, GeoParquet 1.0.0 spec). Programmatic access via `sea_mile.geoparquet`.
+- KML export: `harborly route --kml route.kml`, `harborly export --format kml`. Programmatic access via `harborly.kml`.
+- GeoParquet export: `harborly export --format geoparquet` (OGC WKB, CRS OGC:CRS84, GeoParquet 1.0.0 spec). Programmatic access via `harborly.geoparquet`.
 
-[1.0.0]: https://github.com/frogiraffe/sea-mile/releases/tag/v1.0.0
+[1.0.0]: https://github.com/frogiraffe/harborly/releases/tag/v1.0.0

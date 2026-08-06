@@ -6,19 +6,19 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
-from sea_mile._registry_data import (
+from harborly._registry_data import (
     _PROVIDER_PRIORITY,
     Port,
     PortSearchResult,
     _port_from_row,
     _port_priority,
 )
-from sea_mile._registry_validation import validate_limit
-from sea_mile.exceptions import AmbiguousPortError, PortNotFoundError
-from sea_mile.geo import great_circle_nmi
+from harborly._registry_validation import validate_limit
+from harborly.exceptions import AmbiguousPortError, PortNotFoundError
+from harborly.geo import great_circle_nmi
 
 if TYPE_CHECKING:
-    from sea_mile.ports import PortRegistry
+    from harborly.ports import PortRegistry
 
 
 def normalize_country_code(country_code: str | None) -> str | None:

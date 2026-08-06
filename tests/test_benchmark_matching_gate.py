@@ -12,8 +12,8 @@ import pytest
 
 from benchmarks.matching_accuracy import build_cases, mine_hard_negatives, score
 from benchmarks.matching_accuracy.metrics import OFFICIAL_PROVIDERS
-from sea_mile._registry_data import bundled_data_directory
-from sea_mile.ports import PortRegistry
+from harborly._registry_data import bundled_data_directory
+from harborly.ports import PortRegistry
 
 SEED = 20260729
 # Kept small on purpose. The full-fidelity run is

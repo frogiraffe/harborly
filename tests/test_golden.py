@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from sea_mile.matching import BatchMatchResult
-from sea_mile.ports import PortRegistry
+from harborly.matching import BatchMatchResult
+from harborly.ports import PortRegistry
 
 GOLDEN = Path(__file__).resolve().parent / "golden"
 

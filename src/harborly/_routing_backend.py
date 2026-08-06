@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Protocol
 
-from sea_mile.coordinates import LatLon
-from sea_mile.exceptions import RoutingError, RoutingErrorReason
+from harborly.coordinates import LatLon
+from harborly.exceptions import RoutingError, RoutingErrorReason
 
 
 class BackendErrorKind(StrEnum):
@@ -94,7 +94,7 @@ class RoutingConfig:
 
 @dataclass(frozen=True, slots=True)
 class BackendRoute:
-    """A raw backend result, before sea-mile applies its quality assessment."""
+    """A raw backend result, before harborly applies its quality assessment."""
 
     distance_nmi: float
     geometry: dict[str, Any]
@@ -187,6 +187,6 @@ class SeaRouteBackend:
         except ImportError as error:
             raise ImportError(
                 "sea routing needs the 'routing' extra "
-                "(pip install 'sea-mile[routing]' or uv sync --extra routing)"
+                "(pip install 'harborly[routing]' or uv sync --extra routing)"
             ) from error
         return searoute

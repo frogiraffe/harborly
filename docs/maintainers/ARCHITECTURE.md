@@ -1,8 +1,8 @@
 # Architecture
 
-`sea-mile` keeps a small public facade while separating registry loading,
+`harborly` keeps a small public facade while separating registry loading,
 identity resolution, spatial search, routing, persistence, and presentation.
-Names exported through `sea_mile.__all__` are the supported Python surface;
+Names exported through `harborly.__all__` are the supported Python surface;
 underscore-prefixed modules are implementation details.
 
 ```mermaid

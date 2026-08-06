@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from sea_mile.build.download import lock_mismatches, sha256, write_source_lock
-from sea_mile.cli import main
-from sea_mile.exceptions import SourceDataError
+from harborly.build.download import lock_mismatches, sha256, write_source_lock
+from harborly.cli import main
+from harborly.exceptions import SourceDataError
 
 
 def _seed_manifest(root: Path) -> Path:
@@ -35,7 +35,7 @@ def test_write_source_lock_pins_the_manifest_sources(tmp_path) -> None:
 
     lock = write_source_lock(tmp_path)
 
-    assert (tmp_path / "sea-mile.lock.json").exists()
+    assert (tmp_path / "harborly.lock.json").exists()
     assert lock["lock_version"] == 1
     assert lock["sources"]["wpi"]["path"] == "wpi.csv"
 
@@ -71,7 +71,7 @@ def test_data_lock_cli_writes_a_lockfile(tmp_path, capsys) -> None:
     assert status == 0
     lock = json.loads(capsys.readouterr().out)["data"]
     assert lock["sources"]["wpi"]["path"] == "wpi.csv"
-    assert (tmp_path / "sea-mile.lock.json").exists()
+    assert (tmp_path / "harborly.lock.json").exists()
 
 
 def test_data_build_with_lock_mismatch_errors_before_building(tmp_path, capsys) -> None:
@@ -86,7 +86,7 @@ def test_data_build_with_lock_mismatch_errors_before_building(tmp_path, capsys) 
             "--reference-root",
             str(tmp_path),
             "--lock",
-            str(tmp_path / "sea-mile.lock.json"),
+            str(tmp_path / "harborly.lock.json"),
         ]
     )
 

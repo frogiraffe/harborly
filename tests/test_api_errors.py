@@ -17,9 +17,9 @@ pytest.importorskip("fastapi", reason="tests the optional 'api' extra")
 
 from test_ports import alias_frame, registry_frame  # noqa: E402
 
-from sea_mile import Port, PortRegistry  # noqa: E402
-from sea_mile.api import create_app  # noqa: E402
-from sea_mile.exceptions import RoutingError, RoutingErrorReason  # noqa: E402
+from harborly import Port, PortRegistry  # noqa: E402
+from harborly.api import create_app  # noqa: E402
+from harborly.exceptions import RoutingError, RoutingErrorReason  # noqa: E402
 
 
 class _FailingRouter:

@@ -6,11 +6,11 @@ from ._routing_backend import BackendError, BackendErrorKind
 from .canonical import CanonicalEvidence
 from .exceptions import (
     AmbiguousPortError,
+    HarborlyError,
     PortCoordinateError,
     PortNotFoundError,
     RegistryDataError,
     RoutingError,
-    SeaMileError,
     SourceDataError,
 )
 from .matching import (
@@ -33,10 +33,10 @@ if TYPE_CHECKING:
     from .router import AsyncSeaRouter, SeaRoute, SeaRouter, SequenceSeaRoute
 
 _LAZY_EXPORTS = {
-    "AsyncSeaRouter": "sea_mile.router",
-    "SeaRoute": "sea_mile.router",
-    "SeaRouter": "sea_mile.router",
-    "SequenceSeaRoute": "sea_mile.router",
+    "AsyncSeaRouter": "harborly.router",
+    "SeaRoute": "harborly.router",
+    "SeaRouter": "harborly.router",
+    "SequenceSeaRoute": "harborly.router",
 }
 
 
@@ -79,7 +79,7 @@ __all__ = [
     "RouteQualityFlag",
     "RouteQualityPolicy",
     "RoutingError",
-    "SeaMileError",
+    "HarborlyError",
     "SeaRoute",
     "SeaRouter",
     "SequenceSeaRoute",

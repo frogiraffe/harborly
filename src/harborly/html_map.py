@@ -9,10 +9,10 @@ from typing import Any
 import folium
 from branca.element import MacroElement, Template
 
-from sea_mile.coordinates import LonLat
-from sea_mile.geo import line_string_coordinates
-from sea_mile.router import SeaRoute
-from sea_mile.tui.coastlines import load_coastlines
+from harborly.coordinates import LonLat
+from harborly.geo import line_string_coordinates
+from harborly.router import SeaRoute
+from harborly.tui.coastlines import load_coastlines
 
 _POLICY_AWARE_TILES = Template(
     """
@@ -33,7 +33,7 @@ _POLICY_AWARE_TILES = Template(
     } else {
         var offlineNotice = L.control({position: "topright"});
         offlineNotice.onAdd = function () {
-            var notice = L.DomUtil.create("div", "sea-mile-offline-notice");
+            var notice = L.DomUtil.create("div", "harborly-offline-notice");
             notice.textContent = "Embedded coastline preview. Serve this file "
                 + "over localhost for detailed OpenStreetMap tiles.";
             notice.style.background = "rgba(255, 255, 255, 0.92)";

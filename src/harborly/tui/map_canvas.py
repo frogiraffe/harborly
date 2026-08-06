@@ -6,17 +6,17 @@ and aggregates nearby ports into clusters at low zoom levels.
 
 Coastlines come from embedded Natural Earth 110m data; ports are projected
 from ``PortGroup`` coordinates using the project's
-:class:`~sea_mile.coordinates.LatLon` contract.
+:class:`~harborly.coordinates.LatLon` contract.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 
-from sea_mile.coordinates import LatLon
-from sea_mile.ports import PortGroup
-from sea_mile.tui.braille import BrailleCanvas
-from sea_mile.tui.coastlines import load_coastlines
+from harborly.coordinates import LatLon
+from harborly.ports import PortGroup
+from harborly.tui.braille import BrailleCanvas
+from harborly.tui.coastlines import load_coastlines
 
 _ANSI_RESET = "\033[0m"
 _ANSI_DIM_GRAY = "\033[90m"

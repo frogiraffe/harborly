@@ -20,7 +20,7 @@ from tenacity import (
     wait_exponential,
 )
 
-from sea_mile.exceptions import SourceDataError
+from harborly.exceptions import SourceDataError
 
 WPI_URL = "https://msi.nga.mil/api/publications/world-port-index?output=csv"
 # Kept as compatibility aliases for callers that imported the previously pinned
@@ -98,9 +98,9 @@ def _is_retryable_download_error(error: BaseException) -> bool:
 
 def _user_agent() -> str:
     try:
-        return f"sea-mile/{version('sea-mile')} (local public reference download)"
+        return f"harborly/{version('harborly')} (local public reference download)"
     except PackageNotFoundError:
-        return "sea-mile (local public reference download)"
+        return "harborly (local public reference download)"
 
 
 def _report_progress(
@@ -689,7 +689,7 @@ def write_source_lock(
         "retrieved_at_utc": manifest.get("retrieved_at_utc"),
         "sources": manifest.get("sources", {}),
     }
-    target = Path(lock_path) if lock_path else reference_root / "sea-mile.lock.json"
+    target = Path(lock_path) if lock_path else reference_root / "harborly.lock.json"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(lock, indent=2) + "\n", encoding="utf-8")
     return lock

@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from sea_mile.geo import _EARTH_RADIUS_NMI
+from harborly.geo import _EARTH_RADIUS_NMI
 
 try:
     from scipy.spatial import cKDTree

@@ -6,9 +6,9 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from sea_mile.geo import great_circle_nmi, validate_coordinate
-from sea_mile.sources.reference import parse_unlocode_coordinates, parse_wpi_dms
-from sea_mile.text import canonical_key, normalize_display_text
+from harborly.geo import great_circle_nmi, validate_coordinate
+from harborly.sources.reference import parse_unlocode_coordinates, parse_wpi_dms
+from harborly.text import canonical_key, normalize_display_text
 
 _ALLOWED_KEY_CHARACTERS = set("abcdefghijklmnopqrstuvwxyz0123456789 ")
 _HALF_CIRCUMFERENCE_NMI = 10810

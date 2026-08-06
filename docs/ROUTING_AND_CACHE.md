@@ -41,9 +41,9 @@ The cache is opt-in and has no implicit global path. Pass the same explicit path
 used by `route --cache` or `matrix --cache`:
 
 ```bash
-sea-mile cache info .cache/routes.sqlite3
-sea-mile cache prune .cache/routes.sqlite3 --older-than-days 90
-sea-mile cache clear .cache/routes.sqlite3
+harborly cache info .cache/routes.sqlite3
+harborly cache prune .cache/routes.sqlite3 --older-than-days 90
+harborly cache clear .cache/routes.sqlite3
 ```
 
 Add `--vacuum` to `prune` or `clear` to reclaim free SQLite pages. Vacuuming
@@ -57,7 +57,7 @@ and newest timestamps, main database bytes, and WAL bytes.
 
 SQLite `PRAGMA user_version` versions the table layout independently from cache
 keys. Version `0` databases with the original routes table are adopted as
-schema `1`. A cache created by a newer unsupported sea-mile version fails
+schema `1`. A cache created by a newer unsupported harborly version fails
 closed instead of being modified.
 
 Future compatible table changes must ship an explicit migration. Because the

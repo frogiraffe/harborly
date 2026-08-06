@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from benchmarks.matching_accuracy.cases import MatchingCase
-from sea_mile.geo import great_circle_nmi
-from sea_mile.matching import OFFICIAL_PROVIDERS, BatchMatchResult, MatchStatus
+from harborly.geo import great_circle_nmi
+from harborly.matching import OFFICIAL_PROVIDERS, BatchMatchResult, MatchStatus
 
 __all__ = ["OFFICIAL_PROVIDERS", "MatchingMetrics", "VariantScore", "score"]
 

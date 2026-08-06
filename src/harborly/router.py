@@ -16,29 +16,29 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from sea_mile._circuit_breaker import (
+from harborly._circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerPolicy,
     _CircuitState,
 )
-from sea_mile._routing_backend import (
+from harborly._routing_backend import (
     BackendRoute,
     RoutingConfig,
     SeaRouteBackend,
     _RoutingBackend,
     classify_backend_error,
 )
-from sea_mile.coordinates import LatLon
-from sea_mile.exceptions import (
+from harborly.coordinates import LatLon
+from harborly.exceptions import (
+    HarborlyError,
     PortCoordinateError,
     RoutingError,
     RoutingErrorReason,
-    SeaMileError,
 )
-from sea_mile.geo import great_circle_nmi, line_string_coordinates, validate_coordinate
-from sea_mile.ports import Port, PortRegistry
-from sea_mile.route_cache import RouteCache
-from sea_mile.routing import (
+from harborly.geo import great_circle_nmi, line_string_coordinates, validate_coordinate
+from harborly.ports import Port, PortRegistry
+from harborly.route_cache import RouteCache
+from harborly.routing import (
     CacheFailurePolicy,
     ReadinessCheck,
     RetryPolicy,
@@ -129,12 +129,12 @@ class SeaRoute:
         }
 
     def to_kml(self) -> str:
-        from sea_mile.kml import to_kml_string
+        from harborly.kml import to_kml_string
 
         return to_kml_string(self)
 
     def write_kml(self, path: str | Path) -> None:
-        from sea_mile.kml import write_route_kml
+        from harborly.kml import write_route_kml
 
         write_route_kml(self, path)
 
@@ -188,12 +188,12 @@ class SequenceSeaRoute:
         }
 
     def to_kml(self) -> str:
-        from sea_mile.kml import to_kml_string
+        from harborly.kml import to_kml_string
 
         return to_kml_string(self)
 
     def write_kml(self, path: str | Path) -> None:
-        from sea_mile.kml import write_route_kml
+        from harborly.kml import write_route_kml
 
         write_route_kml(self, path)
 
@@ -216,7 +216,7 @@ def _worker_initializer(
     Called once per worker process before any tasks execute.
     """
     global _worker_router
-    import sea_mile._routing_backend  # noqa: F401, PLC0415
+    import harborly._routing_backend  # noqa: F401, PLC0415
 
     _worker_router = SeaRouter(
         algorithm=algorithm,
@@ -441,7 +441,7 @@ class SeaRouter:
             result, cache_key, from_cache = self._backend_result(
                 origin_coordinates, destination_coordinates, config
             )
-        except (SeaMileError, ImportError):
+        except (HarborlyError, ImportError):
             raise
         except Exception as error:
             raise RoutingError(

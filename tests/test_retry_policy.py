@@ -3,11 +3,11 @@ import math
 import httpx
 import pytest
 
-from sea_mile import RetryPolicy
-from sea_mile._routing_backend import BackendRoute
-from sea_mile.exceptions import RoutingError, RoutingErrorReason
-from sea_mile.ports import Port
-from sea_mile.router import SeaRouter, _is_transient_backend_error
+from harborly import RetryPolicy
+from harborly._routing_backend import BackendRoute
+from harborly.exceptions import RoutingError, RoutingErrorReason
+from harborly.ports import Port
+from harborly.router import SeaRouter, _is_transient_backend_error
 
 
 def _fake_port(label="A", lat=None, lon=None):
@@ -89,7 +89,7 @@ def test_first_call_success(monkeypatch):
         nonlocal sleep_called
         sleep_called = True
 
-    monkeypatch.setattr("sea_mile.router.time.sleep", mock_sleep)
+    monkeypatch.setattr("harborly.router.time.sleep", mock_sleep)
 
     backend = CountingBackend([_VALID_ROUTE])
     router = SeaRouter(retry_policy=RetryPolicy(attempts=3), _routing_backend=backend)
@@ -113,8 +113,8 @@ def test_transient_then_success(monkeypatch):
     def mock_random(_self):
         return 0.5
 
-    monkeypatch.setattr("sea_mile.router.time.sleep", mock_sleep)
-    monkeypatch.setattr("sea_mile.router.secrets.SystemRandom.random", mock_random)
+    monkeypatch.setattr("harborly.router.time.sleep", mock_sleep)
+    monkeypatch.setattr("harborly.router.secrets.SystemRandom.random", mock_random)
 
     backend = CountingBackend([TimeoutError("timeout"), _VALID_ROUTE])
     router = SeaRouter(
@@ -139,7 +139,7 @@ def test_retry_exhaustion(monkeypatch):
     def mock_sleep(seconds):
         sleep_calls.append(seconds)
 
-    monkeypatch.setattr("sea_mile.router.time.sleep", mock_sleep)
+    monkeypatch.setattr("harborly.router.time.sleep", mock_sleep)
 
     error1 = TimeoutError("1")
     error2 = ConnectionError("2")
@@ -166,7 +166,7 @@ def test_non_transient_no_retry(monkeypatch):
         nonlocal sleep_called
         sleep_called = True
 
-    monkeypatch.setattr("sea_mile.router.time.sleep", mock_sleep)
+    monkeypatch.setattr("harborly.router.time.sleep", mock_sleep)
 
     error = ValueError("bad data")
     backend = CountingBackend([error, _VALID_ROUTE])
@@ -187,7 +187,7 @@ def test_exact_retry_count(monkeypatch):
     def mock_sleep(seconds):
         pass
 
-    monkeypatch.setattr("sea_mile.router.time.sleep", mock_sleep)
+    monkeypatch.setattr("harborly.router.time.sleep", mock_sleep)
 
     errors = [TimeoutError("err")] * 5
     backend = CountingBackend(errors)
@@ -222,10 +222,10 @@ class _FakeClock:
 @pytest.fixture
 def fake_clock(monkeypatch):
     clock = _FakeClock()
-    monkeypatch.setattr("sea_mile.router.time.monotonic", clock.monotonic)
-    monkeypatch.setattr("sea_mile.router.time.sleep", clock.sleep)
+    monkeypatch.setattr("harborly.router.time.monotonic", clock.monotonic)
+    monkeypatch.setattr("harborly.router.time.sleep", clock.sleep)
     monkeypatch.setattr(
-        "sea_mile.router.secrets.SystemRandom.random", lambda _self: 0.5
+        "harborly.router.secrets.SystemRandom.random", lambda _self: 0.5
     )
     return clock
 

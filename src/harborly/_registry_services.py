@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sea_mile._registry_data import (
+from harborly._registry_data import (
     _PROVIDER_PRIORITY,
     NearbyPortGroup,
     NearbyPortResult,
@@ -13,17 +13,17 @@ from sea_mile._registry_data import (
     _port_from_row,
     _port_priority,
 )
-from sea_mile._registry_search import normalize_unlocode
-from sea_mile._registry_validation import validate_limit
-from sea_mile.exceptions import (
+from harborly._registry_search import normalize_unlocode
+from harborly._registry_validation import validate_limit
+from harborly.exceptions import (
     PortCoordinateError,
     PortNotFoundError,
 )
-from sea_mile.geo import great_circle_nmi, validate_coordinate
-from sea_mile.text import canonical_key
+from harborly.geo import great_circle_nmi, validate_coordinate
+from harborly.text import canonical_key
 
 if TYPE_CHECKING:
-    from sea_mile.ports import PortRegistry
+    from harborly.ports import PortRegistry
 
 
 def same_identity(first: Port, second: Port, coordinate_agreement_nmi: float) -> bool:

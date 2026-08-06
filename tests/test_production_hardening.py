@@ -10,18 +10,18 @@ import pandas as pd
 import pandera.errors
 import pytest
 
-from sea_mile._routing_backend import BackendRoute, RoutingConfig, SeaRouteBackend
-from sea_mile.coordinates import LatLon
-from sea_mile.data_contracts import (
+from harborly._routing_backend import BackendRoute, RoutingConfig, SeaRouteBackend
+from harborly.coordinates import LatLon
+from harborly.data_contracts import (
     validate_distance_matrix,
     validate_review_decisions,
     validate_review_frame,
 )
-from sea_mile.geo import great_circle_nmi
-from sea_mile.ports import Port
-from sea_mile.route_cache import RouteCache
-from sea_mile.router import SeaRouter
-from sea_mile.routing import RetryPolicy
+from harborly.geo import great_circle_nmi
+from harborly.ports import Port
+from harborly.route_cache import RouteCache
+from harborly.router import SeaRouter
+from harborly.routing import RetryPolicy
 
 
 class DeterministicBackend:
@@ -146,7 +146,7 @@ def test_searoute_boundary_converts_lat_lon_to_lon_lat(monkeypatch) -> None:
 def test_transient_backend_errors_use_exponential_backoff(monkeypatch) -> None:
     backend = FlakyBackend()
     sleeps: list[float] = []
-    monkeypatch.setattr("sea_mile.router.time.sleep", sleeps.append)
+    monkeypatch.setattr("harborly.router.time.sleep", sleeps.append)
 
     result = SeaRouter(
         _routing_backend=backend,
@@ -351,8 +351,8 @@ def test_distance_edges_use_bounded_batches_and_default_worker_cap(
             self.max_outstanding = max(self.max_outstanding, self.outstanding)
             return CompletedBatch(self, tasks)
 
-    monkeypatch.setattr("sea_mile.router.ProcessPoolExecutor", RecordingExecutor)
-    monkeypatch.setattr("sea_mile.router.os.cpu_count", lambda: 64)
+    monkeypatch.setattr("harborly.router.ProcessPoolExecutor", RecordingExecutor)
+    monkeypatch.setattr("harborly.router.os.cpu_count", lambda: 64)
     ports = [
         _port(str(index), float(index % 80), float(index % 170)) for index in range(50)
     ]

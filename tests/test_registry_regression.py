@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 import pytest
 
-from sea_mile import (
+from harborly import (
     Port,
     PortGroup,
     PortNotFoundError,
@@ -287,16 +287,16 @@ def test_registry_providers(registry: PortRegistry) -> None:
 
 
 def test_public_api_all_exports() -> None:
-    import sea_mile
+    import harborly
 
-    for name in sea_mile.__all__:
-        assert hasattr(sea_mile, name), f"{name} in __all__ but not accessible"
+    for name in harborly.__all__:
+        assert hasattr(harborly, name), f"{name} in __all__ but not accessible"
 
 
 def test_internal_modules_not_exported() -> None:
-    import sea_mile
+    import harborly
 
-    public_names = dir(sea_mile)
+    public_names = dir(harborly)
     for name in public_names:
         assert not name.startswith("_registry_"), (
             f"internal module {name} should not be in public dir()"
@@ -340,7 +340,7 @@ def test_registry_validation_negative_agreement_raises() -> None:
 
 
 def test_registry_validation_incomplete_schema_raises() -> None:
-    from sea_mile import RegistryDataError
+    from harborly import RegistryDataError
 
     df = pd.DataFrame({"registry_id": ["REG:1"]})
     aliases = pd.DataFrame({"registry_id": ["REG:1"]})
@@ -349,7 +349,7 @@ def test_registry_validation_incomplete_schema_raises() -> None:
 
 
 def test_registry_validation_duplicate_ids_raises() -> None:
-    from sea_mile import RegistryDataError
+    from harborly import RegistryDataError
 
     df = pd.DataFrame(
         {
@@ -391,7 +391,7 @@ def test_nearest_validation_negative_max_distance_raises(
 def test_nearest_validation_invalid_coordinate_raises(
     registry: PortRegistry,
 ) -> None:
-    from sea_mile import PortCoordinateError
+    from harborly import PortCoordinateError
 
     with pytest.raises(PortCoordinateError):
         registry.nearest(99.0, 0.0)
@@ -472,7 +472,7 @@ def test_public_limit_apis_accept_positive_integers(
 def test_spatial_index_initialization_is_singleton_under_concurrency(
     monkeypatch,
 ) -> None:
-    import sea_mile.ports as ports_module
+    import harborly.ports as ports_module
 
     original_index = ports_module.PortSpatialIndex
     registry = PortRegistry.bundled()
@@ -521,7 +521,7 @@ def test_spatial_index_initialization_is_singleton_under_concurrency(
 
 
 def test_spatial_index_initialization_retries_after_failure(monkeypatch) -> None:
-    import sea_mile.ports as ports_module
+    import harborly.ports as ports_module
 
     original_index = ports_module.PortSpatialIndex
     registry = PortRegistry.bundled()

@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from benchmarks.route_accuracy.checks import observe, percentile, triangle_violations
-from sea_mile.router import SeaRouter
+from harborly.router import SeaRouter
 
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("searoute") is None,

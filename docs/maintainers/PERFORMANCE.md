@@ -2,13 +2,13 @@
 
 `scripts/benchmark.py` builds a synthetic registry and measures build time, search operations, nearest-port queries, and distance matrix calculation.
 
-## Reference Run (sea-mile 1.0.0)
+## Reference Run (harborly 1.0.0)
 
 Measurements refreshed on 2026-08-06:
 
 - OS: Linux x86_64
 - Python: 3.14.6
-- sea-mile: 1.0.0
+- harborly: 1.0.0
 - Registry size: 40,000 synthetic records
 - Spatial index: SciPy k-d tree
 

@@ -19,8 +19,8 @@ from benchmarks.route_accuracy.reference import (
     score_against_reference,
 )
 from benchmarks.route_accuracy.report import write_report
-from sea_mile.exceptions import RoutingError
-from sea_mile.router import SeaRouter
+from harborly.exceptions import RoutingError
+from harborly.router import SeaRouter
 
 DATA = Path(__file__).resolve().parent / "data"
 

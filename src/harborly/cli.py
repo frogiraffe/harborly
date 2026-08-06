@@ -18,9 +18,9 @@ from importlib.util import find_spec
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-from sea_mile.exceptions import SeaMileError, SourceDataError
-from sea_mile.matching import BatchMatchResult, MatchReason, MatchStatus
-from sea_mile.ports import (
+from harborly.exceptions import HarborlyError, SourceDataError
+from harborly.matching import BatchMatchResult, MatchReason, MatchStatus
+from harborly.ports import (
     _ENRICHMENT_FIELDS,
     Port,
     PortGroup,
@@ -30,17 +30,17 @@ from sea_mile.ports import (
     source_short_label,
 )
 
-logger = logging.getLogger("sea_mile")
+logger = logging.getLogger("harborly")
 
 if TYPE_CHECKING:
-    from sea_mile.router import SeaRoute
+    from harborly.router import SeaRoute
 
 _PORT_FIELDS = [field.name for field in dataclasses.fields(Port)]
 
 
 def _version() -> str:
     try:
-        return version("sea-mile")
+        return version("harborly")
     except PackageNotFoundError:
         return "0.0.0"
 
@@ -58,12 +58,12 @@ def _print_optional_extras_error(feature: str, extras: Sequence[str]) -> None:
     sync_flags = " ".join(f"--extra {extra}" for extra in unique_extras)
     labels = " and ".join(f"'{extra}'" for extra in unique_extras)
     print(
-        f"sea-mile: error: {feature} needs the {labels} extras\n"
+        f"harborly: error: {feature} needs the {labels} extras\n"
         "install every required extra in the same environment:\n"
-        f"  uv tool:        uv tool install --force 'sea-mile[{extras_spec}]'\n"
-        f"  virtualenv:     python -m pip install 'sea-mile[{extras_spec}]'\n"
+        f"  uv tool:        uv tool install --force 'harborly[{extras_spec}]'\n"
+        f"  virtualenv:     python -m pip install 'harborly[{extras_spec}]'\n"
         f"  source checkout: uv sync {sync_flags}\n"
-        "                   then run the command with 'uv run sea-mile'",
+        "                   then run the command with 'uv run harborly'",
         file=sys.stderr,
     )
 
@@ -91,7 +91,7 @@ def _endpoint_port(registry: PortRegistry, value: str, country: str | None) -> P
     coordinate = _parse_coordinate(value)
     if coordinate is None:
         return registry.resolve(value, country_code=country)
-    from sea_mile.router import _coordinate_port
+    from harborly.router import _coordinate_port
 
     return _coordinate_port(value, coordinate[0], coordinate[1])
 
@@ -122,7 +122,7 @@ def _coordinate(value: str) -> float:
         raise argparse.ArgumentTypeError(
             f"{value!r} is not a coordinate. 'near' takes a latitude and "
             "longitude, not a port name: resolve one first with "
-            "'sea-mile search' or 'sea-mile show', then pass its coordinate."
+            "'harborly search' or 'harborly show', then pass its coordinate."
         ) from None
 
 
@@ -166,7 +166,7 @@ def _default_reference_root() -> Path:
     project_reference = Path.cwd() / "data" / "reference"
     if project_reference.exists():
         return project_reference
-    return Path.home() / ".local" / "share" / "sea-mile" / "reference"
+    return Path.home() / ".local" / "share" / "harborly" / "reference"
 
 
 def _print_json(value: object) -> None:
@@ -411,7 +411,7 @@ def _cmd_near(args: argparse.Namespace) -> int:
 
 
 def _cmd_route(args: argparse.Namespace) -> int:
-    from sea_mile.router import SeaRouter
+    from harborly.router import SeaRouter
 
     requirements = [("routing", "searoute")]
     if args.html_map:
@@ -424,7 +424,7 @@ def _cmd_route(args: argparse.Namespace) -> int:
     html_map_writer: Callable[[SeaRoute, Path], None] | None = None
     if args.html_map:
         try:
-            from sea_mile.html_map import write_route_html
+            from harborly.html_map import write_route_html
         except ImportError:
             _print_optional_extras_error(
                 "route --html-map", [extra for extra, _ in requirements]
@@ -503,7 +503,7 @@ def _cmd_route(args: argparse.Namespace) -> int:
 def _cmd_matrix(args: argparse.Namespace) -> int:
     if len(args.ports) < 2:
         raise ValueError("matrix needs two or more ports")
-    from sea_mile.router import SeaRouter
+    from harborly.router import SeaRouter
 
     registry = _load_registry(args)
     ports = [registry.resolve(identifier) for identifier in args.ports]
@@ -534,9 +534,9 @@ def _cmd_matrix(args: argparse.Namespace) -> int:
             return 0
         matrix = router.distance_matrix(ports, max_workers=args.workers)
     except ImportError as error:
-        print(f"sea-mile: error: {error}", file=sys.stderr)
+        print(f"harborly: error: {error}", file=sys.stderr)
         return 2
-    from sea_mile.data_contracts import validate_distance_matrix
+    from harborly.data_contracts import validate_distance_matrix
 
     validate_distance_matrix(labels, matrix)
     if args.json:
@@ -616,7 +616,7 @@ def _cmd_export(args: argparse.Namespace) -> int:
             raise ValueError(
                 "export format 'geoparquet' requires an --output file path"
             )
-        from sea_mile.geoparquet import write_ports_geoparquet
+        from harborly.geoparquet import write_ports_geoparquet
 
         write_ports_geoparquet(ports, args.output)
         print(f"wrote {len(ports)} records to {args.output}")
@@ -701,7 +701,7 @@ def _read_decisions(path: Path) -> dict[str, str]:
     import pandas as pd
     import pandera.errors
 
-    from sea_mile.data_contracts import validate_review_decisions
+    from harborly.data_contracts import validate_review_decisions
 
     frame = pd.read_csv(
         path,
@@ -814,7 +814,7 @@ class _ReviewWriter:
             return
         import pandas as pd
 
-        from sea_mile.data_contracts import validate_review_frame
+        from harborly.data_contracts import validate_review_frame
 
         frame = pd.DataFrame(pending, columns=_REVIEW_FIELDS)
         for column in ("candidate_latitude", "candidate_longitude"):
@@ -933,7 +933,7 @@ def _cmd_tui(args: argparse.Namespace) -> int:
         return 2
     registry = _load_registry(args)
     try:
-        from sea_mile import tui
+        from harborly import tui
     except ImportError:
         _print_optional_extras_error("tui", ["tui"])
         return 2
@@ -950,7 +950,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
     if not _require_optional_extras("serve", requirements):
         return 2
     try:
-        from sea_mile.api import run_server
+        from harborly.api import run_server
     except ImportError:
         _print_optional_extras_error("serve", ["api", "routing"])
         return 2
@@ -1005,7 +1005,7 @@ def _print_verify_report(report: dict[str, Any]) -> None:
 
 def _cmd_data(args: argparse.Namespace) -> int:
     if args.data_command == "verify":
-        from sea_mile.validation import verify_reference_data
+        from harborly.validation import verify_reference_data
 
         report = verify_reference_data(args.reference_root)
         if args.json:
@@ -1014,7 +1014,7 @@ def _cmd_data(args: argparse.Namespace) -> int:
             _print_verify_report(report)
         return 0 if report["status"] == "passed" else 1
     if args.data_command == "lock":
-        from sea_mile.build.download import write_source_lock
+        from harborly.build.download import write_source_lock
 
         lock = write_source_lock(args.reference_root, lock_path=args.output)
         if args.json:
@@ -1024,7 +1024,7 @@ def _cmd_data(args: argparse.Namespace) -> int:
         return 0
     payload: dict[str, Any] = {}
     if args.data_command in {"download", "prepare"}:
-        from sea_mile.build.download import download_reference_data
+        from harborly.build.download import download_reference_data
 
         download_manifest = download_reference_data(
             args.reference_root, refresh=getattr(args, "refresh", False)
@@ -1034,14 +1034,14 @@ def _cmd_data(args: argparse.Namespace) -> int:
             _print_download_manifest(download_manifest)
     if args.data_command in {"build", "prepare"}:
         if getattr(args, "lock", None) is not None:
-            from sea_mile.build.download import load_source_lock, lock_mismatches
+            from harborly.build.download import load_source_lock, lock_mismatches
 
             mismatches = lock_mismatches(
                 args.reference_root, load_source_lock(args.lock)
             )
             if mismatches:
                 raise SourceDataError("source lock mismatch: " + ", ".join(mismatches))
-        from sea_mile.build.registry import build_reference_registry
+        from harborly.build.registry import build_reference_registry
 
         build_manifest = build_reference_registry(args.reference_root)
         payload["build"] = build_manifest
@@ -1056,7 +1056,7 @@ def _cmd_data(args: argparse.Namespace) -> int:
 
 
 def _cmd_cache(args: argparse.Namespace) -> int:
-    from sea_mile.route_cache import RouteCache
+    from harborly.route_cache import RouteCache
 
     if not args.path.is_file():
         raise ValueError(f"route cache does not exist: {args.path}")
@@ -1094,7 +1094,7 @@ def _cmd_cache(args: argparse.Namespace) -> int:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="sea-mile",
+        prog="harborly",
         description=(
             "Search a local port registry and calculate approximate sea routes."
         ),
@@ -1105,7 +1105,7 @@ def _parser() -> argparse.ArgumentParser:
         default=None,
         help="directory containing port_registry.parquet and port_aliases.parquet",
     )
-    parser.add_argument("--version", action="version", version=f"sea-mile {_version()}")
+    parser.add_argument("--version", action="version", version=f"harborly {_version()}")
     parser.add_argument(
         "-v",
         "--verbose",
@@ -1174,7 +1174,7 @@ def _parser() -> argparse.ArgumentParser:
     match_cmd.add_argument(
         "--output",
         type=Path,
-        help="write the input rows plus sea_mile_* columns to this CSV",
+        help="write the input rows plus harborly_* columns to this CSV",
     )
     match_cmd.add_argument(
         "--review",
@@ -1354,7 +1354,7 @@ def _parser() -> argparse.ArgumentParser:
             data_command.add_argument(
                 "--output",
                 type=Path,
-                help="lockfile path (default sea-mile.lock.json in the reference root)",
+                help="lockfile path (default harborly.lock.json in the reference root)",
             )
         data_command.set_defaults(func=_cmd_data)
     return parser
@@ -1376,9 +1376,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         command = cast(Callable[[argparse.Namespace], int], args.func)
         return command(args)
     except KeyboardInterrupt:
-        print("sea-mile: interrupted", file=sys.stderr)
+        print("harborly: interrupted", file=sys.stderr)
         return 130
-    except (SeaMileError, ValueError, TimeoutError) as error:
+    except (HarborlyError, ValueError, TimeoutError) as error:
         if getattr(args, "json", False):
             _print_json(
                 {
@@ -1392,7 +1392,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 }
             )
         else:
-            print(f"sea-mile: error: {error}", file=sys.stderr)
+            print(f"harborly: error: {error}", file=sys.stderr)
         return 2
 
 

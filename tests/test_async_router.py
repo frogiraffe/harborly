@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sea_mile import AsyncSeaRouter, Port
+from harborly import AsyncSeaRouter, Port
 
 
 def make_port(registry_id: str, name: str, latitude: float, longitude: float) -> Port:

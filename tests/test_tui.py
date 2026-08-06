@@ -7,8 +7,8 @@ pytest.importorskip("textual", reason="tests the optional 'tui' extra")
 from test_ports import alias_frame, registry_frame  # noqa: E402
 from textual.widgets import DataTable, Static  # noqa: E402
 
-from sea_mile import PortRegistry  # noqa: E402
-from sea_mile.tui import SeaMileTUI  # noqa: E402
+from harborly import PortRegistry  # noqa: E402
+from harborly.tui import HarborlyTUI  # noqa: E402
 
 
 @pytest.fixture
@@ -16,7 +16,7 @@ def anyio_backend() -> str:
     return "asyncio"
 
 
-def _map_text(app: SeaMileTUI) -> str:
+def _map_text(app: HarborlyTUI) -> str:
     return str(app.query_one("#map", Static).render())
 
 
@@ -29,14 +29,14 @@ async def _type(pilot, text: str) -> None:
     await pilot.pause()
 
 
-async def _enter_browse(app: SeaMileTUI) -> None:
+async def _enter_browse(app: HarborlyTUI) -> None:
     app.action_enter_browse()
 
 
 @pytest.mark.anyio
 async def test_typing_populates_results_and_map() -> None:
     registry = PortRegistry(registry_frame(), alias_frame())
-    app = SeaMileTUI(registry)
+    app = HarborlyTUI(registry)
     async with app.run_test() as pilot:
         await _type(pilot, "Mersin")
 
@@ -50,7 +50,7 @@ async def test_typing_populates_results_and_map() -> None:
 async def test_map_rerenders_after_resize(monkeypatch) -> None:
     render_calls: list[tuple[int, int]] = []
 
-    from sea_mile.tui import map_canvas as mc
+    from harborly.tui import map_canvas as mc
 
     original_render = mc.BrailleWorldMap.render
 
@@ -61,7 +61,7 @@ async def test_map_rerenders_after_resize(monkeypatch) -> None:
     monkeypatch.setattr(mc.BrailleWorldMap, "render", tracking_render)
 
     registry = PortRegistry(registry_frame(), alias_frame())
-    app = SeaMileTUI(registry)
+    app = HarborlyTUI(registry)
     async with app.run_test(size=(80, 24)) as pilot:
         await _type(pilot, "Mersin")
 
@@ -77,7 +77,7 @@ async def test_map_rerenders_after_resize(monkeypatch) -> None:
 @pytest.mark.anyio
 async def test_bare_unlocode_groups_the_matching_sources() -> None:
     registry = PortRegistry(registry_frame(), alias_frame())
-    app = SeaMileTUI(registry)
+    app = HarborlyTUI(registry)
     async with app.run_test() as pilot:
         await _type(pilot, "TRMER")
 
@@ -92,7 +92,7 @@ async def test_bare_unlocode_groups_the_matching_sources() -> None:
 @pytest.mark.anyio
 async def test_arrow_down_updates_map() -> None:
     registry = PortRegistry(registry_frame(), alias_frame())
-    app = SeaMileTUI(registry)
+    app = HarborlyTUI(registry)
     async with app.run_test() as pilot:
         await _type(pilot, "Piraeus")
 
@@ -114,7 +114,7 @@ async def test_arrow_down_updates_map() -> None:
 @pytest.mark.anyio
 async def test_clearing_the_query_resets_results() -> None:
     registry = PortRegistry(registry_frame(), alias_frame())
-    app = SeaMileTUI(registry)
+    app = HarborlyTUI(registry)
     async with app.run_test() as pilot:
         await _type(pilot, "Mersin")
         table = app.query_one("#results", DataTable)
@@ -131,7 +131,7 @@ async def test_clearing_the_query_resets_results() -> None:
 @pytest.mark.anyio
 async def test_clearing_the_query_mid_search_keeps_results_empty() -> None:
     registry = PortRegistry(registry_frame(), alias_frame())
-    app = SeaMileTUI(registry)
+    app = HarborlyTUI(registry)
     async with app.run_test() as pilot:
         await pilot.click("#query")
         for character in "Mersin":
@@ -148,7 +148,7 @@ async def test_clearing_the_query_mid_search_keeps_results_empty() -> None:
 @pytest.mark.anyio
 async def test_zoom_in_increases_zoom_level() -> None:
     registry = PortRegistry(registry_frame(), alias_frame())
-    app = SeaMileTUI(registry)
+    app = HarborlyTUI(registry)
     async with app.run_test() as pilot:
         await _type(pilot, "Mersin")
         await _enter_browse(app)
@@ -162,7 +162,7 @@ async def test_zoom_in_increases_zoom_level() -> None:
 @pytest.mark.anyio
 async def test_zoom_out_decreases_zoom_level() -> None:
     registry = PortRegistry(registry_frame(), alias_frame())
-    app = SeaMileTUI(registry)
+    app = HarborlyTUI(registry)
     async with app.run_test() as pilot:
         await _type(pilot, "Mersin")
         await _enter_browse(app)
@@ -176,7 +176,7 @@ async def test_zoom_out_decreases_zoom_level() -> None:
 @pytest.mark.anyio
 async def test_zoom_reset_restores_default() -> None:
     registry = PortRegistry(registry_frame(), alias_frame())
-    app = SeaMileTUI(registry)
+    app = HarborlyTUI(registry)
     async with app.run_test() as pilot:
         await _type(pilot, "Mersin")
         await _enter_browse(app)
@@ -194,7 +194,7 @@ async def test_zoom_reset_restores_default() -> None:
 @pytest.mark.anyio
 async def test_go_to_port_centers_on_selected() -> None:
     registry = PortRegistry(registry_frame(), alias_frame())
-    app = SeaMileTUI(registry)
+    app = HarborlyTUI(registry)
     async with app.run_test() as pilot:
         await _type(pilot, "Mersin")
         await _enter_browse(app)
@@ -211,7 +211,7 @@ async def test_go_to_port_centers_on_selected() -> None:
 @pytest.mark.anyio
 async def test_escape_enters_browse_mode() -> None:
     registry = PortRegistry(registry_frame(), alias_frame())
-    app = SeaMileTUI(registry)
+    app = HarborlyTUI(registry)
     async with app.run_test() as pilot:
         await _type(pilot, "Mersin")
         assert not app._browse_mode
@@ -224,7 +224,7 @@ async def test_escape_enters_browse_mode() -> None:
 @pytest.mark.anyio
 async def test_i_enters_insert_mode() -> None:
     registry = PortRegistry(registry_frame(), alias_frame())
-    app = SeaMileTUI(registry)
+    app = HarborlyTUI(registry)
     async with app.run_test() as pilot:
         await _type(pilot, "Mersin")
         await _enter_browse(app)
@@ -238,7 +238,7 @@ async def test_i_enters_insert_mode() -> None:
 @pytest.mark.anyio
 async def test_browse_mode_pan_and_zoom_via_keys() -> None:
     registry = PortRegistry(registry_frame(), alias_frame())
-    app = SeaMileTUI(registry)
+    app = HarborlyTUI(registry)
     async with app.run_test() as pilot:
         await _type(pilot, "Mersin")
         await _enter_browse(app)

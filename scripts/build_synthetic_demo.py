@@ -7,8 +7,8 @@ from pathlib import Path
 
 import searoute
 
-from sea_mile.geo import great_circle_nmi
-from sea_mile.routing import assess_route_length
+from harborly.geo import great_circle_nmi
+from harborly.routing import assess_route_length
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_PATH = PROJECT_ROOT / "examples" / "synthetic" / "synthetic_routes.geojson"
@@ -69,7 +69,7 @@ def main() -> None:
 
     collection = {
         "type": "FeatureCollection",
-        "name": "sea-mile synthetic demo",
+        "name": "harborly synthetic demo",
         "description": "Six fixed example routes. Not real port data.",
         "features": features,
     }

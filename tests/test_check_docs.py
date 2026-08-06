@@ -113,7 +113,7 @@ def test_pypi_guard_rejects_relative_reference_style_link() -> None:
 
 def test_pypi_guard_allows_absolute_github_url() -> None:
     text = (
-        "See [docs](https://github.com/frogiraffe/sea-mile/blob/main/docs/GUIDE.md).\n"
+        "See [docs](https://github.com/frogiraffe/harborly/blob/main/docs/GUIDE.md).\n"
     )
     assert check_pypi_readme_links(Path("README.md"), text) == []
 

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from sea_mile._registry_data import (
+from harborly._registry_data import (
     _ALIAS_COLUMNS,
     _ENRICHMENT_FIELDS,
     _PROVIDER_PRIORITY,
@@ -29,23 +29,23 @@ from sea_mile._registry_data import (
     bundled_data_directory,
     source_short_label,
 )
-from sea_mile._registry_search import (
+from harborly._registry_search import (
     resolve_port_uncached,
     search_registry_uncached,
 )
-from sea_mile._registry_services import (
+from harborly._registry_services import (
     group_for_query,
     nearest_grouped_ports,
     nearest_ports,
     resolve_canonical_group,
     search_grouped_ports,
 )
-from sea_mile.canonical import assign_canonical_ids
-from sea_mile.exceptions import (
+from harborly.canonical import assign_canonical_ids
+from harborly.exceptions import (
     PortNotFoundError,
     RegistryDataError,
 )
-from sea_mile.matching import (
+from harborly.matching import (
     BatchMatchResult,
     MatchCandidate,
     MatchPolicy,
@@ -53,8 +53,8 @@ from sea_mile.matching import (
     MatchStatus,
     decide_exact_match,
 )
-from sea_mile.search import AliasSearchIndex
-from sea_mile.spatial import PortSpatialIndex
+from harborly.search import AliasSearchIndex
+from harborly.spatial import PortSpatialIndex
 
 
 def _match_candidates(
@@ -187,7 +187,7 @@ class PortRegistry:
 
     @classmethod
     def bundled(cls, *, coordinate_agreement_nmi: float = 25.0) -> PortRegistry:
-        """Load the registry distributed with sea-mile."""
+        """Load the registry distributed with harborly."""
         return cls.from_directory(
             bundled_data_directory(),
             coordinate_agreement_nmi=coordinate_agreement_nmi,

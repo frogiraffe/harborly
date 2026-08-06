@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from benchmarks.matching_accuracy import MatchingCase, score
-from sea_mile.matching import (
+from harborly.matching import (
     BatchMatchResult,
     ConfidenceTier,
     MatchCandidate,

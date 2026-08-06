@@ -4,16 +4,16 @@ import argparse
 import json
 from pathlib import Path
 
-from sea_mile.build import build_reference_registry
+from harborly.build import build_reference_registry
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_OUTPUT = ROOT / "src" / "sea_mile" / "data"
+DEFAULT_OUTPUT = ROOT / "src" / "harborly" / "data"
 BUNDLED_PROVIDERS = ("NGA_WPI", "GEONAMES")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Build the WPI and GeoNames registry distributed with sea-mile."
+        description="Build the WPI and GeoNames registry distributed with harborly."
     )
     parser.add_argument(
         "reference_root",

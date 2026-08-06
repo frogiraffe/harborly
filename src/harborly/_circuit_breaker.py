@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from math import isfinite
 
-from sea_mile.exceptions import RoutingError, RoutingErrorReason
+from harborly.exceptions import RoutingError, RoutingErrorReason
 
 
 class _CircuitState(StrEnum):

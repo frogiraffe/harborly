@@ -6,9 +6,9 @@ pytest.importorskip("textual", reason="tests the optional 'tui' extra")
 
 from test_ports import alias_frame, registry_frame  # noqa: E402
 
-from sea_mile import PortRegistry  # noqa: E402
-from sea_mile.coordinates import LatLon  # noqa: E402
-from sea_mile.tui.map_canvas import (  # noqa: E402
+from harborly import PortRegistry  # noqa: E402
+from harborly.coordinates import LatLon  # noqa: E402
+from harborly.tui.map_canvas import (  # noqa: E402
     BrailleWorldMap,
     _cluster_ports,
     _geo_to_pixel,

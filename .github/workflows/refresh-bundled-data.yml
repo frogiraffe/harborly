@@ -30,10 +30,10 @@ jobs:
       - name: Record the currently bundled registry hash
         id: before
         run: |
-          echo "hash=$(jq -r .registry_content_hash src/sea_mile/data/registry_manifest.json)" >> "$GITHUB_OUTPUT"
+          echo "hash=$(jq -r .registry_content_hash src/harborly/data/registry_manifest.json)" >> "$GITHUB_OUTPUT"
 
       - name: Download latest source snapshots
-        run: uv run sea-mile data download --reference-root data/reference --refresh
+        run: uv run harborly data download --reference-root data/reference --refresh
 
       - name: Rebuild the bundled registry
         run: uv run python scripts/build_bundled_registry.py data/reference
@@ -41,12 +41,12 @@ jobs:
       - name: Check whether the registry content actually changed
         id: diff
         run: |
-          new_hash=$(jq -r .registry_content_hash src/sea_mile/data/registry_manifest.json)
+          new_hash=$(jq -r .registry_content_hash src/harborly/data/registry_manifest.json)
           echo "hash=$new_hash" >> "$GITHUB_OUTPUT"
           if [ "$new_hash" = "${{ steps.before.outputs.hash }}" ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "registry_content_hash unchanged ($new_hash); the manifest's snapshot_label/path/sha256 fields still shift with today's date even when the port data itself doesn't, so those get discarded below."
-            git checkout -- src/sea_mile/data
+            git checkout -- src/harborly/data
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
             echo "registry_content_hash changed: ${{ steps.before.outputs.hash }} -> $new_hash"
@@ -63,7 +63,7 @@ jobs:
           git fetch origin \
             "refs/heads/$branch:refs/remotes/origin/$branch" || true
           git checkout -B "$branch"
-          git add src/sea_mile/data
+          git add src/harborly/data
           git commit -m "Refresh bundled WPI + GeoNames registry data"
           git push --force-with-lease origin "$branch"
           if [ "$(gh pr view "$branch" --json state -q .state 2>/dev/null)" = "OPEN" ]; then
@@ -71,7 +71,7 @@ jobs:
           else
             gh pr create \
               --title "Refresh bundled registry data" \
-              --body "Automated refresh of the WPI + GeoNames registry bundled in the wheel (\`scripts/build_bundled_registry.py\`). registry_content_hash: \`${{ steps.before.outputs.hash }}\` -> \`${{ steps.diff.outputs.hash }}\`. Review the diff in \`src/sea_mile/data/\` before merging, and bump the package version as part of the merge." \
+              --body "Automated refresh of the WPI + GeoNames registry bundled in the wheel (\`scripts/build_bundled_registry.py\`). registry_content_hash: \`${{ steps.before.outputs.hash }}\` -> \`${{ steps.diff.outputs.hash }}\`. Review the diff in \`src/harborly/data/\` before merging, and bump the package version as part of the merge." \
               --base main \
               --head "$branch"
           fi

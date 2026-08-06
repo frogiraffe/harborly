@@ -12,8 +12,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from sea_mile.exceptions import RegistryDataError
-from sea_mile.matching import BatchMatchResult
+from harborly.exceptions import RegistryDataError
+from harborly.matching import BatchMatchResult
 
 _REGISTRY_COLUMNS = {
     "registry_id",
@@ -53,8 +53,8 @@ def source_short_label(provider: str) -> str:
 
 
 def bundled_data_directory() -> Path:
-    """Return the directory containing the registry distributed with sea-mile."""
-    return Path(str(files("sea_mile").joinpath("data")))
+    """Return the directory containing the registry distributed with harborly."""
+    return Path(str(files("harborly").joinpath("data")))
 
 
 def _positions_by_value(values: pd.Series) -> dict[str, np.ndarray]:
@@ -96,9 +96,9 @@ def _validate_registry_schema(manifest_path: Path) -> None:
     if version is None or version in SUPPORTED_REGISTRY_SCHEMA_VERSIONS:
         return
     raise RegistryDataError(
-        f"registry schema version {version} is not readable by this sea-mile, "
+        f"registry schema version {version} is not readable by this harborly, "
         f"which supports {sorted(SUPPORTED_REGISTRY_SCHEMA_VERSIONS)}. "
-        "rebuild the registry with: sea-mile data build"
+        "rebuild the registry with: harborly data build"
     )
 
 
@@ -226,14 +226,14 @@ class NearbyPortGroup:
 
 
 _ENRICHMENT_FIELDS: tuple[str, ...] = (
-    "sea_mile_status",
-    "sea_mile_reason_code",
-    "sea_mile_registry_id",
-    "sea_mile_name",
-    "sea_mile_country_code",
-    "sea_mile_latitude",
-    "sea_mile_longitude",
-    "sea_mile_unlocode",
+    "harborly_status",
+    "harborly_reason_code",
+    "harborly_registry_id",
+    "harborly_name",
+    "harborly_country_code",
+    "harborly_latitude",
+    "harborly_longitude",
+    "harborly_unlocode",
 )
 
 
@@ -276,16 +276,16 @@ def _result_enrichment(registry: Any, result: BatchMatchResult) -> dict[str, obj
     if registry_id and registry_id in registry:
         record = registry.get(registry_id)
     return {
-        "sea_mile_status": str(result.status),
-        "sea_mile_reason_code": str(result.reason_code),
-        "sea_mile_registry_id": registry_id or "",
-        "sea_mile_name": record.name if record else "",
-        "sea_mile_country_code": record.country_code if record else "",
-        "sea_mile_latitude": (
+        "harborly_status": str(result.status),
+        "harborly_reason_code": str(result.reason_code),
+        "harborly_registry_id": registry_id or "",
+        "harborly_name": record.name if record else "",
+        "harborly_country_code": record.country_code if record else "",
+        "harborly_latitude": (
             record.latitude if record and record.latitude is not None else ""
         ),
-        "sea_mile_longitude": (
+        "harborly_longitude": (
             record.longitude if record and record.longitude is not None else ""
         ),
-        "sea_mile_unlocode": record.unlocode if record and record.unlocode else "",
+        "harborly_unlocode": record.unlocode if record and record.unlocode else "",
     }

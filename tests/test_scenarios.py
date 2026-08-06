@@ -1,4 +1,4 @@
-"""End to end validation of the three usage scenarios sea-mile targets.
+"""End to end validation of the three usage scenarios harborly targets.
 
 An analyst cleaning a large name list, a developer embedding search and routing,
 and a researcher building a reproducible distance matrix. These lock the public
@@ -10,7 +10,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from sea_mile import PortRegistry, SeaRouter
+from harborly import PortRegistry, SeaRouter
 
 _PORTS = [
     ("WPI:1", "1", "TR", "Mersin", 36.8, 34.65, "TRMER"),
@@ -68,24 +68,24 @@ def test_analyst_bulk_match_enriches_every_row_and_repeats() -> None:
 
     assert len(enriched) == len(frame)
     for column in (
-        "sea_mile_status",
-        "sea_mile_reason_code",
-        "sea_mile_registry_id",
-        "sea_mile_name",
-        "sea_mile_country_code",
-        "sea_mile_latitude",
-        "sea_mile_longitude",
-        "sea_mile_unlocode",
+        "harborly_status",
+        "harborly_reason_code",
+        "harborly_registry_id",
+        "harborly_name",
+        "harborly_country_code",
+        "harborly_latitude",
+        "harborly_longitude",
+        "harborly_unlocode",
     ):
         assert column in enriched.columns
 
     mersin = enriched[enriched["port_name"] == "Mersin"]
-    assert (mersin["sea_mile_registry_id"] != "").all()
-    assert (mersin["sea_mile_name"] == "Mersin").all()
+    assert (mersin["harborly_registry_id"] != "").all()
+    assert (mersin["harborly_name"] == "Mersin").all()
 
     unknown = enriched[enriched["port_name"] == "Zzz Unknown"]
-    assert (unknown["sea_mile_status"] == "unresolved").all()
-    assert (unknown["sea_mile_registry_id"] == "").all()
+    assert (unknown["harborly_status"] == "unresolved").all()
+    assert (unknown["harborly_registry_id"] == "").all()
 
     again = registry.match_dataframe(frame, name_column="port_name")
     pd.testing.assert_frame_equal(enriched, again)

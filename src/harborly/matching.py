@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-from sea_mile.geo import great_circle_nmi
+from harborly.geo import great_circle_nmi
 
 OFFICIAL_PROVIDERS = frozenset({"NGA_WPI", "UN_LOCODE"})
 

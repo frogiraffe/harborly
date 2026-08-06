@@ -3,7 +3,7 @@ requires = ["setuptools==83.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "sea-mile"
+name = "harborly"
 version = "1.0.0"
 description = "Reproducible, source-aware port identity resolution with approximate sea-route distances"
 readme = "README.md"
@@ -39,7 +39,7 @@ dependencies = [
 routing = [
     "searoute>=1.6.0",
 ]
-# pyproj powers the optional WGS84 route cross-check in `sea-mile data verify`.
+# pyproj powers the optional WGS84 route cross-check in `harborly data verify`.
 # The demo builder in scripts/ needs the routing extra as well.
 analysis = [
     "pyproj>=3.7.2",
@@ -60,18 +60,18 @@ map = [
 ]
 
 [project.scripts]
-sea-mile = "sea_mile.cli:main"
+harborly = "harborly.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/frogiraffe/sea-mile"
-Repository = "https://github.com/frogiraffe/sea-mile"
-Issues = "https://github.com/frogiraffe/sea-mile/issues"
+Homepage = "https://github.com/frogiraffe/harborly"
+Repository = "https://github.com/frogiraffe/harborly"
+Issues = "https://github.com/frogiraffe/harborly/issues"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
 
 [tool.setuptools.package-data]
-sea_mile = ["py.typed", "data/*.json", "data/*.md", "data/*.parquet"]
+harborly = ["py.typed", "data/*.json", "data/*.md", "data/*.parquet"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -108,7 +108,7 @@ pythonpath = ["."]
 
 [tool.coverage.run]
 branch = true
-source = ["sea_mile"]
+source = ["harborly"]
 
 [tool.coverage.report]
 fail_under = 88

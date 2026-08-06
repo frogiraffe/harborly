@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from rapidfuzz import fuzz, process
 
-from sea_mile.text import canonical_key
+from harborly.text import canonical_key
 
 _MIN_FUZZY_QUERY_LENGTH = 3
 _MIN_GLOBAL_FUZZY_QUERY_LENGTH = 4

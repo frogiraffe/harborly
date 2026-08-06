@@ -5,9 +5,9 @@ from typing import Any
 
 import pytest
 
-from sea_mile._routing_backend import BackendRoute, RoutingConfig
-from sea_mile.coordinates import LatLon
-from sea_mile.route_cache import RouteCache
+from harborly._routing_backend import BackendRoute, RoutingConfig
+from harborly.coordinates import LatLon
+from harborly.route_cache import RouteCache
 
 
 @pytest.fixture
@@ -88,8 +88,8 @@ def test_cache_closes_every_connection(tmp_path, monkeypatch):
         connections.append(connection)
         return connection
 
-    monkeypatch.setattr("sea_mile.route_cache.sqlite3.connect", tracked_connect)
-    monkeypatch.setattr("sea_mile.route_cache.sleep", lambda _: None)
+    monkeypatch.setattr("harborly.route_cache.sqlite3.connect", tracked_connect)
+    monkeypatch.setattr("harborly.route_cache.sleep", lambda _: None)
 
     cache = RouteCache(tmp_path / "tracked.db")
     key = _cache_key(cache)

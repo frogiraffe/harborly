@@ -24,7 +24,7 @@ from markdown_it import MarkdownIt
 
 from scripts.check_docs import DEFAULT_ROOTS, iter_markdown_files
 
-_USER_AGENT = "sea-mile-doc-link-check/1.0 (+https://github.com/frogiraffe/sea-mile)"
+_USER_AGENT = "harborly-doc-link-check/1.0 (+https://github.com/frogiraffe/harborly)"
 _TIMEOUT_SECONDS = 10
 
 

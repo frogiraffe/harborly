@@ -4,9 +4,9 @@ import json
 
 import pyarrow.parquet as pq
 
-from sea_mile import SeaRouter
-from sea_mile.geoparquet import write_ports_geoparquet, write_route_geoparquet
-from sea_mile.ports import Port
+from harborly import SeaRouter
+from harborly.geoparquet import write_ports_geoparquet, write_route_geoparquet
+from harborly.ports import Port
 
 
 def port(registry_id: str, name: str, latitude: float, longitude: float) -> Port:

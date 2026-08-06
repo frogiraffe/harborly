@@ -12,13 +12,13 @@ from typing import Any
 
 import pandas as pd
 
-import sea_mile.spatial
-from sea_mile import PortRegistry
-from sea_mile._routing_backend import BackendRoute, RoutingConfig
-from sea_mile.coordinates import LatLon
-from sea_mile.geo import great_circle_nmi
-from sea_mile.router import SeaRouter
-from sea_mile.text import canonical_key
+import harborly.spatial
+from harborly import PortRegistry
+from harborly._routing_backend import BackendRoute, RoutingConfig
+from harborly.coordinates import LatLon
+from harborly.geo import great_circle_nmi
+from harborly.router import SeaRouter
+from harborly.text import canonical_key
 
 try:
     import resource as _resource
@@ -148,13 +148,13 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
 def main(argv: Sequence[str] | None = None) -> None:
     args = _parse_args(argv)
     if args.no_kdtree:
-        sea_mile.spatial.cKDTree = None
+        harborly.spatial.cKDTree = None
 
     frame, aliases = _synthetic(args.count)
-    tree = "scipy" if sea_mile.spatial.cKDTree is not None else "scan only"
+    tree = "scipy" if harborly.spatial.cKDTree is not None else "scan only"
     machine = f"{platform.system()} {platform.machine()}"
 
-    print("sea-mile benchmark")
+    print("harborly benchmark")
     print(f"{'python':{_LABEL}}{platform.python_version()} on {machine}")
     print(f"{'records':{_LABEL}}{args.count}")
     print(f"{'k-d tree':{_LABEL}}{tree}")

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from sea_mile.router import SeaRoute, SequenceSeaRoute
+    from harborly.router import SeaRoute, SequenceSeaRoute
 
 
 def _extract_lines(geometry: dict[str, Any]) -> list[list[tuple[float, float]]]:
@@ -101,7 +101,7 @@ def _placemark_for_geometry(
 
 def to_kml_string(route: SeaRoute | SequenceSeaRoute) -> str:
     """Generate a standard KML document string for a sea route or multi-leg sequence."""
-    from sea_mile.router import SequenceSeaRoute  # noqa: PLC0415
+    from harborly.router import SequenceSeaRoute  # noqa: PLC0415
 
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',

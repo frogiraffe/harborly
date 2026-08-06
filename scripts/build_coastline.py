@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rebuild the embedded coastline data in sea_mile/tui/coastlines.py.
+"""Rebuild the embedded coastline data in harborly/tui/coastlines.py.
 
 Downloads Natural Earth 110m coastline shapefile, extracts and quantizes
 coordinates to 1 decimal place, then gzip+base64 compresses the result.
@@ -33,7 +33,7 @@ NE_REQUIRED_FILES = (
 TARGET = (
     Path(__file__).resolve().parent.parent
     / "src"
-    / "sea_mile"
+    / "harborly"
     / "tui"
     / "coastlines.py"
 )

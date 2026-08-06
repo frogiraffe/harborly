@@ -7,13 +7,13 @@ from contextlib import closing
 
 import pytest
 
-from sea_mile._routing_backend import BackendRoute, RoutingConfig, SeaRouteBackend
-from sea_mile.coordinates import LatLon
-from sea_mile.exceptions import RoutingError, RoutingErrorReason
-from sea_mile.geo import great_circle_nmi
-from sea_mile.route_cache import RouteCache
-from sea_mile.router import SeaRouter
-from sea_mile.routing import RouteQualityFlag
+from harborly._routing_backend import BackendRoute, RoutingConfig, SeaRouteBackend
+from harborly.coordinates import LatLon
+from harborly.exceptions import RoutingError, RoutingErrorReason
+from harborly.geo import great_circle_nmi
+from harborly.route_cache import RouteCache
+from harborly.router import SeaRouter
+from harborly.routing import RouteQualityFlag
 
 ORIGIN = (36.8, 34.65)
 DESTINATION = (37.94, 23.63)
@@ -303,7 +303,7 @@ def test_routing_error_reasons_are_distinct_stable_strings():
     assert len(set(reasons)) == 4
 
 
-def test_quality_assessment_stays_in_sea_mile_not_the_backend():
+def test_quality_assessment_stays_in_harborly_not_the_backend():
     great_circle = great_circle_nmi(*ORIGIN, *DESTINATION)
     route = SeaRouter(
         _routing_backend=FakeBackend(distance_nmi=great_circle * 4)

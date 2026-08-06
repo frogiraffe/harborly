@@ -4,22 +4,22 @@ import json
 
 import pytest
 
-from sea_mile.matching import (
+from harborly.matching import (
     BatchMatchResult,
     ConfidenceTier,
     MatchCandidate,
     MatchReason,
     MatchStatus,
 )
-from sea_mile.ports import (
+from harborly.ports import (
     NearbyPortGroup,
     NearbyPortResult,
     Port,
     PortGroup,
     PortSearchResult,
 )
-from sea_mile.router import SeaRoute
-from sea_mile.routing import RouteQualityFlag
+from harborly.router import SeaRoute
+from harborly.routing import RouteQualityFlag
 
 
 def _port() -> Port:

@@ -6,8 +6,8 @@ import sys
 import pandas as pd
 import pytest
 
-from sea_mile.build.download import sha256
-from sea_mile.validation import verify_reference_data
+from harborly.build.download import sha256
+from harborly.validation import verify_reference_data
 
 
 def _record(registry_id, provider, country, name, unlocode, lat, lon) -> dict:

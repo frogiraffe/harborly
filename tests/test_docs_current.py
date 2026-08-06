@@ -8,10 +8,10 @@ from pathlib import Path
 
 from markdown_it import MarkdownIt
 
-import sea_mile
+import harborly
+from harborly.cli import _parser
+from harborly.exceptions import RoutingErrorReason
 from scripts.check_docs import _heading_slugs
-from sea_mile.cli import _parser
-from sea_mile.exceptions import RoutingErrorReason
 
 ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
@@ -28,7 +28,7 @@ MARKDOWN_FILES = [
         if "superpowers" not in path.parts
     ),
     *sorted((ROOT / "examples").rglob("*.md")),
-    ROOT / "src" / "sea_mile" / "data" / "ATTRIBUTION.md",
+    ROOT / "src" / "harborly" / "data" / "ATTRIBUTION.md",
 ]
 
 
@@ -52,13 +52,13 @@ def test_every_cli_command_is_documented() -> None:
 
 def test_every_public_export_is_documented() -> None:
     docs = LIBRARY_API.read_text().lower()
-    missing = [name for name in sea_mile.__all__ if name.lower() not in docs]
+    missing = [name for name in harborly.__all__ if name.lower() not in docs]
     assert not missing, f"undocumented public exports: {missing}"
 
 
 def test_every_stable_export_is_in_compatibility_policy() -> None:
     policy = API_COMPATIBILITY.read_text().lower()
-    missing = [name for name in sea_mile.__all__ if name.lower() not in policy]
+    missing = [name for name in harborly.__all__ if name.lower() not in policy]
     assert not missing, f"exports missing from compatibility policy: {missing}"
 
 
@@ -78,9 +78,9 @@ def _example_commands() -> list[list[str]]:
                 tokens = shlex.split(line)
             except ValueError:
                 continue
-            if tokens[:3] == ["uv", "run", "sea-mile"]:
+            if tokens[:3] == ["uv", "run", "harborly"]:
                 commands.append(tokens[3:])
-            elif tokens[:1] == ["sea-mile"]:
+            elif tokens[:1] == ["harborly"]:
                 commands.append(tokens[1:])
     return commands
 
@@ -219,7 +219,7 @@ def test_release_metadata_versions_match() -> None:
     citation_match = re.search(r"^version:\s*([^\s]+)\s*$", citation, re.MULTILINE)
     assert citation_match is not None
     locked_package = next(
-        package for package in lock["package"] if package["name"] == "sea-mile"
+        package for package in lock["package"] if package["name"] == "harborly"
     )
 
     versions = {

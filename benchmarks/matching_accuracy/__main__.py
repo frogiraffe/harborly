@@ -15,8 +15,8 @@ from benchmarks.matching_accuracy.metrics import (
     score,
 )
 from benchmarks.matching_accuracy.report import write_report
-from sea_mile._registry_data import bundled_data_directory
-from sea_mile.ports import PortRegistry
+from harborly._registry_data import bundled_data_directory
+from harborly.ports import PortRegistry
 
 
 def _parse_args() -> argparse.Namespace:

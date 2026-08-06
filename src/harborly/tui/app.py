@@ -23,8 +23,8 @@ from textual.message import Message
 from textual.timer import Timer
 from textual.widgets import DataTable, Footer, Header, Input, Static
 
-from sea_mile.ports import Port, PortGroup, PortRegistry, source_short_label
-from sea_mile.tui.map_canvas import BrailleWorldMap
+from harborly.ports import Port, PortGroup, PortRegistry, source_short_label
+from harborly.tui.map_canvas import BrailleWorldMap
 
 _RESULT_COLUMNS = ("Name", "Country", "UN/LOCODE", "Sources", "Coord")
 _SEARCH_DEBOUNCE_SECONDS = 0.15
@@ -79,7 +79,7 @@ def _detail_lines(group: PortGroup) -> list[str]:
     return lines
 
 
-class SeaMileTUI(App[None]):
+class HarborlyTUI(App[None]):
     """Live fuzzy port search with a braille world map, over a local registry."""
 
     ENABLE_COMMAND_PALETTE = False
@@ -118,7 +118,7 @@ class SeaMileTUI(App[None]):
         # Go to selected port
         Binding("g", "go_to_port", "Center on port"),
     ]
-    TITLE = "sea-mile"
+    TITLE = "harborly"
 
     def __init__(self, registry: PortRegistry) -> None:
         super().__init__()
@@ -350,4 +350,4 @@ class SeaMileTUI(App[None]):
 
 def run(registry: PortRegistry) -> None:
     """Launch the interactive TUI."""
-    SeaMileTUI(registry).run()
+    HarborlyTUI(registry).run()

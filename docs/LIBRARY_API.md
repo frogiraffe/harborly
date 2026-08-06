@@ -1,6 +1,6 @@
 # Library API
 
-This page describes the public API of `sea_mile`. The library builds a local port
+This page describes the public API of `harborly`. The library builds a local port
 registry, searches it, and calculates an approximate sea route. Routing uses the
 searoute package.
 
@@ -11,29 +11,29 @@ The stable top-level exports are the core types: `Port`, `PortGroup`,
 `PassageRestriction`, `BatchMatchResult`, `MatchStatus`,
 `ConfidenceTier`, `MatchReason`, `MatchPolicy`, `RetryPolicy`,
 `RouteQualityFlag`, `RouteQualityPolicy`, `CanonicalEvidence`, `BackendError`,
-`BackendErrorKind`, and the `SeaMileError` family (`RegistryDataError`,
+`BackendErrorKind`, and the `HarborlyError` family (`RegistryDataError`,
 `SourceDataError`, `PortNotFoundError`, `AmbiguousPortError`,
 `PortCoordinateError`, `RoutingError`).
 
 Lower-level APIs are imported from their defining modules:
 
-- `sea_mile.geo`: `validate_coordinate`, `CoordinateCheck`, `great_circle_nmi`.
-- `sea_mile.text`: `canonical_key`, `normalize_display_text`.
-- `sea_mile.sources`: `parse_wpi_dms`, `parse_unlocode_coordinates`.
-- `sea_mile.matching`: `decide_exact_match`, `ExactMatchDecision`, `MatchCandidate`, `MatchPolicy`.
-- `sea_mile.ports`: `PortSearchResult`, `NearbyPortResult`, `NearbyPortGroup`.
-- `sea_mile.canonical`: `assign_canonical_ids`, `assign_canonical_ids_with_evidence`, `CanonicalEvidence`.
-- `sea_mile.routing`: `RouteQualityFlag`, `RouteQualityPolicy`, `assess_route_length`.
-- `sea_mile.build`: `build_reference_registry`, `download_reference_data`.
-- `sea_mile.kml`: `to_kml_string`, `write_route_kml`.
-- `sea_mile.geoparquet`: `write_ports_geoparquet`, `write_route_geoparquet`.
+- `harborly.geo`: `validate_coordinate`, `CoordinateCheck`, `great_circle_nmi`.
+- `harborly.text`: `canonical_key`, `normalize_display_text`.
+- `harborly.sources`: `parse_wpi_dms`, `parse_unlocode_coordinates`.
+- `harborly.matching`: `decide_exact_match`, `ExactMatchDecision`, `MatchCandidate`, `MatchPolicy`.
+- `harborly.ports`: `PortSearchResult`, `NearbyPortResult`, `NearbyPortGroup`.
+- `harborly.canonical`: `assign_canonical_ids`, `assign_canonical_ids_with_evidence`, `CanonicalEvidence`.
+- `harborly.routing`: `RouteQualityFlag`, `RouteQualityPolicy`, `assess_route_length`.
+- `harborly.build`: `build_reference_registry`, `download_reference_data`.
+- `harborly.kml`: `to_kml_string`, `write_route_kml`.
+- `harborly.geoparquet`: `write_ports_geoparquet`, `write_route_geoparquet`.
 
 ## Data lifecycle
 
 The wheel includes a registry derived from WPI and GeoNames:
 
 ```python
-from sea_mile import PortRegistry
+from harborly import PortRegistry
 
 registry = PortRegistry.bundled()
 ```
@@ -46,36 +46,36 @@ The CLI selects `--data-dir`, `SEA_MILE_DATA_DIR`,
 A local build adds UN/LOCODE and may add a local OpenStreetMap export:
 
 ```bash
-sea-mile data download
-sea-mile data build
+harborly data download
+harborly data build
 ```
 
-`sea-mile data prepare` executes both operations. Existing snapshots are reused
+`harborly data prepare` executes both operations. Existing snapshots are reused
 unless `--refresh` is specified. `--json` returns the complete manifests.
 
 The Python calls are `download_reference_data` and `build_reference_registry`:
 
 ```python
-from sea_mile.build import build_reference_registry, download_reference_data
+from harborly.build import build_reference_registry, download_reference_data
 
 download_reference_data("reference")
 build_reference_registry("reference")
 ```
 
-`sea-mile data verify` checks a local build. `verify_reference_data` in
-`sea_mile.validation` returns the same report.
+`harborly data verify` checks a local build. `verify_reference_data` in
+`harborly.validation` returns the same report.
 
 The build manifest records a `registry_schema_version` and a deterministic
 `registry_content_hash`. When it loads a directory, `PortRegistry.from_directory` reads
-the manifest and refuses a schema version this build of sea-mile does not support,
+the manifest and refuses a schema version this build of harborly does not support,
 rather than failing later on a missing or renamed column. The content hash is
 order-independent, so a rebuild from the same sources produces the same hash.
 
-`sea-mile data lock` writes `sea-mile.lock.json` from the download manifest, pinning
-each source's URL, snapshot label, size, and SHA-256. `sea-mile data build --lock`
+`harborly data lock` writes `harborly.lock.json` from the download manifest, pinning
+each source's URL, snapshot label, size, and SHA-256. `harborly data build --lock`
 verifies local raw snapshots before building and aborts on a mismatch. The
 `write_source_lock`, `load_source_lock`, and `lock_mismatches` functions in
-`sea_mile.build` expose the same behavior.
+`harborly.build` expose the same behavior.
 
 ## Port records
 
@@ -216,7 +216,7 @@ Pass a `MatchPolicy` to control the fuzzy score cutoff and how many candidates a
 offered:
 
 ```python
-from sea_mile import MatchPolicy
+from harborly import MatchPolicy
 
 policy = MatchPolicy(fuzzy_score_cutoff=90.0, max_strong_candidates=3)
 results = registry.match_names(names, country_codes=countries, policy=policy)
@@ -238,9 +238,9 @@ results = registry.match_series(frame["port_name"], country_codes=frame["country
 ```
 
 `match_dataframe` returns a copy of a frame with eight appended columns:
-`sea_mile_status`, `sea_mile_reason_code`, `sea_mile_registry_id`, `sea_mile_name`,
-`sea_mile_country_code`, `sea_mile_latitude`, `sea_mile_longitude`, and
-`sea_mile_unlocode`. These are the same columns that `sea-mile match --output` writes.
+`harborly_status`, `harborly_reason_code`, `harborly_registry_id`, `harborly_name`,
+`harborly_country_code`, `harborly_latitude`, `harborly_longitude`, and
+`harborly_unlocode`. These are the same columns that `harborly match --output` writes.
 
 ```python
 enriched = registry.match_dataframe(
@@ -261,14 +261,14 @@ for chunk in pd.read_csv("big.csv", chunksize=10_000, dtype=str, keep_default_na
     header = False
 ```
 
-The `sea-mile match --output` command streams the same way. It reads the input in
+The `harborly match --output` command streams the same way. It reads the input in
 chunks and appends each block to the output file, so it does not load the whole input
 either.
 
 ## Sea routes
 
 ```python
-from sea_mile import SeaRouter
+from harborly import SeaRouter
 
 router = SeaRouter()
 route = router.route(origin, destination)
@@ -290,7 +290,7 @@ The default settings use the searoute A* algorithm, the NetworkX backend, the
 `RouteQualityPolicy` to customise the plausibility thresholds:
 
 ```python
-from sea_mile import SeaRouter, RouteQualityPolicy, RetryPolicy
+from harborly import SeaRouter, RouteQualityPolicy, RetryPolicy
 
 quality_policy = RouteQualityPolicy(
     high_detour_ratio=2.5,
@@ -314,7 +314,7 @@ the budget; where it does not, it stops instead of sleeping and raises
 `RoutingError` with the reason `timeout_budget_exhausted`, chaining the failure
 that was being retried. Without it, `RetryPolicy(attempts=8,
 max_backoff_seconds=8.0)` can spend roughly 24 seconds asleep inside a single
-`route()` call, which under `sea-mile serve` holds a threadpool worker for that
+`route()` call, which under `harborly serve` holds a threadpool worker for that
 whole time.
 
 The budget bounds *scheduling*, not execution. A backend call already running
@@ -327,7 +327,7 @@ classified as transient. `BackendError` exposes the resulting
 `BackendErrorKind` (`NETWORK`, `TIMEOUT`, `RATE_LIMIT`, `SERVER`,
 `INVALID_RESPONSE`, or `UNKNOWN`) and a `transient` boolean.
 
-Advanced callers can import `CircuitBreakerPolicy` from `sea_mile.router` and
+Advanced callers can import `CircuitBreakerPolicy` from `harborly.router` and
 pass it to `SeaRouter` to set `failure_threshold` and `recovery_seconds`. This
 documented lower-level policy protects against repeated calls while a backend
 is unavailable. When tripped, calls raise `RoutingError` with the stable reason
@@ -359,14 +359,14 @@ it. Routing runs behind a small internal backend interface. That interface is no
 public extension point, and it may change without notice.
 
 The searoute backend does not expose the graph nodes it uses when it snaps an endpoint
-to its routing network. sea-mile therefore does not report or estimate snapped
+to its routing network. harborly therefore does not report or estimate snapped
 coordinates. A route retains the submitted origin and destination and does not
 present an inferred snapped point as observed data.
 
 `route_ids` routes two registry IDs. `route_coordinates` routes two raw `lat, lon`
 points without a registry lookup. `route_many` routes a list of port pairs.
 `distance_matrix` returns the pairwise sea distance for a list of ports. The bundled
-searoute backend declares symmetric distances, so sea-mile calculates one route for
+searoute backend declares symmetric distances, so harborly calculates one route for
 each unordered pair. An internal backend that does not declare symmetry is calculated
 in both directions. Each worker process runs an initializer that pre-imports the
 routing backend modules, so the first task in a worker does not pay the import cost.
@@ -395,7 +395,7 @@ is right depends on who is asking, so it is stated rather than assumed.
   the reason `cache_access_failed`. A caller who asked for a cached result
   should hear that the cache is broken.
 - `CacheFailurePolicy.BEST_EFFORT` logs the failure at `WARNING` on the
-  `sea_mile.router` logger and answers from a fresh computation: an unreadable
+  `harborly.router` logger and answers from a fresh computation: an unreadable
   entry becomes a cache miss, an unwritable result is still returned, and a
   failed eviction no longer replaces the routing error that triggered it. For a
   long-running service that would rather be slow than unavailable.
@@ -404,7 +404,7 @@ Neither policy changes what a *healthy* cache does.
 
 ## Optional service and visualizations
 
-`sea-mile serve` starts the FastAPI application from `sea_mile.api` with Uvicorn
+`harborly serve` starts the FastAPI application from `harborly.api` with Uvicorn
 after checking that both the `api` and `routing` extras are installed. The base
 URL redirects to `/docs`, and `GET /v1/livez` returns the service name, liveness
 status, and installed package version. `GET /v1/readyz` probes the dependencies
@@ -447,29 +447,29 @@ Install the `api` and `routing` extras together for this command. `create_app` a
 injected registry and router objects for isolated application tests; the default
 application uses the bundled registry.
 
-`sea-mile route ORIGIN DESTINATION --html-map route.html` writes an interactive
+`harborly route ORIGIN DESTINATION --html-map route.html` writes an interactive
 Folium preview. The route geometry crosses the visualization boundary as
 `LonLat(longitude, latitude)` before Folium receives its required latitude,
 longitude locations. Install the `map` and `routing` extras.
 
-`sea-mile route ORIGIN DESTINATION --kml route.kml` writes a KML document
-suitable for Google Earth and GIS tools. `sea-mile export --format kml` exports
-matching port records. The KML module (`sea_mile.kml`) exposes `to_kml_string`
+`harborly route ORIGIN DESTINATION --kml route.kml` writes a KML document
+suitable for Google Earth and GIS tools. `harborly export --format kml` exports
+matching port records. The KML module (`harborly.kml`) exposes `to_kml_string`
 and `write_route_kml` for programmatic access:
 
 ```python
-from sea_mile.kml import to_kml_string, write_route_kml
+from harborly.kml import to_kml_string, write_route_kml
 
 kml_str = to_kml_string(route)          # SeaRoute or SequenceSeaRoute
 write_route_kml(seq, "voyage.kml")      # writes to disk
 ```
 
-`sea-mile export --format geoparquet --output ports.geoparquet` exports matching
-port records as an OGC GeoParquet file. `sea_mile.geoparquet` provides
+`harborly export --format geoparquet --output ports.geoparquet` exports matching
+port records as an OGC GeoParquet file. `harborly.geoparquet` provides
 `write_ports_geoparquet` and `write_route_geoparquet`:
 
 ```python
-from sea_mile.geoparquet import write_ports_geoparquet, write_route_geoparquet
+from harborly.geoparquet import write_ports_geoparquet, write_route_geoparquet
 
 write_route_geoparquet(route, "route.geoparquet")   # LineString WKB geometry
 write_ports_geoparquet(ports, "ports.geoparquet")   # Point WKB geometry
@@ -498,9 +498,9 @@ and port clustering at low zoom levels.
 The UI supports vim-style modal navigation: press `Esc` to enter browse mode
 (pan, zoom, go-to-port shortcuts), then `i` to return to insert mode for
 search input. Viewport state (`zoom`, `center_lat`, `center_lon`) is managed
-by `BrailleWorldMap` in `sea_mile.tui.map_canvas`.
+by `BrailleWorldMap` in `harborly.tui.map_canvas`.
 
-Install the `tui` extra: `pip install sea-mile[tui]`.
+Install the `tui` extra: `pip install harborly[tui]`.
 
 ## Coordinates and text helpers
 
@@ -519,14 +519,14 @@ rounded coordinates.
 rules. It accepts an optional `RouteQualityPolicy` to customise thresholds:
 
 ```python
-from sea_mile.routing import assess_route_length, RouteQualityPolicy
+from harborly.routing import assess_route_length, RouteQualityPolicy
 
 assessment = assess_route_length(400, 300, policy=RouteQualityPolicy(high_detour_ratio=2.0))
 ```
 
 ## Error types
 
-Every recoverable public error is a subclass of `SeaMileError`:
+Every recoverable public error is a subclass of `HarborlyError`:
 
 - `RegistryDataError`, the local registry files are missing or invalid.
 - `SourceDataError`, a public snapshot could not be downloaded or read.

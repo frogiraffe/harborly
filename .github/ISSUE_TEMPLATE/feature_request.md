@@ -7,7 +7,7 @@ labels: ["type:enhancement"]
 
 ## The problem
 
-What are you trying to do, and where does sea-mile fall short today?
+What are you trying to do, and where does harborly fall short today?
 
 ## The idea
 

@@ -1,6 +1,6 @@
 # HTTP service
 
-`sea-mile serve` is a local FastAPI convenience application. It requires the
+`harborly serve` is a local FastAPI convenience application. It requires the
 `api` and `routing` extras and defaults to `127.0.0.1:8000`.
 
 ## Endpoints
@@ -26,7 +26,7 @@ would only replace a process that is fine.
 
 ```json
 {
-  "service": "sea-mile",
+  "service": "harborly",
   "status": "ready",
   "version": "1.0.0",
   "checks": [
@@ -87,7 +87,7 @@ answering badly; other routing failures report `502`.
 | `404` | A port identity was not found. |
 | `409` | An identity was ambiguous. |
 | `422` | Query or coordinate validation failed. |
-| `500` | An unexpected sea-mile failure. |
+| `500` | An unexpected harborly failure. |
 | `502` | The routing backend failed. |
 | `503` | Routing is unavailable, or the circuit breaker is open. |
 

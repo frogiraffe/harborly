@@ -4,9 +4,9 @@ import importlib.util
 
 import pytest
 
-from sea_mile.ports import Port
-from sea_mile.router import SeaRouter
-from sea_mile.routing import RouteQualityFlag
+from harborly.ports import Port
+from harborly.router import SeaRouter
+from harborly.routing import RouteQualityFlag
 
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("searoute") is None,

@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from sea_mile.build.registry import (
+from harborly.build.registry import (
     _provider_manifest_entry,
     _write_parquet_atomic,
     _write_text_atomic,

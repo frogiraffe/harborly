@@ -13,9 +13,9 @@ from pathlib import Path
 from time import monotonic, sleep
 from typing import TypeGuard, cast
 
-from sea_mile._routing_backend import BackendRoute, RoutingConfig
-from sea_mile.coordinates import LatLon
-from sea_mile.geo import line_string_coordinates
+from harborly._routing_backend import BackendRoute, RoutingConfig
+from harborly.coordinates import LatLon
+from harborly.geo import line_string_coordinates
 
 _CACHE_KEY_SCHEMA_VERSION = 1
 _DATABASE_SCHEMA_VERSION = 1

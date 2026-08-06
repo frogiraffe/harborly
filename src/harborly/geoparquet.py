@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from sea_mile.ports import Port
-    from sea_mile.router import SeaRoute, SequenceSeaRoute
+    from harborly.ports import Port
+    from harborly.router import SeaRoute, SequenceSeaRoute
 
 # GeoParquet 1.0.0 spec: omitting "crs" means OGC:CRS84 (lon/lat WGS84).
 # We include null explicitly so readers don't have to guess.
@@ -181,7 +181,7 @@ def write_route_geoparquet(
     route: SeaRoute | SequenceSeaRoute, path: str | Path
 ) -> None:
     """Export a sea route or multi-leg sequence as a GeoParquet file."""
-    from sea_mile.router import SequenceSeaRoute  # noqa: PLC0415
+    from harborly.router import SequenceSeaRoute  # noqa: PLC0415
 
     pa, pq = _pyarrow_imports()
 

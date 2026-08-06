@@ -4,7 +4,7 @@ import pytest
 
 pytest.importorskip("textual", reason="tests the optional 'tui' extra")
 
-from sea_mile.tui.braille import BrailleCanvas  # noqa: E402
+from harborly.tui.braille import BrailleCanvas  # noqa: E402
 
 
 def test_canvas_dimensions() -> None:

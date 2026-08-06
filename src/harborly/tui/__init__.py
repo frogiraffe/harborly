@@ -1,7 +1,7 @@
 """Interactive terminal port search over a local registry, built on Textual.
 
-Re-exports :class:`SeaMileTUI` and :func:`run` for backward compatibility
-with ``from sea_mile.tui import SeaMileTUI`` and ``sea_mile.tui.run()``.
+Re-exports :class:`HarborlyTUI` and :func:`run` for backward compatibility
+with ``from harborly.tui import HarborlyTUI`` and ``harborly.tui.run()``.
 """
 
 from __future__ import annotations
@@ -9,11 +9,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from sea_mile.tui.app import SeaMileTUI, run
+    from harborly.tui.app import HarborlyTUI, run
 
 _LAZY_EXPORTS = {
-    "SeaMileTUI": "sea_mile.tui.app",
-    "run": "sea_mile.tui.app",
+    "HarborlyTUI": "harborly.tui.app",
+    "run": "harborly.tui.app",
 }
 
 
@@ -33,4 +33,4 @@ def __dir__() -> list[str]:
     return sorted(set(__all__) | set(_LAZY_EXPORTS))
 
 
-__all__ = ["SeaMileTUI", "run"]
+__all__ = ["HarborlyTUI", "run"]

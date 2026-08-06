@@ -593,6 +593,98 @@ wheels = [
 ]
 
 [[package]]
+name = "harborly"
+version = "1.0.0"
+source = { editable = "." }
+dependencies = [
+    { name = "httpx" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "pandas" },
+    { name = "pandera" },
+    { name = "pyarrow" },
+    { name = "rapidfuzz" },
+    { name = "tenacity" },
+]
+
+[package.optional-dependencies]
+analysis = [
+    { name = "pyproj" },
+]
+api = [
+    { name = "fastapi" },
+    { name = "uvicorn" },
+]
+fast = [
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "scipy", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+]
+map = [
+    { name = "branca" },
+    { name = "folium" },
+]
+routing = [
+    { name = "searoute" },
+]
+tui = [
+    { name = "textual" },
+]
+
+[package.dev-dependencies]
+audit = [
+    { name = "bandit" },
+    { name = "cyclonedx-bom" },
+    { name = "pip-audit" },
+    { name = "twine" },
+]
+dev = [
+    { name = "hypothesis" },
+    { name = "jsonschema" },
+    { name = "markdown-it-py" },
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "branca", marker = "extra == 'map'", specifier = ">=0.8" },
+    { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.115" },
+    { name = "folium", marker = "extra == 'map'", specifier = ">=0.19" },
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "numpy", specifier = ">=1.26.4" },
+    { name = "pandas", specifier = ">=2.2.3" },
+    { name = "pandera", specifier = ">=0.26.1" },
+    { name = "pyarrow", specifier = ">=17.0.0" },
+    { name = "pyproj", marker = "extra == 'analysis'", specifier = ">=3.7.2" },
+    { name = "rapidfuzz", specifier = ">=3.9.7" },
+    { name = "scipy", marker = "extra == 'fast'", specifier = ">=1.16" },
+    { name = "searoute", marker = "extra == 'routing'", specifier = ">=1.6.0" },
+    { name = "tenacity", specifier = ">=8.2.3" },
+    { name = "textual", marker = "extra == 'tui'", specifier = ">=0.60" },
+    { name = "uvicorn", marker = "extra == 'api'", specifier = ">=0.30" },
+]
+provides-extras = ["routing", "analysis", "fast", "tui", "api", "map"]
+
+[package.metadata.requires-dev]
+audit = [
+    { name = "bandit", specifier = ">=1.9.4" },
+    { name = "cyclonedx-bom", specifier = ">=7.0.0" },
+    { name = "pip-audit", specifier = ">=2.9.0" },
+    { name = "twine", specifier = ">=6.2.0" },
+]
+dev = [
+    { name = "hypothesis", specifier = ">=6.92.7" },
+    { name = "jsonschema", specifier = ">=4.0" },
+    { name = "markdown-it-py", specifier = ">=4.0" },
+    { name = "mypy", specifier = ">=2.3.0" },
+    { name = "pytest", specifier = ">=9.1.1" },
+    { name = "pytest-cov", specifier = ">=7.0.0" },
+    { name = "ruff", specifier = ">=0.15.22" },
+]
+
+[[package]]
 name = "httpcore"
 version = "1.0.9"
 source = { registry = "https://pypi.org/simple" }
@@ -2523,98 +2615,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/f7/86/5185061a1fcc41d18c5dc2463969b3a3964b31d9ac67b2fb05d4c7ff7670/scipy-1.18.0-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:9aac6192fac56bf2ca534389d24623f07b39ff83317d58287285e7fbd622ff76", size = 37472480, upload-time = "2026-06-19T15:01:35.136Z" },
     { url = "https://files.pythonhosted.org/packages/31/8e/f04c68e39919a010d34f2ee1367fd705b0a25a02f609d755f0bfbc0a15fc/scipy-1.18.0-cp314-cp314t-win_amd64.whl", hash = "sha256:e40baea28ae7f5475c779741e2d90b1247c78531207b49c7030e698ff81cee3f", size = 37365390, upload-time = "2026-06-19T15:01:38.091Z" },
     { url = "https://files.pythonhosted.org/packages/d5/19/969dc072906c84dd0a3b05dcf57ea750936087d7873549e408b35cfc3f97/scipy-1.18.0-cp314-cp314t-win_arm64.whl", hash = "sha256:368e0a705903c466aa5f08eefb39e6b1b6b2d659e7352a31fd9e2438365be0f8", size = 25279661, upload-time = "2026-06-19T15:01:40.817Z" },
-]
-
-[[package]]
-name = "sea-mile"
-version = "1.0.0"
-source = { editable = "." }
-dependencies = [
-    { name = "httpx" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-    { name = "pandas" },
-    { name = "pandera" },
-    { name = "pyarrow" },
-    { name = "rapidfuzz" },
-    { name = "tenacity" },
-]
-
-[package.optional-dependencies]
-analysis = [
-    { name = "pyproj" },
-]
-api = [
-    { name = "fastapi" },
-    { name = "uvicorn" },
-]
-fast = [
-    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "scipy", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-]
-map = [
-    { name = "branca" },
-    { name = "folium" },
-]
-routing = [
-    { name = "searoute" },
-]
-tui = [
-    { name = "textual" },
-]
-
-[package.dev-dependencies]
-audit = [
-    { name = "bandit" },
-    { name = "cyclonedx-bom" },
-    { name = "pip-audit" },
-    { name = "twine" },
-]
-dev = [
-    { name = "hypothesis" },
-    { name = "jsonschema" },
-    { name = "markdown-it-py" },
-    { name = "mypy" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "branca", marker = "extra == 'map'", specifier = ">=0.8" },
-    { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.115" },
-    { name = "folium", marker = "extra == 'map'", specifier = ">=0.19" },
-    { name = "httpx", specifier = ">=0.28.1" },
-    { name = "numpy", specifier = ">=1.26.4" },
-    { name = "pandas", specifier = ">=2.2.3" },
-    { name = "pandera", specifier = ">=0.26.1" },
-    { name = "pyarrow", specifier = ">=17.0.0" },
-    { name = "pyproj", marker = "extra == 'analysis'", specifier = ">=3.7.2" },
-    { name = "rapidfuzz", specifier = ">=3.9.7" },
-    { name = "scipy", marker = "extra == 'fast'", specifier = ">=1.16" },
-    { name = "searoute", marker = "extra == 'routing'", specifier = ">=1.6.0" },
-    { name = "tenacity", specifier = ">=8.2.3" },
-    { name = "textual", marker = "extra == 'tui'", specifier = ">=0.60" },
-    { name = "uvicorn", marker = "extra == 'api'", specifier = ">=0.30" },
-]
-provides-extras = ["routing", "analysis", "fast", "tui", "api", "map"]
-
-[package.metadata.requires-dev]
-audit = [
-    { name = "bandit", specifier = ">=1.9.4" },
-    { name = "cyclonedx-bom", specifier = ">=7.0.0" },
-    { name = "pip-audit", specifier = ">=2.9.0" },
-    { name = "twine", specifier = ">=6.2.0" },
-]
-dev = [
-    { name = "hypothesis", specifier = ">=6.92.7" },
-    { name = "jsonschema", specifier = ">=4.0" },
-    { name = "markdown-it-py", specifier = ">=4.0" },
-    { name = "mypy", specifier = ">=2.3.0" },
-    { name = "pytest", specifier = ">=9.1.1" },
-    { name = "pytest-cov", specifier = ">=7.0.0" },
-    { name = "ruff", specifier = ">=0.15.22" },
 ]
 
 [[package]]

@@ -36,8 +36,8 @@ from benchmarks.matching_performance.workload import (
     build_fuzzy_typo,
     build_mixed,
 )
-from sea_mile._registry_data import bundled_data_directory
-from sea_mile.ports import PortRegistry
+from harborly._registry_data import bundled_data_directory
+from harborly.ports import PortRegistry
 
 _PROFILE_ROW_LIMIT = 25
 

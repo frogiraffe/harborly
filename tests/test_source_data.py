@@ -7,7 +7,7 @@ import time
 import httpx
 import pytest
 
-from sea_mile.build.download import (
+from harborly.build.download import (
     _chunk_ranges,
     _discover_latest_unlocode_release,
     _download,
@@ -15,7 +15,7 @@ from sea_mile.build.download import (
     download_reference_data,
     sha256,
 )
-from sea_mile.exceptions import SourceDataError
+from harborly.exceptions import SourceDataError
 
 
 def test_existing_snapshots_produce_checksum_manifest_without_network(tmp_path) -> None:
@@ -62,7 +62,7 @@ def test_reuses_existing_snapshot_without_network(tmp_path, monkeypatch) -> None
     def fail(*args, **kwargs):
         raise AssertionError("no download expected when a snapshot already exists")
 
-    monkeypatch.setattr("sea_mile.build.download._download", fail)
+    monkeypatch.setattr("harborly.build.download._download", fail)
 
     manifest = download_reference_data(tmp_path)
     sources = manifest["sources"]
@@ -80,7 +80,7 @@ def test_reused_snapshot_keeps_manifest_checksum_without_rehashing(
     def fail(*args, **kwargs):
         raise AssertionError("no download expected")
 
-    monkeypatch.setattr("sea_mile.build.download._download", fail)
+    monkeypatch.setattr("harborly.build.download._download", fail)
     first = download_reference_data(tmp_path)
 
     calls: list = []
@@ -89,7 +89,7 @@ def test_reused_snapshot_keeps_manifest_checksum_without_rehashing(
         calls.append(path)
         return "unexpected"
 
-    monkeypatch.setattr("sea_mile.build.download.sha256", counting_sha256)
+    monkeypatch.setattr("harborly.build.download.sha256", counting_sha256)
     second = download_reference_data(tmp_path)
 
     assert calls == []
@@ -110,7 +110,7 @@ def test_explicit_snapshot_label_downloads_into_that_label(
         destination.write_bytes(b"fresh")
         calls.append(destination)
 
-    monkeypatch.setattr("sea_mile.build.download._download", fake_download)
+    monkeypatch.setattr("harborly.build.download._download", fake_download)
     manifest = download_reference_data(tmp_path, snapshot_label="2099-12-31")
     sources = manifest["sources"]
 
@@ -128,9 +128,9 @@ def test_refresh_redownloads_into_new_folder(tmp_path, monkeypatch) -> None:
         destination.write_bytes(b"fresh")
         calls.append(destination)
 
-    monkeypatch.setattr("sea_mile.build.download._download", fake_download)
+    monkeypatch.setattr("harborly.build.download._download", fake_download)
     monkeypatch.setattr(
-        "sea_mile.build.download._discover_latest_unlocode_release",
+        "harborly.build.download._discover_latest_unlocode_release",
         lambda client: "2026-1",
     )
 
@@ -223,7 +223,7 @@ def test_download_does_not_retry_permanent_http_errors(tmp_path) -> None:
 
 
 def test_send_with_deadline_gives_up_on_a_stalled_connection(monkeypatch) -> None:
-    monkeypatch.setattr("sea_mile.build.download._CONNECT_DEADLINE_SECONDS", 0.05)
+    monkeypatch.setattr("harborly.build.download._CONNECT_DEADLINE_SECONDS", 0.05)
 
     def handler(request: httpx.Request) -> httpx.Response:
         time.sleep(1)
@@ -254,9 +254,9 @@ def test_download_splits_large_range_capable_sources_into_fixed_size_chunks(
 ) -> None:
     # Far fewer workers than chunks, so the whole download can only complete if
     # workers keep claiming chunks past their "fair share" of one each.
-    monkeypatch.setattr("sea_mile.build.download._PARALLEL_THRESHOLD_BYTES", 100)
-    monkeypatch.setattr("sea_mile.build.download._PARALLEL_CONNECTIONS", 3)
-    monkeypatch.setattr("sea_mile.build.download._PARALLEL_CHUNK_BYTES", 100)
+    monkeypatch.setattr("harborly.build.download._PARALLEL_THRESHOLD_BYTES", 100)
+    monkeypatch.setattr("harborly.build.download._PARALLEL_CONNECTIONS", 3)
+    monkeypatch.setattr("harborly.build.download._PARALLEL_CHUNK_BYTES", 100)
 
     content = bytes(range(256)) * 4  # 1024 bytes -> 11 chunks of <= 100 bytes
     total = len(content)
@@ -302,7 +302,7 @@ def test_download_splits_large_range_capable_sources_into_fixed_size_chunks(
 
 
 def test_download_stays_sequential_without_range_support(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr("sea_mile.build.download._PARALLEL_THRESHOLD_BYTES", 100)
+    monkeypatch.setattr("harborly.build.download._PARALLEL_THRESHOLD_BYTES", 100)
 
     content = b"x" * 500
 
@@ -323,9 +323,9 @@ def test_download_stays_sequential_without_range_support(tmp_path, monkeypatch) 
 
 
 def test_download_falls_back_when_server_ignores_ranges(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr("sea_mile.build.download._PARALLEL_THRESHOLD_BYTES", 100)
-    monkeypatch.setattr("sea_mile.build.download._PARALLEL_CONNECTIONS", 2)
-    monkeypatch.setattr("sea_mile.build.download._PARALLEL_CHUNK_BYTES", 100)
+    monkeypatch.setattr("harborly.build.download._PARALLEL_THRESHOLD_BYTES", 100)
+    monkeypatch.setattr("harborly.build.download._PARALLEL_CONNECTIONS", 2)
+    monkeypatch.setattr("harborly.build.download._PARALLEL_CHUNK_BYTES", 100)
 
     content = bytes(range(200))
     ordinary_requests = 0
@@ -356,8 +356,8 @@ def test_download_falls_back_when_server_ignores_ranges(tmp_path, monkeypatch) -
 def test_download_range_fallback_still_enforces_size_limit(
     tmp_path, monkeypatch
 ) -> None:
-    monkeypatch.setattr("sea_mile.build.download._PARALLEL_THRESHOLD_BYTES", 100)
-    monkeypatch.setattr("sea_mile.build.download._PARALLEL_CONNECTIONS", 1)
+    monkeypatch.setattr("harborly.build.download._PARALLEL_THRESHOLD_BYTES", 100)
+    monkeypatch.setattr("harborly.build.download._PARALLEL_CONNECTIONS", 1)
 
     advertised = b"x" * 200
     oversized = b"x" * 300
@@ -399,9 +399,9 @@ def test_download_range_fallback_still_enforces_size_limit(
 def test_download_rejects_invalid_range_responses(
     tmp_path, monkeypatch, content_range, body, message
 ) -> None:
-    monkeypatch.setattr("sea_mile.build.download._PARALLEL_THRESHOLD_BYTES", 100)
-    monkeypatch.setattr("sea_mile.build.download._PARALLEL_CONNECTIONS", 1)
-    monkeypatch.setattr("sea_mile.build.download._PARALLEL_CHUNK_BYTES", 100)
+    monkeypatch.setattr("harborly.build.download._PARALLEL_THRESHOLD_BYTES", 100)
+    monkeypatch.setattr("harborly.build.download._PARALLEL_CONNECTIONS", 1)
+    monkeypatch.setattr("harborly.build.download._PARALLEL_CHUNK_BYTES", 100)
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.headers.get("Range") is None:

@@ -16,11 +16,11 @@ import logging
 
 import pytest
 
-from sea_mile._routing_backend import BackendRoute
-from sea_mile.exceptions import RoutingError, RoutingErrorReason
-from sea_mile.ports import Port
-from sea_mile.router import SeaRouter
-from sea_mile.routing import CacheFailurePolicy
+from harborly._routing_backend import BackendRoute
+from harborly.exceptions import RoutingError, RoutingErrorReason
+from harborly.ports import Port
+from harborly.router import SeaRouter
+from harborly.routing import CacheFailurePolicy
 
 _VALID_ROUTE = BackendRoute(
     distance_nmi=1000.0,
@@ -97,7 +97,7 @@ class _BrokenCache:
 @pytest.fixture
 def install_cache(monkeypatch):
     def install(cache: _BrokenCache) -> None:
-        monkeypatch.setattr("sea_mile.router.RouteCache", lambda _path: cache)
+        monkeypatch.setattr("harborly.router.RouteCache", lambda _path: cache)
 
     return install
 
@@ -146,7 +146,7 @@ def test_best_effort_still_returns_a_route_it_could_not_store(install_cache):
 def test_best_effort_says_out_loud_what_it_swallowed(install_cache, caplog):
     install_cache(_BrokenCache("put"))
 
-    with caplog.at_level(logging.WARNING, logger="sea_mile.router"):
+    with caplog.at_level(logging.WARNING, logger="harborly.router"):
         _router(_StubBackend(), CacheFailurePolicy.BEST_EFFORT).route(
             _port("A"), _port("B")
         )

@@ -9,10 +9,10 @@ pytest.importorskip("fastapi", reason="tests the optional 'api' extra")
 
 from test_ports import alias_frame, registry_frame  # noqa: E402
 
-from sea_mile import Port, PortRegistry  # noqa: E402
-from sea_mile.api import create_app  # noqa: E402
-from sea_mile.router import SeaRoute  # noqa: E402
-from sea_mile.routing import RouteQualityFlag  # noqa: E402
+from harborly import Port, PortRegistry  # noqa: E402
+from harborly.api import create_app  # noqa: E402
+from harborly.router import SeaRoute  # noqa: E402
+from harborly.routing import RouteQualityFlag  # noqa: E402
 
 
 class FakeRouter:
@@ -121,17 +121,17 @@ async def test_health_endpoint_reports_package_version(registry: PortRegistry) -
 
     assert response.status_code == 200
     assert response.json() == {
-        "service": "sea-mile",
+        "service": "harborly",
         "status": "ok",
-        "version": version("sea-mile"),
+        "version": version("harborly"),
     }
 
 
 def test_openapi_documents_route_contract_and_errors(registry: PortRegistry) -> None:
     schema = create_app(registry=registry, router=FakeRouter()).openapi()
 
-    assert schema["info"]["title"] == "sea-mile API"
-    assert schema["info"]["version"] == version("sea-mile")
+    assert schema["info"]["title"] == "harborly API"
+    assert schema["info"]["version"] == version("harborly")
     assert set(schema["paths"]) == {
         "/v1/livez",
         "/v1/readyz",

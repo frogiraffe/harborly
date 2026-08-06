@@ -1,13 +1,13 @@
-# sea-mile
+# harborly
 
-[![CI](https://github.com/frogiraffe/sea-mile/actions/workflows/ci.yml/badge.svg)](https://github.com/frogiraffe/sea-mile/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/sea-mile.svg)](https://pypi.org/project/sea-mile/)
-[![Python](https://img.shields.io/pypi/pyversions/sea-mile.svg)](https://pypi.org/project/sea-mile/)
-[![License](https://img.shields.io/pypi/l/sea-mile.svg)](https://github.com/frogiraffe/sea-mile/blob/main/LICENSE)
+[![CI](https://github.com/frogiraffe/harborly/actions/workflows/ci.yml/badge.svg)](https://github.com/frogiraffe/harborly/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/harborly.svg)](https://pypi.org/project/harborly/)
+[![Python](https://img.shields.io/pypi/pyversions/harborly.svg)](https://pypi.org/project/harborly/)
+[![License](https://img.shields.io/pypi/l/harborly.svg)](https://github.com/frogiraffe/harborly/blob/main/LICENSE)
 
 **Port identity resolution, spatial search, and analytical sea routing.**
 
-`sea-mile` is a typed Python SDK and CLI. It resolves port identities, finds nearby ports, reviews ambiguous CSV matches, and calculates approximate sea-route distances in nautical miles.
+`harborly` is a typed Python SDK and CLI. It resolves port identities, finds nearby ports, reviews ambiguous CSV matches, and calculates approximate sea-route distances in nautical miles.
 
 > [!IMPORTANT]
 > Routes are analytical approximations on a maritime graph. They are not for navigation, voyage planning, or safety-critical use.
@@ -33,29 +33,29 @@
 Install the core CLI with routing:
 
 ```bash
-uv tool install 'sea-mile[routing]'
+uv tool install 'harborly[routing]'
 ```
 
 Install with all optional extras (`routing`, `api`, `map`, `tui`, `fast`, `analysis`):
 
 ```bash
-uv tool install --force 'sea-mile[routing,api,map,tui,fast,analysis]'
+uv tool install --force 'harborly[routing,api,map,tui,fast,analysis]'
 ```
 
 For local development:
 
 ```bash
 uv sync --dev --all-extras
-uv run sea-mile info
+uv run harborly info
 ```
 
 ## Quick start
 
 ```bash
-sea-mile search Mersin --country TR
-sea-mile show TRMER
-sea-mile near 39.87 26.16 --country TR --limit 5
-sea-mile route TRMER GRPIR --geojson route.geojson --html-map route.html
+harborly search Mersin --country TR
+harborly show TRMER
+harborly near 39.87 26.16 --country TR --limit 5
+harborly route TRMER GRPIR --geojson route.geojson --html-map route.html
 ```
 
 Example output:
@@ -73,13 +73,13 @@ engine: searoute 1.6.0 (astar, networkx)
 ## Python SDK
 
 ```python
-from sea_mile import PortRegistry, SeaRouter
+from harborly import PortRegistry, SeaRouter
 
 registry = PortRegistry.bundled()
 origin = registry.resolve("TRMER")
 destination = registry.resolve("GRPIR")
 
-router = SeaRouter(cache_path=".cache/sea-mile/routes.sqlite3")
+router = SeaRouter(cache_path=".cache/harborly/routes.sqlite3")
 route = router.route(origin, destination)
 matrix = router.distance_matrix([origin, destination], max_workers=4)
 
@@ -88,7 +88,7 @@ print(f"Distance: {route.distance_nmi} nmi, status: {route.quality_flag}")
 
 ```python
 import asyncio
-from sea_mile import AsyncSeaRouter, PassageRestriction, PortRegistry
+from harborly import AsyncSeaRouter, PassageRestriction, PortRegistry
 
 async def async_example():
     registry = PortRegistry.bundled()
@@ -138,7 +138,7 @@ asyncio.run(async_example())
 Run the local API server:
 
 ```bash
-sea-mile serve --host 127.0.0.1 --port 8000
+harborly serve --host 127.0.0.1 --port 8000
 ```
 
 - `GET /v1/livez` — liveness probe.
@@ -147,22 +147,22 @@ sea-mile serve --host 127.0.0.1 --port 8000
 
 ## Documentation Index
 
-See the detailed guides in [`docs/README.md`](https://github.com/frogiraffe/sea-mile/blob/main/docs/README.md):
+See the detailed guides in [`docs/README.md`](https://github.com/frogiraffe/harborly/blob/main/docs/README.md):
 
-- [Library API](https://github.com/frogiraffe/sea-mile/blob/main/docs/LIBRARY_API.md)
-- [API Compatibility](https://github.com/frogiraffe/sea-mile/blob/main/docs/API_COMPATIBILITY.md)
-- [HTTP Service](https://github.com/frogiraffe/sea-mile/blob/main/docs/API_SERVICE.md)
-- [Data Dictionary](https://github.com/frogiraffe/sea-mile/blob/main/docs/DATA_DICTIONARY.md)
-- [Output Schemas](https://github.com/frogiraffe/sea-mile/blob/main/docs/OUTPUT_SCHEMAS.md)
-- [Sources & Limitations](https://github.com/frogiraffe/sea-mile/blob/main/docs/SOURCES_AND_LIMITATIONS.md)
-- [Cookbook](https://github.com/frogiraffe/sea-mile/blob/main/docs/COOKBOOK.md)
+- [Library API](https://github.com/frogiraffe/harborly/blob/main/docs/LIBRARY_API.md)
+- [API Compatibility](https://github.com/frogiraffe/harborly/blob/main/docs/API_COMPATIBILITY.md)
+- [HTTP Service](https://github.com/frogiraffe/harborly/blob/main/docs/API_SERVICE.md)
+- [Data Dictionary](https://github.com/frogiraffe/harborly/blob/main/docs/DATA_DICTIONARY.md)
+- [Output Schemas](https://github.com/frogiraffe/harborly/blob/main/docs/OUTPUT_SCHEMAS.md)
+- [Sources & Limitations](https://github.com/frogiraffe/harborly/blob/main/docs/SOURCES_AND_LIMITATIONS.md)
+- [Cookbook](https://github.com/frogiraffe/harborly/blob/main/docs/COOKBOOK.md)
 
 Maintainer documentation:
-- [Architecture](https://github.com/frogiraffe/sea-mile/blob/main/docs/maintainers/ARCHITECTURE.md)
-- [Performance](https://github.com/frogiraffe/sea-mile/blob/main/docs/maintainers/PERFORMANCE.md)
-- [Dependency Policy](https://github.com/frogiraffe/sea-mile/blob/main/docs/maintainers/DEPENDENCY_POLICY.md)
-- [Release Procedure](https://github.com/frogiraffe/sea-mile/blob/main/docs/maintainers/RELEASING.md)
+- [Architecture](https://github.com/frogiraffe/harborly/blob/main/docs/maintainers/ARCHITECTURE.md)
+- [Performance](https://github.com/frogiraffe/harborly/blob/main/docs/maintainers/PERFORMANCE.md)
+- [Dependency Policy](https://github.com/frogiraffe/harborly/blob/main/docs/maintainers/DEPENDENCY_POLICY.md)
+- [Release Procedure](https://github.com/frogiraffe/harborly/blob/main/docs/maintainers/RELEASING.md)
 
 ## License
 
-MIT License. See [LICENSE](https://github.com/frogiraffe/sea-mile/blob/main/LICENSE) for details.
+MIT License. See [LICENSE](https://github.com/frogiraffe/harborly/blob/main/LICENSE) for details.

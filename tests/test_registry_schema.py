@@ -6,9 +6,9 @@ import json
 import pandas as pd
 import pytest
 
-from sea_mile.build.registry import REGISTRY_SCHEMA_VERSION, registry_content_hash
-from sea_mile.exceptions import RegistryDataError
-from sea_mile.ports import PortRegistry, bundled_data_directory
+from harborly.build.registry import REGISTRY_SCHEMA_VERSION, registry_content_hash
+from harborly.exceptions import RegistryDataError
+from harborly.ports import PortRegistry, bundled_data_directory
 
 
 def _registry_frame() -> pd.DataFrame:

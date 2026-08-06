@@ -9,9 +9,9 @@ from contextlib import closing
 import pandas as pd
 import pytest
 
-import sea_mile
-from sea_mile.cli import main
-from sea_mile.route_cache import RouteCache
+import harborly
+from harborly.cli import main
+from harborly.route_cache import RouteCache
 
 
 def write_registry(directory) -> None:
@@ -298,9 +298,9 @@ def test_route_can_write_html_map(tmp_path, capsys) -> None:
 def test_route_html_map_reports_missing_extra(tmp_path, capsys, monkeypatch) -> None:
     data_directory = tmp_path / "registry"
     write_registry(data_directory)
-    monkeypatch.setitem(sys.modules, "sea_mile.html_map", None)
+    monkeypatch.setitem(sys.modules, "harborly.html_map", None)
     monkeypatch.setattr(
-        "sea_mile.router.SeaRouter.route",
+        "harborly.router.SeaRouter.route",
         lambda *args, **kwargs: pytest.fail("route should not be calculated"),
     )
     geojson = tmp_path / "route.geojson"
@@ -323,9 +323,9 @@ def test_route_html_map_reports_missing_extra(tmp_path, capsys, monkeypatch) -> 
     assert status == 2
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert "sea-mile[routing,map]" in captured.err
+    assert "harborly[routing,map]" in captured.err
     assert "uv tool install --force" in captured.err
-    assert "uv run sea-mile" in captured.err
+    assert "uv run harborly" in captured.err
     assert not geojson.exists()
 
 
@@ -333,11 +333,11 @@ def test_route_html_map_preflight_keeps_required_extras_together(
     tmp_path, capsys, monkeypatch
 ) -> None:
     monkeypatch.setattr(
-        "sea_mile.cli._module_available",
+        "harborly.cli._module_available",
         lambda module: module == "searoute",
     )
     monkeypatch.setattr(
-        "sea_mile.cli._load_registry",
+        "harborly.cli._load_registry",
         lambda args: pytest.fail(f"registry should not load: {args}"),
     )
 
@@ -353,7 +353,7 @@ def test_route_html_map_preflight_keeps_required_extras_together(
 
     assert status == 2
     captured = capsys.readouterr()
-    assert "sea-mile[routing,map]" in captured.err
+    assert "harborly[routing,map]" in captured.err
     assert "--extra routing --extra map" in captured.err
 
 
@@ -367,7 +367,7 @@ def test_route_html_map_write_failure_does_not_emit_success(
     def fail_write(*args, **kwargs) -> None:
         raise OSError("read-only file system")
 
-    monkeypatch.setattr("sea_mile.html_map.write_route_html", fail_write)
+    monkeypatch.setattr("harborly.html_map.write_route_html", fail_write)
 
     status = main(
         [
@@ -392,7 +392,7 @@ def test_serve_delegates_to_optional_api(monkeypatch) -> None:
     calls: list[tuple[str, int]] = []
 
     monkeypatch.setattr(
-        "sea_mile.api.run_server",
+        "harborly.api.run_server",
         lambda *, host, port: calls.append((host, port)),
     )
 
@@ -403,23 +403,23 @@ def test_serve_delegates_to_optional_api(monkeypatch) -> None:
 
 
 def test_serve_reports_missing_extra(capsys, monkeypatch) -> None:
-    monkeypatch.setitem(sys.modules, "sea_mile.api", None)
+    monkeypatch.setitem(sys.modules, "harborly.api", None)
 
     status = main(["serve"])
 
     assert status == 2
     captured = capsys.readouterr()
-    assert "sea-mile[api,routing]" in captured.err
+    assert "harborly[api,routing]" in captured.err
     assert "uv tool install --force" in captured.err
 
 
 def test_serve_checks_routing_before_starting_server(capsys, monkeypatch) -> None:
     monkeypatch.setattr(
-        "sea_mile.cli._module_available",
+        "harborly.cli._module_available",
         lambda module: module != "searoute",
     )
     monkeypatch.setattr(
-        "sea_mile.api.run_server",
+        "harborly.api.run_server",
         lambda **kwargs: pytest.fail(f"server should not start: {kwargs}"),
     )
 
@@ -427,7 +427,7 @@ def test_serve_checks_routing_before_starting_server(capsys, monkeypatch) -> Non
 
     assert status == 2
     captured = capsys.readouterr()
-    assert "sea-mile[api,routing]" in captured.err
+    assert "harborly[api,routing]" in captured.err
     assert "--extra api --extra routing" in captured.err
 
 
@@ -442,19 +442,19 @@ def test_serve_rejects_out_of_range_port(capsys) -> None:
 def test_tui_reports_missing_extra(tmp_path, capsys, monkeypatch) -> None:
     data_directory = tmp_path / "registry"
     write_registry(data_directory)
-    monkeypatch.delattr(sea_mile, "tui", raising=False)
-    monkeypatch.setitem(sys.modules, "sea_mile.tui", None)
+    monkeypatch.delattr(harborly, "tui", raising=False)
+    monkeypatch.setitem(sys.modules, "harborly.tui", None)
 
     status = main(["--data-dir", str(data_directory), "tui"])
 
     assert status == 2
-    assert "sea-mile[tui]" in capsys.readouterr().err
+    assert "harborly[tui]" in capsys.readouterr().err
 
 
 def test_route_json_error_carries_a_stable_reason(
     tmp_path, capsys, monkeypatch
 ) -> None:
-    from sea_mile.exceptions import RoutingError, RoutingErrorReason
+    from harborly.exceptions import RoutingError, RoutingErrorReason
 
     data_directory = tmp_path / "registry"
     write_registry(data_directory)
@@ -464,7 +464,7 @@ def test_route_json_error_carries_a_stable_reason(
             "backend blew up", reason=RoutingErrorReason.MALFORMED_BACKEND_RESULT
         )
 
-    monkeypatch.setattr("sea_mile.router.SeaRouter.route", boom)
+    monkeypatch.setattr("harborly.router.SeaRouter.route", boom)
     status = main(
         ["--data-dir", str(data_directory), "route", "TRMER", "GRPIR", "--json"]
     )
@@ -526,7 +526,7 @@ def test_near_rejects_a_port_name_instead_of_a_coordinate(tmp_path, capsys) -> N
         main(["--data-dir", str(data_directory), "near", "mersin", "34.65"])
     stderr = capsys.readouterr().err
     assert "not a coordinate" in stderr
-    assert "sea-mile search" in stderr
+    assert "harborly search" in stderr
 
 
 def test_near_grouped_table_by_default(tmp_path, capsys) -> None:
@@ -702,11 +702,11 @@ def test_data_prepare_json_is_one_valid_document(tmp_path, capsys, monkeypatch) 
     download_manifest = {"retrieved_at_utc": "test", "sources": {}}
     build_manifest = {"registry_rows": 2, "providers": {}}
     monkeypatch.setattr(
-        "sea_mile.build.download.download_reference_data",
+        "harborly.build.download.download_reference_data",
         lambda *args, **kwargs: download_manifest,
     )
     monkeypatch.setattr(
-        "sea_mile.build.registry.build_reference_registry",
+        "harborly.build.registry.build_reference_registry",
         lambda *args, **kwargs: build_manifest,
     )
 
@@ -723,7 +723,7 @@ def test_data_download_json_keeps_flat_manifest_shape(
 ) -> None:
     download_manifest = {"retrieved_at_utc": "test", "sources": {}}
     monkeypatch.setattr(
-        "sea_mile.build.download.download_reference_data",
+        "harborly.build.download.download_reference_data",
         lambda *args, **kwargs: download_manifest,
     )
 
@@ -801,9 +801,9 @@ def test_match_output_enriches_input_and_preserves_columns(tmp_path) -> None:
         row = next(csv.DictReader(handle))
     assert row["ref"] == "X-1"
     assert row["port_name"] == "Mersin"
-    assert row["sea_mile_status"] == "auto_resolved"
-    assert row["sea_mile_registry_id"] == "WPI:1"
-    assert row["sea_mile_name"] == "Mersin"
+    assert row["harborly_status"] == "auto_resolved"
+    assert row["harborly_registry_id"] == "WPI:1"
+    assert row["harborly_name"] == "Mersin"
 
 
 def test_match_review_writes_one_row_per_candidate(tmp_path) -> None:
@@ -1019,11 +1019,11 @@ def test_text_error_still_goes_to_stderr(tmp_path, capsys) -> None:
     captured = capsys.readouterr()
     assert status == 2
     assert captured.out == ""
-    assert "sea-mile: error:" in captured.err
+    assert "harborly: error:" in captured.err
 
 
 def test_match_output_streams_across_chunks(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr("sea_mile.cli._MATCH_CHUNK_SIZE", 2)
+    monkeypatch.setattr("harborly.cli._MATCH_CHUNK_SIZE", 2)
     data_directory = tmp_path / "registry"
     write_registry(data_directory)
     input_csv = tmp_path / "in.csv"
@@ -1052,11 +1052,11 @@ def test_match_output_streams_across_chunks(tmp_path, monkeypatch) -> None:
     with output_csv.open(encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))
     assert [row["row_id"] for row in rows] == ["1", "2", "3", "4", "5"]
-    assert all(row["sea_mile_registry_id"] == "WPI:1" for row in rows)
+    assert all(row["harborly_registry_id"] == "WPI:1" for row in rows)
 
 
 def test_match_review_row_ids_continue_across_chunks(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr("sea_mile.cli._MATCH_CHUNK_SIZE", 1)
+    monkeypatch.setattr("harborly.cli._MATCH_CHUNK_SIZE", 1)
     data_directory = tmp_path / "registry"
     write_ambiguous_registry(data_directory)
     input_csv = tmp_path / "in.csv"

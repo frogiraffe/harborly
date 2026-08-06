@@ -1,12 +1,12 @@
 # Release procedure
 
-sea-mile releases are tag-driven. The release workflow accepts only a `v<version>`
+harborly releases are tag-driven. The release workflow accepts only a `v<version>`
 tag whose commit is already contained in `origin/main` and whose value matches
 `project.version`.
 
 ## Versioning
 
-sea-mile follows [SemVer](https://semver.org/): `MAJOR.MINOR.PATCH`. The
+harborly follows [SemVer](https://semver.org/): `MAJOR.MINOR.PATCH`. The
 question a version bump answers is narrow — *if someone upgrades with no code
 changes on their side, does anything that used to work now behave differently
 or stop working?* — not how large the diff is or how long the change took.
@@ -87,7 +87,7 @@ items out of `Unreleased`, and review source-data changes before approving.
 
 PyPI artifacts and tags are immutable: a broken release is fixed with a new
 patch release, never by replacing the uploaded files. After the publish job
-finishes, manually confirm on `https://pypi.org/project/sea-mile/`:
+finishes, manually confirm on `https://pypi.org/project/harborly/`:
 
 - the new version is the one displayed;
 - the long description renders (it is `README.md` as of the published commit —
@@ -96,8 +96,8 @@ finishes, manually confirm on `https://pypi.org/project/sea-mile/`:
   repository);
 - the CI, PyPI, Python, and License badges render;
 - the Homepage, Repository, and Issues project links resolve;
-- `pip install sea-mile` succeeds in a clean virtual environment and
-  `sea-mile info` runs.
+- `pip install harborly` succeeds in a clean virtual environment and
+  `harborly info` runs.
 
 If any of these fail, the tag and uploaded artifacts stay published as-is;
 open an issue describing exactly what failed and ship the fix as the next
@@ -107,7 +107,7 @@ patch release.
 
 ```bash
 uv sync --locked --all-extras --group audit --python 3.14
-uv run pytest --cov=sea_mile -W error::ResourceWarning \
+uv run pytest --cov=harborly -W error::ResourceWarning \
   -W error::pytest.PytestUnraisableExceptionWarning -q
 export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
 uv build

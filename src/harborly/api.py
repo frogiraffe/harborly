@@ -13,17 +13,17 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
-from sea_mile.exceptions import (
+from harborly.exceptions import (
     AmbiguousPortError,
+    HarborlyError,
     PortCoordinateError,
     PortNotFoundError,
     RoutingError,
     RoutingErrorReason,
-    SeaMileError,
 )
-from sea_mile.ports import Port, PortRegistry
-from sea_mile.router import SeaRoute, SeaRouter
-from sea_mile.routing import ReadinessCheck
+from harborly.ports import Port, PortRegistry
+from harborly.router import SeaRoute, SeaRouter
+from harborly.routing import ReadinessCheck
 
 
 class _RouteService(Protocol):
@@ -33,7 +33,7 @@ class _RouteService(Protocol):
 class HealthResponse(BaseModel):
     """Liveness response for local process supervision."""
 
-    service: Literal["sea-mile"]
+    service: Literal["harborly"]
     status: Literal["ok"]
     version: str
 
@@ -49,7 +49,7 @@ class ReadinessCheckResponse(BaseModel):
 class ReadinessResponse(BaseModel):
     """Whether this process can currently serve a route request."""
 
-    service: Literal["sea-mile"]
+    service: Literal["harborly"]
     status: Literal["ready", "not_ready"]
     version: str
     checks: list[ReadinessCheckResponse]
@@ -172,7 +172,7 @@ _ROUTE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
         "model": UnprocessableResponse,
         "description": "Invalid query parameters or port coordinates",
     },
-    500: {"model": ErrorResponse, "description": "Unexpected sea-mile failure"},
+    500: {"model": ErrorResponse, "description": "Unexpected harborly failure"},
     502: {"model": ErrorResponse, "description": "Routing backend failed"},
     503: {
         "model": ErrorResponse,
@@ -238,8 +238,8 @@ def _install_error_handlers(application: FastAPI) -> None:
     async def _routing_unavailable(_: Request, error: ImportError) -> JSONResponse:
         return _error_response(503, "routing_unavailable", str(error))
 
-    @application.exception_handler(SeaMileError)
-    async def _other_domain_error(_: Request, error: SeaMileError) -> JSONResponse:
+    @application.exception_handler(HarborlyError)
+    async def _other_domain_error(_: Request, error: HarborlyError) -> JSONResponse:
         return _error_response(500, error.code, str(error))
 
     @application.exception_handler(RequestValidationError)
@@ -289,7 +289,7 @@ def _readiness_checks(
 
 def _package_version() -> str:
     try:
-        return version("sea-mile")
+        return version("harborly")
     except PackageNotFoundError:
         return "0.0.0"
 
@@ -312,7 +312,7 @@ def create_app(
     """Create the HTTP application, with injectable services for isolated tests."""
 
     application = FastAPI(
-        title="sea-mile API",
+        title="harborly API",
         version=_package_version(),
         description=(
             "Resolve bundled port identities and calculate approximate analytical "
@@ -334,7 +334,7 @@ def create_app(
         """Report that the process is up, saying nothing about its dependencies."""
 
         return HealthResponse(
-            service="sea-mile", status="ok", version=_package_version()
+            service="harborly", status="ok", version=_package_version()
         )
 
     application.get(
@@ -360,7 +360,7 @@ def create_app(
         checks = _readiness_checks(registry, router)
         ready = all(check.passed for check in checks)
         body = ReadinessResponse(
-            service="sea-mile",
+            service="harborly",
             status="ready" if ready else "not_ready",
             version=_package_version(),
             checks=[

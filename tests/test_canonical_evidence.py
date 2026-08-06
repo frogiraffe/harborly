@@ -1,7 +1,7 @@
 import pandas as pd
 
-from sea_mile.canonical import assign_canonical_ids_with_evidence
-from sea_mile.geo import great_circle_nmi
+from harborly.canonical import assign_canonical_ids_with_evidence
+from harborly.geo import great_circle_nmi
 
 
 def _make_registry(**kwargs):

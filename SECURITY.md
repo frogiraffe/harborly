@@ -8,7 +8,7 @@ before a fix is available.
 
 Include:
 
-- the affected sea-mile version;
+- the affected harborly version;
 - operating system and Python version;
 - installed optional dependencies;
 - the smallest reproducible input or command;
@@ -16,7 +16,7 @@ Include:
 
 ## Security boundaries
 
-sea-mile downloads and parses external CSV, ZIP, JSON, GeoJSON, and Parquet
+harborly downloads and parses external CSV, ZIP, JSON, GeoJSON, and Parquet
 data. Relevant vulnerability classes include malformed-input denial of service,
 resource exhaustion, archive/parser defects, dependency compromise, path
 handling errors, and upstream data tampering.

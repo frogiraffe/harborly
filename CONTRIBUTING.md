@@ -51,7 +51,7 @@ never rewrites anything.
 
 ## Source providers
 
-A source parser belongs under `sea_mile.sources` and returns `(records,
+A source parser belongs under `harborly.sources` and returns `(records,
 aliases)` as pandas DataFrames. Registry rows require:
 
 `registry_id`, `provider`, `provider_id`, `country_code`, `canonical_name`,
@@ -62,13 +62,13 @@ Alias rows require:
 
 `registry_id`, `provider`, `alias`, `alias_key`, and `alias_type`.
 
-Provider integration occurs in `sea_mile.build.registry`. The source license
+Provider integration occurs in `harborly.build.registry`. The source license
 must permit the intended processing and distribution mode.
 
 ## Bundled registry refresh
 
 `.github/workflows/refresh-bundled-data.yml` rebuilds the WPI + GeoNames
-registry under `src/sea_mile/data/` (`scripts/build_bundled_registry.py`) on
+registry under `src/harborly/data/` (`scripts/build_bundled_registry.py`) on
 a GitHub-hosted runner monthly, or on demand via `workflow_dispatch`. It opens
 a PR against `main` only when `registry_content_hash` actually changes;
 the manifest's `snapshot_label`/`path` fields shift with the run date even
@@ -79,7 +79,7 @@ refreshed data to reach PyPI.
 
 ## Coastline data
 
-The embedded coastline in `src/sea_mile/tui/coastlines.py` is auto-generated from
+The embedded coastline in `src/harborly/tui/coastlines.py` is auto-generated from
 Natural Earth 110m (Public Domain / CC0). To regenerate after an upstream update:
 
 ```bash
