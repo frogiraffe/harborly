@@ -29,6 +29,7 @@ from harborly.ports import (
     bundled_data_directory,
     source_short_label,
 )
+from harborly.routing import PassageRestriction
 
 logger = logging.getLogger("harborly")
 
@@ -434,14 +435,22 @@ def _cmd_route(args: argparse.Namespace) -> int:
 
     registry = _load_registry(args)
     origin = _endpoint_port(registry, args.origin, args.origin_country)
+    via_ports = [_endpoint_port(registry, value, None) for value in args.via]
     destination = _endpoint_port(registry, args.destination, args.destination_country)
     try:
         route_kwargs = {}
         if args.speed_knots is not None:
             route_kwargs["speed_knots"] = args.speed_knots
-        result = SeaRouter(cache_path=args.cache).route(
-            origin, destination, **route_kwargs
-        )
+        router_kwargs = {"cache_path": args.cache}
+        if args.restrictions is not None:
+            router_kwargs["restrictions"] = args.restrictions
+        router = SeaRouter(**router_kwargs)
+        if via_ports:
+            result = router.route_sequence(
+                [origin, *via_ports, destination], **route_kwargs
+            )
+        else:
+            result = router.route(origin, destination, **route_kwargs)
     except ImportError:
         _print_optional_extras_error(
             "route --html-map" if args.html_map else "route",
@@ -1223,6 +1232,13 @@ def _parser() -> argparse.ArgumentParser:
     )
     route.add_argument("--origin-country")
     route.add_argument("--destination-country")
+    route.add_argument("--via", action="append", default=[], help="intermediate port")
+    route.add_argument(
+        "--restrictions",
+        nargs="+",
+        choices=tuple(str(value) for value in PassageRestriction),
+        help="passages to avoid",
+    )
     route.add_argument(
         "--geojson", type=Path, help="write the route as a GeoJSON Feature"
     )

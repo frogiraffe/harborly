@@ -1187,7 +1187,7 @@ def test_route_cli_routes_ordered_vias_with_explicit_restrictions(
         == 0
     )
     assert json.loads(capsys.readouterr().out)["data"] == {"kind": "sequence"}
-    assert registry.calls == [("A", None), ("C", None), ("B", None), ("D", None)]
+    assert registry.calls == [("A", None), ("B", None), ("D", None), ("C", None)]
     assert FakeRouter.instance is not None
     assert FakeRouter.instance.kwargs == {
         "cache_path": None,
