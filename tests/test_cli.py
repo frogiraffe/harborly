@@ -1084,3 +1084,123 @@ def test_match_review_row_ids_continue_across_chunks(tmp_path, monkeypatch) -> N
     with review_csv.open(encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))
     assert sorted({row["row_id"] for row in rows}) == ["1", "2", "3"]
+
+
+class _RouteCommandRegistry:
+    def __init__(self, ports: dict[str, object]) -> None:
+        self.ports = ports
+        self.calls: list[tuple[str, str | None]] = []
+
+    def resolve(self, value: str, *, country_code: str | None = None) -> object:
+        self.calls.append((value, country_code))
+        return self.ports[value]
+
+
+class _RouteCommandResult:
+    def __init__(self, summary: dict[str, object]) -> None:
+        self._summary = summary
+
+    def summary(self) -> dict[str, object]:
+        return self._summary
+
+
+def test_route_cli_preserves_two_port_path_and_default_restrictions(
+    monkeypatch, capsys
+) -> None:
+    origin, destination = object(), object()
+    registry = _RouteCommandRegistry({"A": origin, "C": destination})
+
+    class FakeRouter:
+        instances: list[FakeRouter] = []
+
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+            self.route_calls: list[tuple[object, object, dict[str, object]]] = []
+            FakeRouter.instances.append(self)
+
+        def route(
+            self, start: object, end: object, **kwargs: object
+        ) -> _RouteCommandResult:
+            self.route_calls.append((start, end, kwargs))
+            return _RouteCommandResult({"kind": "single"})
+
+        def route_sequence(self, *args: object, **kwargs: object) -> object:
+            pytest.fail(f"route_sequence should not be called: {args}, {kwargs}")
+
+    monkeypatch.setattr("harborly.cli._require_optional_extras", lambda *_args: True)
+    monkeypatch.setattr("harborly.cli._load_registry", lambda _args: registry)
+    monkeypatch.setattr("harborly.router.SeaRouter", FakeRouter)
+
+    assert main(["route", "A", "C", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["data"] == {"kind": "single"}
+    assert registry.calls == [("A", None), ("C", None)]
+    assert len(FakeRouter.instances) == 1
+    assert FakeRouter.instances[0].kwargs == {"cache_path": None}
+    assert FakeRouter.instances[0].route_calls == [(origin, destination, {})]
+
+
+def test_route_cli_routes_ordered_vias_with_explicit_restrictions(
+    monkeypatch, capsys
+) -> None:
+    origin, via_one, via_two, destination = object(), object(), object(), object()
+    registry = _RouteCommandRegistry(
+        {"A": origin, "B": via_one, "D": via_two, "C": destination}
+    )
+
+    class FakeRouter:
+        instance: FakeRouter | None = None
+
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+            self.sequence_calls: list[tuple[object, ...]] = []
+            FakeRouter.instance = self
+
+        def route(self, *args: object, **kwargs: object) -> object:
+            pytest.fail(f"route should not be called: {args}, {kwargs}")
+
+        def route_sequence(
+            self, ports: list[object], **kwargs: object
+        ) -> _RouteCommandResult:
+            self.sequence_calls.append((*ports, kwargs))
+            return _RouteCommandResult({"kind": "sequence"})
+
+    monkeypatch.setattr("harborly.cli._require_optional_extras", lambda *_args: True)
+    monkeypatch.setattr("harborly.cli._load_registry", lambda _args: registry)
+    monkeypatch.setattr("harborly.router.SeaRouter", FakeRouter)
+
+    assert (
+        main(
+            [
+                "route",
+                "A",
+                "C",
+                "--via",
+                "B",
+                "--via",
+                "D",
+                "--restrictions",
+                "suez",
+                "panama",
+                "--json",
+            ]
+        )
+        == 0
+    )
+    assert json.loads(capsys.readouterr().out)["data"] == {"kind": "sequence"}
+    assert registry.calls == [("A", None), ("C", None), ("B", None), ("D", None)]
+    assert FakeRouter.instance is not None
+    assert FakeRouter.instance.kwargs == {
+        "cache_path": None,
+        "restrictions": ["suez", "panama"],
+    }
+    assert FakeRouter.instance.sequence_calls == [
+        (origin, via_one, via_two, destination, {})
+    ]
+
+
+def test_route_cli_rejects_invalid_restriction(capsys) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        main(["route", "A", "C", "--restrictions", "not-a-passage"])
+
+    assert exc_info.value.code == 2
+    assert "invalid choice" in capsys.readouterr().err
