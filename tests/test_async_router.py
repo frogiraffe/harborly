@@ -85,6 +85,12 @@ class _ParityRouter:
             raise self.error
         return self.result
 
+    def route_sequence(self, ports, *, speed_knots=None):
+        self.calls.append(("route_sequence", ports, speed_knots))
+        if self.error is not None:
+            raise self.error
+        return self.result
+
 
 @pytest.mark.anyio
 async def test_async_router_route() -> None:
@@ -267,3 +273,26 @@ async def test_async_router_route_sequence() -> None:
 
     assert len(seq.legs) == 2
     assert seq.total_distance_nmi > 0
+
+
+@pytest.mark.anyio
+async def test_async_router_route_sequence_delegates_once_with_exact_result() -> None:
+    ports = (object(), object(), object())
+    result = object()
+    sync_router = _ParityRouter(result)
+
+    assert (
+        await AsyncSeaRouter(sync_router).route_sequence(ports, speed_knots=14.0)
+        is result
+    )
+    assert sync_router.calls == [("route_sequence", ports, 14.0)]
+
+
+@pytest.mark.anyio
+async def test_async_router_route_sequence_preserves_exception_identity() -> None:
+    error = RuntimeError("sequence failed")
+
+    with pytest.raises(RuntimeError) as exc_info:
+        await AsyncSeaRouter(_ParityRouter(object(), error)).route_sequence(())
+
+    assert exc_info.value is error

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import inspect
 import sys
 
 import pytest
 
-from harborly import Port, PortCoordinateError, SeaRouter
+from harborly import PassageRestriction, Port, PortCoordinateError, SeaRouter
+from harborly.router import SeaRoute
+from harborly.routing import RouteQualityFlag
 
 
 def port(
@@ -113,12 +116,75 @@ def test_router_rejects_out_of_range_coordinates() -> None:
 
 
 def test_passage_restriction_enum_integration() -> None:
-    from harborly import PassageRestriction
-
     router = SeaRouter(
-        restrictions=[PassageRestriction.SUEZ, PassageRestriction.PANAMA]
+        restrictions=[PassageRestriction.SUEZ, "panama", PassageRestriction.KIEL]
     )
-    assert router.restrictions == ("suez", "panama")
+    assert router.restrictions == ("suez", "panama", "kiel")
+    assert (
+        inspect.signature(SeaRouter).parameters["restrictions"].annotation
+        == "Iterable[str | PassageRestriction]"
+    )
+
+
+def _sequence_leg(origin: Port, destination: Port, distance_nmi: float) -> SeaRoute:
+    return SeaRoute(
+        origin=origin,
+        destination=destination,
+        distance_nmi=distance_nmi,
+        great_circle_nmi=distance_nmi - 1.0,
+        detour_ratio=1.1,
+        quality_flag=RouteQualityFlag.OK,
+        geometry={"type": "LineString", "coordinates": []},
+        engine="fake",
+        engine_version="1",
+        algorithm="astar",
+        backend="fake",
+        restrictions=("suez",),
+    )
+
+
+def test_route_sequence_delegates_ordered_legs_and_propagates_first_error(
+    monkeypatch,
+) -> None:
+    port_a = port("TEST:1", "Mersin", 36.8, 34.65)
+    port_b = port("TEST:2", "Piraeus", 37.94, 23.63)
+    port_c = port("TEST:3", "Istanbul", 41.0, 28.97)
+    first = _sequence_leg(port_a, port_b, 10.0)
+    second = _sequence_leg(port_b, port_c, 20.0)
+    calls: list[tuple[Port, Port, float | None]] = []
+
+    def fake_route(
+        origin: Port, destination: Port, *, speed_knots: float | None = None
+    ) -> SeaRoute:
+        calls.append((origin, destination, speed_knots))
+        return (first, second)[len(calls) - 1]
+
+    router = SeaRouter(_routing_backend=object())
+    monkeypatch.setattr(router, "route", fake_route)
+    sequence = router.route_sequence([port_a, port_b, port_c], speed_knots=12.0)
+
+    assert sequence.legs[0] is first
+    assert sequence.legs[1] is second
+    assert sequence.total_distance_nmi == 30.0
+    assert calls == [(port_a, port_b, 12.0), (port_b, port_c, 12.0)]
+
+    error = RuntimeError("second leg failed")
+    calls.clear()
+
+    def failing_route(
+        origin: Port, destination: Port, *, speed_knots: float | None = None
+    ) -> SeaRoute:
+        calls.append((origin, destination, speed_knots))
+        if len(calls) == 2:
+            raise error
+        return first
+
+    monkeypatch.setattr(router, "route", failing_route)
+    with pytest.raises(RuntimeError) as exc_info:
+        router.route_sequence([port_a, port_b, port_c], speed_knots=12.0)
+
+    assert exc_info.value is error
+    assert calls == [(port_a, port_b, 12.0), (port_b, port_c, 12.0)]
 
 
 def test_route_sequence_multi_leg() -> None:
