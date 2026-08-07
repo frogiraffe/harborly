@@ -9,6 +9,7 @@ import html
 import io
 import json
 import logging
+import math
 import os
 import sys
 import tempfile
@@ -228,7 +229,7 @@ def _positive_float(value: str) -> float:
         raise argparse.ArgumentTypeError(
             f"{value!r} is not a positive number"
         ) from None
-    if parsed <= 0:
+    if not math.isfinite(parsed) or parsed <= 0:
         raise argparse.ArgumentTypeError(f"{value!r} is not a positive number")
     return parsed
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import multiprocessing
 import os
 import secrets
@@ -54,6 +55,13 @@ _DEFAULT_MATRIX_WORKER_LIMIT = 4
 _MATRIX_BATCH_SIZE = 32
 _MATRIX_PENDING_BATCHES_PER_WORKER = 2
 _ASYNC_EDGE_QUEUE_MAXSIZE = 1
+
+
+def _normalize_speed_knots(speed_knots: float) -> float:
+    normalized = float(speed_knots)
+    if not math.isfinite(normalized) or normalized <= 0:
+        raise ValueError("speed_knots must be a finite positive number")
+    return normalized
 
 
 def _coordinate_port(label: str, latitude: float, longitude: float) -> Port:
@@ -335,10 +343,13 @@ class SeaRouter:
         *,
         speed_knots: float | None = None,
     ) -> SeaRoute:
+        normalized_speed = (
+            _normalize_speed_knots(speed_knots) if speed_knots is not None else None
+        )
         base = self._route_cached(
             origin, destination, self.algorithm, self.backend, self.restrictions
         )
-        if speed_knots is not None:
+        if normalized_speed is not None:
             return SeaRoute(
                 origin=base.origin,
                 destination=base.destination,
@@ -352,7 +363,7 @@ class SeaRouter:
                 algorithm=base.algorithm,
                 backend=base.backend,
                 restrictions=base.restrictions,
-                speed_knots=float(speed_knots),
+                speed_knots=normalized_speed,
             )
         return base
 
@@ -628,6 +639,8 @@ class SeaRouter:
         origin_longitude: float,
         destination_latitude: float,
         destination_longitude: float,
+        *,
+        speed_knots: float | None = None,
     ) -> SeaRoute:
         """Route between two raw coordinates, without a registry lookup."""
 
@@ -636,6 +649,7 @@ class SeaRouter:
             _coordinate_port(
                 "destination", destination_latitude, destination_longitude
             ),
+            speed_knots=speed_knots,
         )
 
     def route_many(self, pairs: Sequence[tuple[Port, Port]]) -> list[SeaRoute]:
@@ -822,6 +836,8 @@ class AsyncSeaRouter:
         origin_longitude: float,
         destination_latitude: float,
         destination_longitude: float,
+        *,
+        speed_knots: float | None = None,
     ) -> SeaRoute:
         import asyncio
 
@@ -831,6 +847,7 @@ class AsyncSeaRouter:
             origin_longitude,
             destination_latitude,
             destination_longitude,
+            speed_knots=speed_knots,
         )
 
     async def distance_matrix(

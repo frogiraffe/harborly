@@ -213,3 +213,34 @@ def test_vessel_speed_duration_calculation() -> None:
     assert route.duration_days is not None
     assert route.duration_days == round(route.duration_hours / 24.0, 2)
     assert route.summary()["speed_knots"] == 14.0
+
+
+@pytest.mark.parametrize(
+    "speed_knots", [0.0, -1.0, float("nan"), float("inf"), -float("inf")]
+)
+def test_route_rejects_non_finite_or_non_positive_speed_before_routing(
+    speed_knots: float,
+) -> None:
+    origin = port("TEST:1", "Mersin", 36.8, 34.65)
+    destination = port("TEST:2", "Piraeus", 37.94, 23.63)
+
+    with pytest.raises(ValueError, match="finite positive"):
+        SeaRouter(_routing_backend=object()).route(
+            origin, destination, speed_knots=speed_knots
+        )
+
+
+def test_route_coordinates_forwards_speed_to_route(monkeypatch) -> None:
+    router = SeaRouter(_routing_backend=object())
+    captured: dict[str, float | None] = {}
+
+    def fake_route(origin, destination, *, speed_knots=None):
+        captured["speed_knots"] = speed_knots
+        return _sequence_leg(origin, destination, 10.0)
+
+    monkeypatch.setattr(router, "route", fake_route)
+
+    route = router.route_coordinates(36.8, 34.65, 37.94, 23.63, speed_knots=12.0)
+
+    assert route.speed_knots is None
+    assert captured == {"speed_knots": 12.0}

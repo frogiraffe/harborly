@@ -91,6 +91,29 @@ class _ParityRouter:
             raise self.error
         return self.result
 
+    def route_coordinates(
+        self,
+        origin_latitude,
+        origin_longitude,
+        destination_latitude,
+        destination_longitude,
+        *,
+        speed_knots=None,
+    ):
+        self.calls.append(
+            (
+                "route_coordinates",
+                origin_latitude,
+                origin_longitude,
+                destination_latitude,
+                destination_longitude,
+                speed_knots,
+            )
+        )
+        if self.error is not None:
+            raise self.error
+        return self.result
+
 
 @pytest.mark.anyio
 async def test_async_router_route() -> None:
@@ -110,6 +133,20 @@ async def test_async_router_route_coordinates() -> None:
     route = await async_router.route_coordinates(36.8, 34.65, 37.94, 23.63)
 
     assert route.distance_nmi > 0
+
+
+@pytest.mark.anyio
+async def test_async_router_route_coordinates_forwards_speed() -> None:
+    result = object()
+    sync_router = _ParityRouter(result)
+
+    assert (
+        await AsyncSeaRouter(sync_router).route_coordinates(
+            36.8, 34.65, 37.94, 23.63, speed_knots=12.0
+        )
+        is result
+    )
+    assert sync_router.calls == [("route_coordinates", 36.8, 34.65, 37.94, 23.63, 12.0)]
 
 
 @pytest.mark.anyio
