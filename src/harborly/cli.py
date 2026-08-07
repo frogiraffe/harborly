@@ -626,16 +626,16 @@ def _cmd_matrix(args: argparse.Namespace) -> int:
             try:
                 with partial.open("w", newline="", encoding="utf-8") as handle:
                     writer = csv.writer(handle)
-                    header = ("origin", "destination", "distance_nmi")
+                    header = ["origin", "destination", "distance_nmi"]
                     if speed_knots is not None:
-                        header += ("duration_hours",)
+                        header.append("duration_hours")
                     writer.writerow(header)
                     for row, column, distance in router.iter_distance_edges(
                         ports, max_workers=args.workers
                     ):
-                        edge = (labels[row], labels[column], distance)
+                        edge = [labels[row], labels[column], distance]
                         if speed_knots is not None:
-                            edge += (round(distance / speed_knots, 2),)
+                            edge.append(round(distance / speed_knots, 2))
                         writer.writerow(edge)
                         count += 1
                 partial.replace(args.edge_csv)
