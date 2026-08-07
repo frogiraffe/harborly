@@ -550,9 +550,8 @@ def _cmd_route(args: argparse.Namespace) -> int:
         route_exports.append(("KML", args.kml, result.write_kml))
     _write_route_exports(route_exports)
     if args.html_map and html_map_writer is not None:
-        assert not isinstance(result, SequenceSeaRoute)
         try:
-            html_map_writer(result, args.html_map)
+            html_map_writer(cast("SeaRoute", result), args.html_map)
         except OSError as error:
             raise ValueError(
                 f"could not write HTML map to {args.html_map}: {error}"
