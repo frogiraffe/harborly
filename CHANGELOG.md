@@ -3,6 +3,29 @@
 All notable user-visible changes are documented here. The project follows
 [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-08-07
+
+### Added
+
+- Ordered CLI waypoints through repeatable `route --via`, with typed passage
+  restrictions derived from `PassageRestriction`.
+- `matrix --speed-knots` duration output for JSON, tables, and streamed edge CSV.
+- Async parity methods for route IDs, coordinate routes, and batch routing.
+
+### Changed
+
+- Async edge iteration now streams through a bounded, cancellation-aware bridge.
+- Vessel speed must be finite and positive across CLI, synchronous, and asynchronous
+  routing entry points.
+- GIS exporters now have end-to-end KML topology, XML escaping, GeoParquet WKB, and
+  CLI artifact verification.
+
+### Fixed
+
+- Matrix workers preserve the configured cache failure policy.
+- Multi-format route exports stage atomically and reject duplicate output paths.
+- The optional API release smoke uses the versioned `/v1/livez` endpoint.
+
 ## [1.0.0] - 2026-08-06
 
 ### Added
@@ -25,4 +48,5 @@ All notable user-visible changes are documented here. The project follows
 - KML export: `harborly route --kml route.kml`, `harborly export --format kml`. Programmatic access via `harborly.kml`.
 - GeoParquet export: `harborly export --format geoparquet` (OGC WKB, CRS OGC:CRS84, GeoParquet 1.0.0 spec). Programmatic access via `harborly.geoparquet`.
 
+[1.1.0]: https://github.com/frogiraffe/harborly/releases/tag/v1.1.0
 [1.0.0]: https://github.com/frogiraffe/harborly/releases/tag/v1.0.0
