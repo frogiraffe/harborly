@@ -6,8 +6,10 @@ import sqlite3
 import sys
 from contextlib import closing
 from pathlib import Path
+from xml.etree import ElementTree
 
 import pandas as pd
+import pyarrow.parquet as pq
 import pytest
 
 import harborly
@@ -15,7 +17,7 @@ from harborly.cli import main
 from harborly.route_cache import RouteCache
 
 
-def write_registry(directory) -> None:
+def write_registry(directory, *, first_name: str = "Mersin") -> None:
     directory.mkdir()
     registry = pd.DataFrame(
         [
@@ -24,7 +26,7 @@ def write_registry(directory) -> None:
                 "provider": "NGA_WPI",
                 "provider_id": "1",
                 "country_code": "TR",
-                "canonical_name": "Mersin",
+                "canonical_name": first_name,
                 "latitude": 36.8,
                 "longitude": 34.65,
                 "unlocode": "TRMER",
@@ -269,6 +271,30 @@ def test_route_can_write_geojson(tmp_path, capsys) -> None:
     feature = json.loads(output.read_text())
     assert summary["distance_nmi"] > 0
     assert feature["properties"]["routing_units"] == "nautical_miles"
+
+
+def test_route_can_write_parseable_kml(tmp_path, capsys) -> None:
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+    output = tmp_path / "route.kml"
+
+    status = main(
+        [
+            "--data-dir",
+            str(data_directory),
+            "route",
+            "TRMER",
+            "GRPIR",
+            "--kml",
+            str(output),
+        ]
+    )
+
+    root = ElementTree.parse(output).getroot()
+    namespace = {"kml": "http://www.opengis.net/kml/2.2"}
+    assert status == 0
+    assert root.find(".//kml:LineString/kml:coordinates", namespace) is not None
+    assert "distance_nmi:" in capsys.readouterr().out
 
 
 def test_route_can_write_html_map(tmp_path, capsys) -> None:
@@ -626,6 +652,63 @@ def test_export_csv_to_stdout(tmp_path, capsys) -> None:
     assert status == 0
     assert out.splitlines()[0].startswith("registry_id,provider")
     assert "WPI:1" in out
+
+
+def test_export_kml_writes_escaped_port_point(tmp_path, capsys) -> None:
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory, first_name="Mersin & <Port>")
+    output = tmp_path / "ports.kml"
+
+    status = main(
+        [
+            "--data-dir",
+            str(data_directory),
+            "export",
+            "--country",
+            "TR",
+            "--format",
+            "kml",
+            "--output",
+            str(output),
+        ]
+    )
+
+    root = ElementTree.parse(output).getroot()
+    namespace = {"kml": "http://www.opengis.net/kml/2.2"}
+    assert status == 0
+    assert (
+        root.findtext(".//kml:Placemark/kml:name", namespaces=namespace)
+        == "Mersin & <Port>"
+    )
+    assert root.find(".//kml:Placemark/kml:Point", namespace) is not None
+    assert "wrote 1 records" in capsys.readouterr().out
+
+
+def test_export_geoparquet_writes_port_wkb(tmp_path, capsys) -> None:
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+    output = tmp_path / "ports.geoparquet"
+
+    status = main(
+        [
+            "--data-dir",
+            str(data_directory),
+            "export",
+            "--country",
+            "TR",
+            "--format",
+            "geoparquet",
+            "--output",
+            str(output),
+        ]
+    )
+
+    table = pq.read_table(output)
+    geo = json.loads(table.schema.metadata[b"geo"])
+    assert status == 0
+    assert table["geometry"][0].as_py() is not None
+    assert geo["columns"]["geometry"]["encoding"] == "WKB"
+    assert "wrote 1 records" in capsys.readouterr().out
 
 
 def test_export_needs_a_filter(tmp_path, capsys) -> None:

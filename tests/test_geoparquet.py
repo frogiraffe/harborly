@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
+import struct
 
 import pyarrow.parquet as pq
 
-from harborly import SeaRouter
+from harborly import RouteQualityFlag, SeaRoute, SeaRouter
 from harborly.geoparquet import write_ports_geoparquet, write_route_geoparquet
 from harborly.ports import Port
 
@@ -106,3 +107,59 @@ def test_write_sequence_route_geoparquet(tmp_path) -> None:
     assert "leg_number" in table.column_names
     assert table["leg_number"].to_pylist() == [1, 2]
     assert "speed_knots" in table.column_names
+
+
+def test_geoparquet_port_wkb_and_metadata(tmp_path) -> None:
+    output = tmp_path / "ports.geoparquet"
+    write_ports_geoparquet([port("TEST:1", "Mersin", 36.8, 34.65)], output)
+
+    table = pq.read_table(output)
+    geometry = table["geometry"][0].as_py()
+    geo = json.loads(table.schema.metadata[b"geo"])
+
+    assert geometry is not None
+    assert geometry[0] == 1
+    assert struct.unpack("<I", geometry[1:5])[0] == 1
+    assert geo["columns"]["geometry"] == {
+        "encoding": "WKB",
+        "geometry_types": ["Point"],
+        "crs": None,
+    }
+
+
+def test_geoparquet_multilinestring_wkb_and_metadata(tmp_path) -> None:
+    origin = port("TEST:1", "Mersin", 36.8, 34.65)
+    destination = port("TEST:2", "Piraeus", 37.94, 23.63)
+    route = SeaRoute(
+        origin=origin,
+        destination=destination,
+        distance_nmi=100.0,
+        great_circle_nmi=90.0,
+        detour_ratio=1.11,
+        quality_flag=RouteQualityFlag.OK,
+        geometry={
+            "type": "MultiLineString",
+            "coordinates": [
+                [[34.65, 36.8], [30.0, 37.0]],
+                [[29.0, 37.2], [23.63, 37.94]],
+            ],
+        },
+        engine="test",
+        engine_version="1",
+        algorithm="test",
+        backend="test",
+        restrictions=(),
+    )
+    output = tmp_path / "route.geoparquet"
+    write_route_geoparquet(route, output)
+
+    table = pq.read_table(output)
+    geometry = table["geometry"][0].as_py()
+    geo = json.loads(table.schema.metadata[b"geo"])
+
+    assert geometry is not None
+    assert geometry[0] == 1
+    assert struct.unpack("<I", geometry[1:5])[0] == 5
+    assert geo["columns"]["geometry"]["encoding"] == "WKB"
+    assert geo["columns"]["geometry"]["geometry_types"] == ["MultiLineString"]
+    assert geo["columns"]["geometry"]["crs"] is None
