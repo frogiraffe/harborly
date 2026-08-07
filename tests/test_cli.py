@@ -736,6 +736,8 @@ def test_matrix_speed_adds_derived_duration_outputs(
     text = capsys.readouterr().out
     assert "FROM/TO" in text
     assert "DURATION HOURS" in text
+    assert "1.00" in text
+    assert "2.00" in text
 
     output = tmp_path / "edges.csv"
     assert main([*args, "--speed-knots", "10", "--edge-csv", str(output)]) == 0

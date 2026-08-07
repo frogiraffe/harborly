@@ -674,7 +674,7 @@ def _cmd_matrix(args: argparse.Namespace) -> int:
         _print_table(
             ("DURATION HOURS", *labels),
             [
-                (label, *[f"{duration:.1f}" for duration in row])
+                (label, *[f"{duration:.2f}" for duration in row])
                 for label, row in zip(labels, durations, strict=True)
             ],
         )
