@@ -707,6 +707,81 @@ def test_matrix_rejects_nonpositive_worker_count() -> None:
         main(["matrix", "TRMER", "GRPIR", "--workers", "0"])
 
 
+def test_matrix_speed_adds_derived_duration_outputs(
+    tmp_path, capsys, monkeypatch
+) -> None:
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+
+    class FakeRouter:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def distance_matrix(self, _ports, *, max_workers=None):
+            return [[0.0, 10.0], [20.0, 0.0]]
+
+        def iter_distance_edges(self, _ports, *, max_workers=None):
+            yield 0, 1, 10.0
+            yield 1, 0, 20.0
+
+    monkeypatch.setattr("harborly.router.SeaRouter", FakeRouter)
+    args = ["--data-dir", str(data_directory), "matrix", "TRMER", "GRPIR"]
+
+    assert main([*args, "--speed-knots", "10", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)["data"]
+    assert payload["speed_knots"] == 10.0
+    assert payload["durations_hours"] == [[0.0, 1.0], [2.0, 0.0]]
+
+    assert main([*args, "--speed-knots", "10"]) == 0
+    text = capsys.readouterr().out
+    assert "FROM/TO" in text
+    assert "DURATION HOURS" in text
+
+    output = tmp_path / "edges.csv"
+    assert main([*args, "--speed-knots", "10", "--edge-csv", str(output)]) == 0
+    with output.open() as handle:
+        rows = list(csv.DictReader(handle))
+    assert rows == [
+        {
+            "origin": "WPI:1",
+            "destination": "WPI:2",
+            "distance_nmi": "10.0",
+            "duration_hours": "1.0",
+        },
+        {
+            "origin": "WPI:2",
+            "destination": "WPI:1",
+            "distance_nmi": "20.0",
+            "duration_hours": "2.0",
+        },
+    ]
+
+
+def test_matrix_without_speed_retains_legacy_json_schema(
+    tmp_path, capsys, monkeypatch
+) -> None:
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+
+    class FakeRouter:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def distance_matrix(self, _ports, *, max_workers=None):
+            return [[0.0, 10.0], [20.0, 0.0]]
+
+    monkeypatch.setattr("harborly.router.SeaRouter", FakeRouter)
+
+    assert (
+        main(["--data-dir", str(data_directory), "matrix", "TRMER", "GRPIR", "--json"])
+        == 0
+    )
+    assert set(json.loads(capsys.readouterr().out)["data"]) == {
+        "ports",
+        "distances_nmi",
+    }
+
+
 def test_cache_info_and_clear_support_json(tmp_path, capsys) -> None:
     cache_path = tmp_path / "routes.sqlite3"
     RouteCache(cache_path)

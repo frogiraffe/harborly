@@ -614,6 +614,7 @@ def _cmd_matrix(args: argparse.Namespace) -> int:
     ports = [registry.resolve(identifier) for identifier in args.ports]
     labels = [port.registry_id for port in ports]
     router = SeaRouter(cache_path=args.cache)
+    speed_knots = args.speed_knots
     try:
         if args.edge_csv:
             if args.json:
@@ -625,11 +626,17 @@ def _cmd_matrix(args: argparse.Namespace) -> int:
             try:
                 with partial.open("w", newline="", encoding="utf-8") as handle:
                     writer = csv.writer(handle)
-                    writer.writerow(("origin", "destination", "distance_nmi"))
+                    header = ("origin", "destination", "distance_nmi")
+                    if speed_knots is not None:
+                        header += ("duration_hours",)
+                    writer.writerow(header)
                     for row, column, distance in router.iter_distance_edges(
                         ports, max_workers=args.workers
                     ):
-                        writer.writerow((labels[row], labels[column], distance))
+                        edge = (labels[row], labels[column], distance)
+                        if speed_knots is not None:
+                            edge += (round(distance / speed_knots, 2),)
+                        writer.writerow(edge)
                         count += 1
                 partial.replace(args.edge_csv)
             except Exception:
@@ -644,8 +651,17 @@ def _cmd_matrix(args: argparse.Namespace) -> int:
     from harborly.data_contracts import validate_distance_matrix
 
     validate_distance_matrix(labels, matrix)
+    durations = (
+        [[round(distance / speed_knots, 2) for distance in row] for row in matrix]
+        if speed_knots is not None
+        else None
+    )
     if args.json:
-        _emit_json(args, {"ports": labels, "distances_nmi": matrix})
+        payload: dict[str, object] = {"ports": labels, "distances_nmi": matrix}
+        if durations is not None:
+            payload["speed_knots"] = speed_knots
+            payload["durations_hours"] = durations
+        _emit_json(args, payload)
         return 0
     _print_table(
         ("FROM/TO", *labels),
@@ -654,6 +670,14 @@ def _cmd_matrix(args: argparse.Namespace) -> int:
             for label, row in zip(labels, matrix, strict=True)
         ],
     )
+    if durations is not None:
+        _print_table(
+            ("DURATION HOURS", *labels),
+            [
+                (label, *[f"{duration:.1f}" for duration in row])
+                for label, row in zip(labels, durations, strict=True)
+            ],
+        )
     return 0
 
 
@@ -1376,6 +1400,11 @@ def _parser() -> argparse.ArgumentParser:
         "--edge-csv",
         type=Path,
         help="stream unique route edges to CSV instead of building a dense matrix",
+    )
+    matrix.add_argument(
+        "--speed-knots",
+        type=_positive_float,
+        help="vessel speed in knots to include voyage durations",
     )
     matrix.set_defaults(func=_cmd_matrix)
 
