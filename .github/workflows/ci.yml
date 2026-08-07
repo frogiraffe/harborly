@@ -191,7 +191,7 @@ jobs:
                   follow_redirects=False,
               ) as client:
                   assert (await client.get("/")).status_code == 307
-                  assert (await client.get("/healthz")).json()["status"] == "ok"
+                  assert (await client.get("/v1/livez")).json()["status"] == "ok"
 
           asyncio.run(smoke())
           PY
