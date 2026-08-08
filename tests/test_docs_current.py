@@ -15,9 +15,8 @@ from scripts.check_docs import _heading_slugs
 
 ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
-LIBRARY_API = ROOT / "docs" / "LIBRARY_API.md"
-API_COMPATIBILITY = ROOT / "docs" / "API_COMPATIBILITY.md"
-OUTPUT_SCHEMAS = ROOT / "docs" / "OUTPUT_SCHEMAS.md"
+REFERENCE = ROOT / "docs" / "REFERENCE.md"
+CONTRIBUTING = ROOT / "CONTRIBUTING.md"
 MARKDOWN_FILES = [
     *sorted(ROOT.glob("*.md")),
     # docs/superpowers/ holds agentic-workflow planning artifacts, not public
@@ -43,7 +42,7 @@ def _command_names(parser: argparse.ArgumentParser) -> list[str]:
 
 
 def test_every_cli_command_is_documented() -> None:
-    docs = (README.read_text() + LIBRARY_API.read_text()).lower()
+    docs = (README.read_text() + REFERENCE.read_text()).lower()
     missing = sorted(
         {name for name in _command_names(_parser()) if name.lower() not in docs}
     )
@@ -51,19 +50,19 @@ def test_every_cli_command_is_documented() -> None:
 
 
 def test_every_public_export_is_documented() -> None:
-    docs = LIBRARY_API.read_text().lower()
+    docs = REFERENCE.read_text().lower()
     missing = [name for name in harborly.__all__ if name.lower() not in docs]
     assert not missing, f"undocumented public exports: {missing}"
 
 
 def test_every_stable_export_is_in_compatibility_policy() -> None:
-    policy = API_COMPATIBILITY.read_text().lower()
+    policy = CONTRIBUTING.read_text().lower()
     missing = [name for name in harborly.__all__ if name.lower() not in policy]
     assert not missing, f"exports missing from compatibility policy: {missing}"
 
 
 def test_every_routing_error_reason_is_documented() -> None:
-    schemas = OUTPUT_SCHEMAS.read_text()
+    schemas = REFERENCE.read_text()
     missing = [
         reason.value for reason in RoutingErrorReason if reason.value not in schemas
     ]
@@ -172,7 +171,7 @@ def test_every_optional_dependency_extra_is_documented() -> None:
 
 
 # Maintainer/methodology docs that are intentionally not required to be
-# reachable from README.md or docs/README.md.
+# reachable from README.md.
 _INTERNAL_DOC_ALLOWLIST = frozenset(
     {
         ROOT / "benchmarks" / "route_accuracy" / "data" / "README.md",
@@ -181,7 +180,6 @@ _INTERNAL_DOC_ALLOWLIST = frozenset(
 
 
 def test_every_docs_file_is_discoverable() -> None:
-    index = (ROOT / "docs" / "README.md").read_text().lower()
     readme = README.read_text().lower()
     paths = [
         *(ROOT / "docs").glob("*.md"),
@@ -191,7 +189,7 @@ def test_every_docs_file_is_discoverable() -> None:
         if path in _INTERNAL_DOC_ALLOWLIST or path.name == "README.md":
             continue
         rel = path.name.lower()
-        assert rel in index or rel in readme, f"orphaned doc: {path}"
+        assert rel in readme, f"orphaned doc: {path}"
 
 
 def test_documentation_uses_neutral_technical_language() -> None:

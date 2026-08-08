@@ -65,8 +65,6 @@ DEFAULT_ROOTS: tuple[str, ...] = (
     "README.md",
     "CHANGELOG.md",
     "CONTRIBUTING.md",
-    "CODE_OF_CONDUCT.md",
-    "SECURITY.md",
     "docs",
     "examples",
     "benchmarks",
