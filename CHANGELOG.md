@@ -3,6 +3,17 @@
 All notable user-visible changes are documented here. The project follows
 [Semantic Versioning](https://semver.org/).
 
+## [1.1.2] - 2026-08-08
+
+### Changed
+
+- Consolidated public and maintainer documentation into focused guides.
+- Renamed the CLI registry override to `HARBORLY_DATA_DIR`.
+
+### Fixed
+
+- Removed the mismatched PyPI environment claim from trusted publishing.
+
 ## [1.1.1] - 2026-08-07
 
 ### Added
@@ -49,5 +60,6 @@ All notable user-visible changes are documented here. The project follows
 - KML export: `harborly route --kml route.kml`, `harborly export --format kml`. Programmatic access via `harborly.kml`.
 - GeoParquet export: `harborly export --format geoparquet` (OGC WKB, CRS OGC:CRS84, GeoParquet 1.0.0 spec). Programmatic access via `harborly.geoparquet`.
 
+[1.1.2]: https://github.com/frogiraffe/harborly/releases/tag/v1.1.2
 [1.1.1]: https://github.com/frogiraffe/harborly/releases/tag/v1.1.1
 [1.0.0]: https://github.com/frogiraffe/harborly/releases/tag/v1.0.0
