@@ -1,93 +1,147 @@
+
 # Contributing
 
-## Environment
+Thanks for improving Harborly.
+
+## Code of conduct
+
+### Standards and scope
+
+Treat everyone respectfully and constructively: welcome newcomers, give feedback
+on the work rather than the person, accommodate different experience levels,
+and assume good faith. Harassment, personal or political attacks, demeaning or
+discriminatory comments, publishing private information, and sustained
+disruption are not acceptable.
+
+This applies in all project spaces, including issues, pull requests,
+discussions, and public representation of the project.
+
+### Reporting and enforcement
+
+Report conduct concerns privately to the maintainers through GitHub private
+vulnerability reporting or by direct message to the repository owner. Reports
+are handled confidentially. Maintainers may warn a participant, remove content,
+or block a participant; they will explain the decision to the reporter.
+
+## Development setup
+
+See [Getting Started](docs/GETTING-STARTED.md) for prerequisites and first-run
+instructions. For the full contributor environment, install the development,
+audit, and optional-feature dependencies:
 
 ```bash
-uv sync --dev --extra analysis --extra api --extra fast --extra map --extra routing --extra tui
+uv sync --locked --all-extras --group audit
 ```
 
-## Validation
+## Coding standards
 
-Run before submitting a pull request:
+- Format Python with Ruff: `uv run ruff format src tests scripts`.
+- Check formatting and lint with `uv run ruff format --check src tests scripts`
+  and `uv run ruff check src tests scripts`.
+- Type-check package code with `uv run mypy src`.
+- Run `uv run python scripts/check_docs.py` when documentation changes.
 
-```bash
-uv run ruff format --check src tests scripts
-uv run ruff check src tests scripts
-uv run mypy src
-uv run python scripts/check_docs.py
-uv run pytest -q
-uv run bandit -r src
-uv run pip-audit
-uv build
-uv run twine check --strict dist/*
-```
+CI enforces the formatting, linting, documentation, type-checking, and test
+commands on pull requests to `main`.
 
-The security and metadata commands require the audit dependency group:
-`uv sync --all-extras --group audit`.
+## Pull requests
 
-Behavior changes require tests. Public commands, exports, schemas, and serialized
-fields require corresponding documentation updates.
+- Target `main`. No contributor branch-naming convention is documented; use a
+  short, descriptive branch name.
+- Use an imperative commit subject and explain user-visible behavior and its
+  reason in the commit body.
+- Add or update tests for behavior changes, then run `uv run pytest -q`.
+- Run the Ruff, Mypy, and documentation checks in the PR template before
+  requesting review.
+- Keep public names, CLI commands, and JSON output documented, and comply with
+  the [public compatibility contract](#public-compatibility-contract).
+- Complete the PR summary and change list so reviewers can verify the intent
+  and scope.
 
-## Documentation prose
+## Issue reporting
 
-`scripts/check_docs.py` scans README/CHANGELOG/CONTRIBUTING/docs/examples/
-benchmarks/generated reports for two things: banned phrasing that overstates a
-reproducibility guarantee this project doesn't make, or misdescribes an
-editorial change (see `FORBIDDEN_PATTERNS` in the script for the exact list),
-and heuristic AI-writing signals (vague attribution, generic scene-setting,
-formulaic contrast, inflated claims, duplicated conclusions). Banned phrasing
-fails the check; heuristic signals are printed for human review and never
-fail it, since they have real false positives in ordinary technical prose. It
-never rewrites anything.
+Use [GitHub Issues](https://github.com/frogiraffe/harborly/issues) for bugs and
+feature requests.
 
-## Engineering requirements
+- For bugs, include the observed and expected behavior, a minimal reproduction,
+  relevant input, Harborly and Python versions, operating system, installed
+  extras, and the full output or error.
+- For feature requests, describe the problem, proposed capability, and any
+  impact on the public Python API, CLI, output schema, registry format, or data
+  sources.
 
-- Ambiguous identities must produce an explicit review result or typed error.
-- Ordering and identifiers must be deterministic for identical inputs.
-- JSON output must validate against the documented schema.
-- Public API, CLI, and output-schema changes must follow
-  [API compatibility](docs/API_COMPATIBILITY.md).
-- Registry changes must preserve provider attribution and snapshot provenance.
+## Security
 
-## Source providers
+Report suspected vulnerabilities through the private
+[security advisory form](https://github.com/frogiraffe/harborly/security/advisories/new),
+not in a public issue or pull request before a fix is available. Include the
+affected Harborly version, operating system, Python version, installed extras,
+the smallest reproducing input or command, and observed impact.
 
-A source parser belongs under `harborly.sources` and returns `(records,
-aliases)` as pandas DataFrames. Registry rows require:
+Harborly parses external CSV, ZIP, JSON, GeoJSON, and Parquet data. Consider
+malformed-input denial of service, resource exhaustion, archive or parser
+defects, dependency compromise, path handling errors, and upstream data
+tampering when reporting or reviewing a vulnerability. Recorded SHA-256 source
+digests protect a downloaded snapshot after its first download; they do not
+authenticate the upstream server or establish that initial trust.
 
-`registry_id`, `provider`, `provider_id`, `country_code`, `canonical_name`,
-`latitude`, `longitude`, `unlocode`, `function_code`, `source_version`, and
-`coordinate_resolution`.
+Release artifacts use GitHub Actions and PyPI Trusted Publishing, with workflow
+actions pinned to commit SHAs. The repository does not define an EOL table for
+released package versions. Harborly uses semantic versioning, and the 1.x
+contract below identifies the maintained public interfaces. CI validates Python
+3.11 through 3.14 on Linux, plus Python 3.14 on macOS and Windows; it also runs
+the complete suite on Python 3.11 with declared minimum direct dependencies.
 
-Alias rows require:
+## Public compatibility contract
 
-`registry_id`, `provider`, `alias`, `alias_key`, and `alias_type`.
+Harborly uses semantic versioning. The following contracts apply throughout the
+1.x series.
 
-Provider integration occurs in `harborly.build.registry`. The source license
-must permit the intended processing and distribution mode.
+### Python API
 
-## Bundled registry refresh
+The names in `harborly.__all__` are stable: `AmbiguousPortError`,
+`AsyncSeaRouter`, `BackendError`, `BackendErrorKind`, `BatchMatchResult`,
+`CacheFailurePolicy`, `CanonicalEvidence`, `ConfidenceTier`, `MatchPolicy`,
+`MatchReason`, `MatchStatus`, `PassageRestriction`, `Port`,
+`PortCoordinateError`, `PortGroup`, `PortNotFoundError`, `PortRegistry`,
+`RegistryDataError`, `RetryPolicy`, `RouteQualityFlag`, `RouteQualityPolicy`,
+`RoutingError`, `HarborlyError`, `SeaRoute`, `SeaRouter`, `SequenceSeaRoute`,
+and `SourceDataError`.
 
-`.github/workflows/refresh-bundled-data.yml` rebuilds the WPI + GeoNames
-registry under `src/harborly/data/` (`scripts/build_bundled_registry.py`) on
-a GitHub-hosted runner monthly, or on demand via `workflow_dispatch`. It opens
-a PR against `main` only when `registry_content_hash` actually changes;
-the manifest's `snapshot_label`/`path` fields shift with the run date even
-when the underlying data doesn't, so a raw file diff is not used. Merging
-that PR does not publish a release by itself — `release.yml` only runs on a
-`v*` tag push, so bump the version as part of the merge if you want the
-refreshed data to reach PyPI.
+These lower-level APIs are also stable within 1.x:
 
-## Coastline data
+- `harborly.kml.to_kml_string(route)` and
+  `harborly.kml.write_route_kml(route, path)`
+- `harborly.geoparquet.write_ports_geoparquet(ports, path)` and
+  `harborly.geoparquet.write_route_geoparquet(route, path)`
 
-The embedded coastline in `src/harborly/tui/coastlines.py` is auto-generated from
-Natural Earth 110m (Public Domain / CC0). To regenerate after an upstream update:
+Breaking signature changes, removals, or incompatible semantic changes require
+a major version. `SeaRouter.distance_matrix` remains the dense-matrix API;
+`SeaRouter.iter_distance_edges` is its bounded-memory streaming counterpart and
+yields `(row_index, column_index, distance_nmi)` in deterministic order. Names
+outside `harborly.__all__` are implementation interfaces unless another
+document explicitly defines them as public.
 
-```bash
-uv pip install pyshp
-uv run scripts/build_coastline.py
-```
+### CLI and JSON output
 
-## Commits
+Documented commands, arguments, and exit status values are stable within 1.x.
+Text-table formatting and error wording may change, so scripts should use
+`--json`. The `route --kml` flag and `export --format kml` and
+`export --format geoparquet` are stable 1.x CLI options.
 
-Use an imperative subject. Explain externally observable behavior and the reason
-for the change in the commit body.
+`schema_version` identifies the JSON format. New optional fields may be added
+within schema version 1; removing a field, changing its type, or incompatibly
+changing an enum requires a new schema version. Integrations must use
+`error.code` and structured `details`; `message` is not stable.
+
+### Registry and GIS exports
+
+`registry_schema_version` identifies the processed Parquet format, and
+`PortRegistry.from_directory` rejects unsupported versions. Registry contents,
+record counts, aliases, coordinates, and provider coverage may change with
+source snapshots and are not API constants.
+
+KML output follows KML 2.2, with `MultiLineString` geometries encoded as a KML
+`<MultiGeometry>`. GeoParquet output follows GeoParquet 1.0.0, uses OGC WKB for
+the geometry column, represents OGC:CRS84 as `crs=null`, and always includes
+the `geo` metadata key. New optional GIS-export columns may be added in 1.x.

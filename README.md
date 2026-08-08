@@ -1,3 +1,4 @@
+
 # harborly
 
 [![CI](https://github.com/frogiraffe/harborly/actions/workflows/ci.yml/badge.svg)](https://github.com/frogiraffe/harborly/actions/workflows/ci.yml)
@@ -147,21 +148,13 @@ harborly serve --host 127.0.0.1 --port 8000
 
 ## Documentation Index
 
-See the detailed guides in [`docs/README.md`](https://github.com/frogiraffe/harborly/blob/main/docs/README.md):
-
-- [Library API](https://github.com/frogiraffe/harborly/blob/main/docs/LIBRARY_API.md)
-- [API Compatibility](https://github.com/frogiraffe/harborly/blob/main/docs/API_COMPATIBILITY.md)
-- [HTTP Service](https://github.com/frogiraffe/harborly/blob/main/docs/API_SERVICE.md)
-- [Data Dictionary](https://github.com/frogiraffe/harborly/blob/main/docs/DATA_DICTIONARY.md)
-- [Output Schemas](https://github.com/frogiraffe/harborly/blob/main/docs/OUTPUT_SCHEMAS.md)
-- [Sources & Limitations](https://github.com/frogiraffe/harborly/blob/main/docs/SOURCES_AND_LIMITATIONS.md)
-- [Cookbook](https://github.com/frogiraffe/harborly/blob/main/docs/COOKBOOK.md)
-
-Maintainer documentation:
-- [Architecture](https://github.com/frogiraffe/harborly/blob/main/docs/maintainers/ARCHITECTURE.md)
-- [Performance](https://github.com/frogiraffe/harborly/blob/main/docs/maintainers/PERFORMANCE.md)
-- [Dependency Policy](https://github.com/frogiraffe/harborly/blob/main/docs/maintainers/DEPENDENCY_POLICY.md)
-- [Release Procedure](https://github.com/frogiraffe/harborly/blob/main/docs/maintainers/RELEASING.md)
+- [Getting Started](https://github.com/frogiraffe/harborly/blob/main/docs/GETTING-STARTED.md)
+- [Reference](https://github.com/frogiraffe/harborly/blob/main/docs/REFERENCE.md) — library, CLI, HTTP, schemas, routing, data, exports, and TUI.
+- [Configuration](https://github.com/frogiraffe/harborly/blob/main/docs/CONFIGURATION.md)
+- [Architecture](https://github.com/frogiraffe/harborly/blob/main/docs/ARCHITECTURE.md)
+- [Development](https://github.com/frogiraffe/harborly/blob/main/docs/DEVELOPMENT.md)
+- [Testing](https://github.com/frogiraffe/harborly/blob/main/docs/TESTING.md)
+- [Contributing](https://github.com/frogiraffe/harborly/blob/main/CONTRIBUTING.md) — conduct, security reporting, and compatibility policy.
 
 ## License
 

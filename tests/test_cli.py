@@ -184,6 +184,19 @@ def test_info_and_search_emit_machine_readable_json(tmp_path, capsys) -> None:
     assert "distance_nmi" in nearest[0]
 
 
+def test_harborly_data_dir_selects_the_cli_registry(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    data_directory = tmp_path / "registry"
+    write_registry(data_directory)
+    monkeypatch.setenv("HARBORLY_DATA_DIR", str(data_directory))
+
+    assert main(["info", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["data"]["registry_records"] == 2
+
+
 def test_search_prints_grouped_table_by_default(tmp_path, capsys) -> None:
     data_directory = tmp_path / "registry"
     write_registry(data_directory)

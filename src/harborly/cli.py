@@ -178,7 +178,7 @@ def _ports_to_csv(ports: Sequence[Port]) -> str:
 
 
 def _default_data_directory() -> Path:
-    configured = os.environ.get("SEA_MILE_DATA_DIR")
+    configured = os.environ.get("HARBORLY_DATA_DIR")
     if configured:
         return Path(configured).expanduser()
     project_data = Path.cwd() / "data" / "reference" / "processed"
