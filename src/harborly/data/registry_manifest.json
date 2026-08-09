@@ -1,18 +1,18 @@
 {
   "registry_schema_version": 1,
-  "registry_content_hash": "2af57ba0a571a8b32ccc98b3594f335a93ee7d7949df9e40709803186ad4afaa",
-  "registry_rows": 20070,
-  "alias_rows": 34216,
+  "registry_content_hash": "c2b83c4364a74bcac6eb657ad44861dde8b33c2c25b9725bcc909ab4ced181ae",
+  "registry_rows": 20045,
+  "alias_rows": 34186,
   "providers": {
     "NGA_WPI": {
-      "records": 2951,
-      "records_with_coordinates": 2951,
-      "aliases": 3735
+      "records": 2926,
+      "records_with_coordinates": 2926,
+      "aliases": 3703
     },
     "GEONAMES": {
       "records": 17119,
       "records_with_coordinates": 17119,
-      "aliases": 30481
+      "aliases": 30483
     }
   },
   "duplicate_provider_ids_reconciled": 0,
@@ -23,19 +23,19 @@
       "NGA_WPI": {
         "publisher": "National Geospatial-Intelligence Agency",
         "url": "https://msi.nga.mil/api/publications/world-port-index?output=csv",
-        "snapshot_label": "2026-07-24",
-        "path": "raw/wpi/2026-07-24/UpdatedPub150.csv",
+        "snapshot_label": "2026-08-09",
+        "path": "raw/wpi/2026-08-09/UpdatedPub150.csv",
         "sha256": "23bba5f0ce278590c5bccc69c0deb7142087af9a4101600e1264fa062fec52ee",
         "bytes": 1306123
       },
       "GEONAMES": {
         "publisher": "GeoNames",
         "url": "https://download.geonames.org/export/dump/allCountries.zip",
-        "snapshot_label": "2026-07-24",
+        "snapshot_label": "2026-08-09",
         "license": "CC BY 4.0",
-        "path": "raw/geonames/2026-07-24/allCountries.zip",
-        "sha256": "1a51e18085d0d496ccc8d3ddce2e3821d5adbea2a9c3545ed64623e5e86ed470",
-        "bytes": 419839953
+        "path": "raw/geonames/2026-08-09/allCountries.zip",
+        "sha256": "ccccddf54ede10df53606f4fa51670f67bfd067055c6ee1a879681790c3864bf",
+        "bytes": 419922602
       }
     }
   }
