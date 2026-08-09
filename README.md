@@ -1,8 +1,7 @@
-
 # harborly
 
 [![CI](https://github.com/frogiraffe/harborly/actions/workflows/ci.yml/badge.svg)](https://github.com/frogiraffe/harborly/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/harborly.svg)](https://pypi.org/project/harborly/)
+[![PyPI](https://img.shields.io/pypi/v/harborly.svg?cacheSeconds=300)](https://pypi.org/project/harborly/)
 [![Python](https://img.shields.io/pypi/pyversions/harborly.svg)](https://pypi.org/project/harborly/)
 [![License](https://img.shields.io/pypi/l/harborly.svg)](https://github.com/frogiraffe/harborly/blob/main/LICENSE)
 

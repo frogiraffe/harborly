@@ -1,4 +1,3 @@
-
 # Architecture
 
 `harborly` is a layered Python package for resolving source-aware port identities and calculating approximate sea-route distances. Its public SDK, CLI, and optional FastAPI service load the same bundled or local Parquet registry, use shared search and spatial indexes to select `Port` records, then pass validated coordinates to the routing layer; results can be cached and exported as structured, map, or terminal output.

@@ -1,4 +1,3 @@
-
 # Harborly reference
 
 This reference covers Harborly's public library, command-line interface, local

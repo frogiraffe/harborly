@@ -3,6 +3,17 @@
 All notable user-visible changes are documented here. The project follows
 [Semantic Versioning](https://semver.org/).
 
+## [1.1.4] - 2026-08-09
+
+### Changed
+
+- Removed internal generation markers from public documentation.
+- Refreshed the PyPI badge URL to avoid stale rendered versions.
+
+### Fixed
+
+- Excluded source rows without coordinates from the bundled registry refresh.
+
 ## [1.1.3] - 2026-08-09
 
 ### Changed
@@ -66,6 +77,7 @@ All notable user-visible changes are documented here. The project follows
 - KML export: `harborly route --kml route.kml`, `harborly export --format kml`. Programmatic access via `harborly.kml`.
 - GeoParquet export: `harborly export --format geoparquet` (OGC WKB, CRS OGC:CRS84, GeoParquet 1.0.0 spec). Programmatic access via `harborly.geoparquet`.
 
+[1.1.4]: https://github.com/frogiraffe/harborly/releases/tag/v1.1.4
 [1.1.3]: https://github.com/frogiraffe/harborly/releases/tag/v1.1.3
 [1.1.2]: https://github.com/frogiraffe/harborly/releases/tag/v1.1.2
 [1.1.1]: https://github.com/frogiraffe/harborly/releases/tag/v1.1.1

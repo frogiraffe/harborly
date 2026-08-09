@@ -1,4 +1,3 @@
-
 # Configuration
 
 Harborly has no required application configuration. The CLI uses its bundled

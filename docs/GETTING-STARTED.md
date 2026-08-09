@@ -1,4 +1,3 @@
-
 # Getting Started
 
 Harborly is a Python SDK and CLI for port identity resolution, spatial search,

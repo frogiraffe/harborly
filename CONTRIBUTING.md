@@ -1,4 +1,3 @@
-
 # Contributing
 
 Thanks for improving Harborly.
