@@ -280,6 +280,7 @@ def build_reference_registry(
     *,
     providers: Iterable[str] | None = None,
     output_directory: str | Path | None = None,
+    require_coordinates: bool = False,
 ) -> dict[str, object]:
     """Build registry Parquet files from the latest local provider snapshots."""
 
@@ -318,6 +319,18 @@ def build_reference_registry(
             provider_frames["OPENSTREETMAP"] = load_osm_port_archive(
                 osm_path, source_version=f"osm-{osm_path.parent.name}"
             )
+
+    if require_coordinates:
+        filtered_frames = {}
+        for provider, (provider_registry, provider_aliases) in provider_frames.items():
+            provider_registry = provider_registry.dropna(
+                subset=["latitude", "longitude"]
+            ).reset_index(drop=True)
+            provider_aliases = provider_aliases[
+                provider_aliases["registry_id"].isin(provider_registry["registry_id"])
+            ].reset_index(drop=True)
+            filtered_frames[provider] = (provider_registry, provider_aliases)
+        provider_frames = filtered_frames
 
     registry = _reconcile_registry_duplicates(
         pd.concat([frame for frame, _ in provider_frames.values()], ignore_index=True)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+import harborly.build.registry as registry_build
 from harborly.build.registry import (
     _provider_manifest_entry,
     _write_parquet_atomic,
@@ -58,3 +59,76 @@ def test_build_rejects_unknown_provider(tmp_path) -> None:
 def test_build_rejects_empty_provider_set(tmp_path) -> None:
     with pytest.raises(ValueError, match="at least one"):
         build_reference_registry(tmp_path, providers=())
+
+
+def test_build_can_require_complete_coordinates(monkeypatch, tmp_path) -> None:
+    snapshot = tmp_path / "raw" / "wpi" / "2026-08-09" / "UpdatedPub150.csv"
+    snapshot.parent.mkdir(parents=True)
+    snapshot.write_text("unused", encoding="utf-8")
+    registry = pd.DataFrame(
+        [
+            {
+                "registry_id": "WPI:1",
+                "provider": "NGA_WPI",
+                "provider_id": "1",
+                "country_code": "TR",
+                "canonical_name": "Mersin",
+                "latitude": 36.8,
+                "longitude": 34.65,
+                "unlocode": "TRMER",
+                "function_code": "port",
+                "source_version": "test",
+                "coordinate_resolution": "arc_second",
+            },
+            {
+                "registry_id": "WPI:2",
+                "provider": "NGA_WPI",
+                "provider_id": "2",
+                "country_code": "TR",
+                "canonical_name": "Unknown Coordinates",
+                "latitude": None,
+                "longitude": None,
+                "unlocode": None,
+                "function_code": "port",
+                "source_version": "test",
+                "coordinate_resolution": "arc_second",
+            },
+        ]
+    )
+    aliases = pd.DataFrame(
+        [
+            {
+                "registry_id": "WPI:1",
+                "provider": "NGA_WPI",
+                "alias": "Mersin",
+                "alias_key": "mersin",
+                "alias_type": "primary",
+            },
+            {
+                "registry_id": "WPI:2",
+                "provider": "NGA_WPI",
+                "alias": "Unknown Coordinates",
+                "alias_key": "unknown coordinates",
+                "alias_type": "primary",
+            },
+        ]
+    )
+    monkeypatch.setattr(registry_build, "_load_wpi", lambda _: (registry, aliases))
+    output = tmp_path / "output"
+
+    manifest = build_reference_registry(
+        tmp_path,
+        providers=("NGA_WPI",),
+        output_directory=output,
+        require_coordinates=True,
+    )
+
+    built_registry = pd.read_parquet(output / "port_registry.parquet")
+    built_aliases = pd.read_parquet(output / "port_aliases.parquet")
+    assert built_registry["registry_id"].tolist() == ["WPI:1"]
+    assert built_aliases["registry_id"].tolist() == ["WPI:1"]
+    assert manifest["providers"]["NGA_WPI"] == {
+        "records": 1,
+        "records_with_coordinates": 1,
+        "aliases": 1,
+    }

@@ -27,6 +27,7 @@ def main() -> None:
         args.reference_root,
         providers=BUNDLED_PROVIDERS,
         output_directory=args.output,
+        require_coordinates=True,
     )
     source_manifest = json.loads(
         (args.reference_root / "manifest.json").read_text(encoding="utf-8")
