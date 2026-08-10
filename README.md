@@ -5,6 +5,8 @@
 [![Python](https://img.shields.io/pypi/pyversions/harborly.svg)](https://pypi.org/project/harborly/)
 [![License](https://img.shields.io/pypi/l/harborly.svg)](https://github.com/frogiraffe/harborly/blob/main/LICENSE)
 
+![harborly CLI demo](https://raw.githubusercontent.com/frogiraffe/harborly/main/docs/harborly-demo.gif)
+
 **Port identity resolution, spatial search, and analytical sea routing.**
 
 `harborly` is a typed Python SDK and CLI. It resolves port identities, finds nearby ports, reviews ambiguous CSV matches, and calculates approximate sea-route distances in nautical miles.
@@ -12,21 +14,62 @@
 > [!IMPORTANT]
 > Routes are analytical approximations on a maritime graph. They are not for navigation, voyage planning, or safety-critical use.
 
+## Why Harborly?
+
+Port databases represent the same physical port with different identifiers, names, and coordinates. A single port can appear as WPI:44860 in one system, LOCODE `TRMER` in another, and `GEONAMES:11361397` in a third. An external CSV may call it "Mersin Port" while the registry says "Mersin". Coordinates can drift between datasets.
+
+Harborly solves this with source-aware entity resolution. Each registry record carries its provenance.
+
+```mermaid
+flowchart LR
+    A["'Mersin Port' (CSV)"] --> B[fuzzy match]
+    B --> C["WPI:44860"]
+    B --> D["TRMER"]
+    B --> E["GEONAMES:11361397"]
+    C & D & E --> F[canonical Port]
+    F --> G[SeaRouter]
+```
+
+Exact, prefix, and fuzzy search resolve identities across naming conventions. When automatic matching is ambiguous, human-review decision files control the outcome.
+
+After resolution, Harborly calculates approximate sea-route distances on a maritime graph. It returns great-circle baselines, detour ratios, and quality flags. The package supports distance matrices, spatial nearest-neighbor search, and GIS export.
+
 ## Features
+
+### Resolve & Match
 
 - Resolves registry IDs, UN/LOCODEs, and exact aliases.
 - Searches port names with exact, prefix, fuzzy, country, and proximity filters.
 - Matches CSV rows with human-review decision files.
+
+### Route & Analyze
+
 - Calculates sea routes and process-parallel distance matrices.
 - Streams large distance matrices without memory growth.
-- Serves port routing over a local FastAPI HTTP server.
-- Visualizes ports and routes in a terminal UI or standalone HTML maps.
-- Provides `AsyncSeaRouter` for async/await interface to `route()` and `route_sequence()`.
-- Restricts passages like Suez, Panama, Kiel, Baban, and Northwest via `PassageRestriction`.
 - Computes multi-leg routes over a list of ports using `route_sequence()`.
 - Calculates vessel speed and ETA directly on routes (`speed_knots`, `duration_hours`, `duration_days`).
+- Restricts passages like Suez, Panama, Kiel, Baban, and Northwest via `PassageRestriction`.
+- Provides `AsyncSeaRouter` for async/await interface to `route()` and `route_sequence()`.
+
+### Export & Integrate
+
+- Serves port routing over a local FastAPI HTTP server.
+- Visualizes ports and routes in a terminal UI or standalone HTML maps.
 - Exports route data to KML format (`--kml`, `--format kml`).
 - Exports route data to GeoParquet format (`--format geoparquet`).
+
+### Performance
+
+Registry of ~20,000 ports loads in 0.117 seconds.
+
+| Workload | Cold (ms) | Warm — cached (ms) |
+| --- | --- | --- |
+| Exact match | 9.3 | 0.004 |
+| Fuzzy/typo | 13.0 | 0.007 |
+| Country-only | 9.2 | 0.004 |
+
+Median of 300 rows per bucket. Cold: first pass. Warm: LRU-cached repeat.
+Python 3.14, Linux, 12-core CPU. Reproduce: `uv run python -m benchmarks.matching_performance`.
 
 ## Installation
 
